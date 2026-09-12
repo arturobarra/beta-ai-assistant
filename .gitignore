@@ -1,0 +1,53 @@
+.# Base de datos y memoria privada de Beta
+beta.db
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Respaldos
+respaldos/
+*.zip
+
+# Biblioteca privada / documentos
+biblioteca/
+indices/
+
+# Modelos locales
+daniela/
+modelo-es/
+modelo-whisper-small/
+modelo-hablante-ecapa/
+modelo-embeddings-academico/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Entornos virtuales
+.venv/
+venv/
+env/
+
+# Archivos temporales
+*.tmp
+*.temp
+*.log
+
+# Credenciales / secretos
+.env
+.env.*
+*.token
+token.json
+credentials.json
+secrets.json
+
+# VS Code local
+.vscode/
+
+# Windows
+Thumbs.db
+Desktop.ini
