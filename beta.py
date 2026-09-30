@@ -36,10 +36,10 @@ import urllib.request
 from datetime import datetime
 
 
-BETA_VERSION = "3.3.2"
+BETA_VERSION = "3.3.3"
 
 # ==========================================================
-# BETA v3.2.1 - AULA WORKSPACE: CONSTRUCTOR ESTRUCTURADO DE TRABAJOS
+# BETA v3.3.3 - MIRADA CONTEXTUAL + AULA WORKSPACE + EXPORTACIÓN WORD
 # Mascota virtual + memoria + comandos aprendidos + clima
 # + Ollama/Qwen3 Instruct + memoria evolutiva + personalidad adaptativa
 # + voz híbrida: Vosk para activación y Faster-Whisper para dictado
@@ -95,6 +95,9 @@ BETA_VERSION = "3.3.2"
 # v3.0.0: aula interactiva propia activable por voz con "Beta, activa modo estudio"
 # v3.0.1: si un fragmento de respuesta tiene ASR dudoso, cancela la corrección pendiente
 # v3.1.0: Aula Workspace integra Clase/Pizarra + Proyecto/Chat + Trabajo/Borrador
+# v3.3.3: mirada contextual: Beta centra los ojos al frente durante toda respuesta hablada
+# + al terminar la voz vuelve suavemente al seguimiento normal del puntero
+# + el estado se mantiene durante streaming completo y también en respaldo de voz Windows
 # v3.2.1: analiza localmente preguntas/instrucciones/estructura antes de depender de Ollama
 # + fallback documental verificable cuando Ollama falla o agota el tiempo
 # + separa consultas sobre Beta/Workspace de preguntas sobre los documentos
@@ -3764,6 +3767,17 @@ class BetaApp:
         self.radio_pupila = 6
         self.radio_brillo_pupila = 2
 
+        # v3.3.3 - Mirada contextual.
+        # En reposo Beta sigue el puntero; mientras una respuesta está sonando
+        # mantiene las pupilas centradas al frente. Los offsets se interpolan
+        # para evitar saltos bruscos al entrar o salir del modo frontal.
+        self.mirada_frontal_voz = False
+        self.mirada_offsets = {
+            "izquierda": [0.0, 0.0],
+            "derecha": [0.0, 0.0],
+        }
+        self.mirada_suavizado = 0.34
+
         # -------------------- inactividad --------------------
         self.ultima_posicion_mouse = (
             self.root.winfo_pointerx(),
@@ -5772,7 +5786,7 @@ class BetaApp:
         self._crear_ventana_modo_estudio()
         self._aula_actualizar_encabezado()
         self._aula_refrescar_ejercicio()
-        print("MODO ESTUDIO v3.3.2: Aula Workspace activa.")
+        print("MODO ESTUDIO v3.3.3: Aula Workspace activa.")
         if anunciar:
             self.responder(
                 "modo estudio activado. Abrí el aula de Beta. Las explicaciones, ejemplos y ejercicios quedarán visibles en la pizarra mientras seguimos conversando.",
@@ -5807,7 +5821,7 @@ class BetaApp:
         self.aula_chat_entrada = None
         self.aula_archivos_tree = None
         self.aula_trabajo = None
-        print("MODO ESTUDIO v3.3.2: Aula Workspace cerrada.")
+        print("MODO ESTUDIO v3.3.3: Aula Workspace cerrada.")
         if anunciar:
             self.responder(
                 "modo estudio finalizado. Conservaré el progreso y el tema de Python para retomarlos después.",
@@ -5930,7 +5944,7 @@ class BetaApp:
                 pass
             self.tutor_python_respuesta_timer = None
         self.tutor_python_respuesta_buffer = []
-        print(f"AULA WORKSPACE v3.3.2: respuesta de ejercicio escrita='{respuesta}'")
+        print(f"AULA WORKSPACE v3.3.3: respuesta de ejercicio escrita='{respuesta}'")
         self._aula_mostrar_respuesta_usuario("[Respuesta escrita] " + respuesta)
         try:
             self.memoria.guardar_conversacion("Señor", respuesta)
@@ -6149,7 +6163,7 @@ class BetaApp:
                 filetypes=[("Documento Word", "*.docx")],
             )
         except Exception as error:
-            print("EXPORTADOR WORD v3.3.2: no pude abrir Guardar como:", error)
+            print("EXPORTADOR WORD v3.3.3: no pude abrir Guardar como:", error)
             return None
         if not elegido:
             return None
@@ -6296,7 +6310,7 @@ class BetaApp:
             self.proyecto_trabajo_estructurado = datos
             self._proyecto_guardar_trabajo_estructurado()
             self.proyecto_ultimo_word = str(salida)
-            print(f"EXPORTADOR WORD v3.3.2: generado {salida}")
+            print(f"EXPORTADOR WORD v3.3.3: generado {salida}")
             return True, f"Generé el Word final en la ubicación que eligió: {salida}", salida
         except Exception as error:
             try:
@@ -6304,7 +6318,7 @@ class BetaApp:
                     salida.unlink()
             except Exception:
                 pass
-            print("EXPORTADOR WORD v3.3.2: error:", error)
+            print("EXPORTADOR WORD v3.3.3: error:", error)
             return False, f"No pude generar el documento Word: {error}", None
 
     def _proyecto_manifest_nuevo(self, nombre, ruta):
@@ -6365,7 +6379,7 @@ class BetaApp:
             try:
                 datos = json.loads(ruta.read_text(encoding="utf-8"))
             except Exception as error:
-                print("CONSTRUCTOR v3.3.2: trabajo.json inválido; reconstruyendo:", error)
+                print("CONSTRUCTOR v3.3.3: trabajo.json inválido; reconstruyendo:", error)
         if not isinstance(datos, dict):
             datos = self._proyecto_trabajo_base()
             legacy = self._proyecto_borrador_ruta(proyecto["ruta"])
@@ -6443,7 +6457,7 @@ class BetaApp:
             ruta.write_text(json.dumps(datos, ensure_ascii=False, indent=2), encoding="utf-8")
             return True
         except Exception as error:
-            print("CONSTRUCTOR v3.3.2: no pude guardar trabajo.json:", error)
+            print("CONSTRUCTOR v3.3.3: no pude guardar trabajo.json:", error)
             return False
 
     def _proyecto_ultima_respuesta_fuentes(self):
@@ -6619,7 +6633,7 @@ class BetaApp:
         self._proyecto_guardar_trabajo_estructurado()
         self._proyecto_renderizar_borrador(guardar_md=True)
         self._proyecto_refrescar_estado_trabajo_ui()
-        print(f"CONSTRUCTOR v3.3.2: respuesta agregada a {destino}.")
+        print(f"CONSTRUCTOR v3.3.3: respuesta agregada a {destino}.")
         return True, f"Agregué la respuesta a {destino}."
 
     def _proyecto_renderizar_borrador(self, guardar_md=False):
@@ -6663,7 +6677,7 @@ class BetaApp:
             try:
                 self._proyecto_borrador_ruta(self.proyecto_estudio_actual["ruta"]).write_text(texto, encoding="utf-8")
             except Exception as error:
-                print("CONSTRUCTOR v3.3.2: no pude actualizar borrador.md:", error)
+                print("CONSTRUCTOR v3.3.3: no pude actualizar borrador.md:", error)
         return texto
 
     def _proyecto_progreso_trabajo(self):
@@ -6747,7 +6761,7 @@ class BetaApp:
         if not t:
             return "", []
 
-        # v3.3.2: Introducción/Conclusión/Bibliografía se guardan como secciones reales, no como chat general.
+        # v3.3.3: Introducción/Conclusión/Bibliografía se guardan como secciones reales, no como chat general.
         secciones = self._proyecto_secciones_mencionadas(consulta)
         if len(secciones) == 2 and set(secciones) == {"conclusion", "bibliografia"} and any(x in t for x in ("haz lo mismo", "redacta", "genera", "prepara")):
             con, f1 = self._proyecto_redactar_seccion_local("conclusion")
@@ -7734,7 +7748,7 @@ class BetaApp:
         self._aula_chat_insertar("Señor", consulta)
         self._proyecto_registrar_chat("Señor", consulta)
 
-        # v3.3.2: detectar primero si el Señor está trabajando una sección general.
+        # v3.3.3: detectar primero si el Señor está trabajando una sección general.
         self._proyecto_actualizar_foco_seccion_desde_consulta(consulta)
 
         # Acciones del Constructor se resuelven antes de consultar documentos/IA.
@@ -7744,7 +7758,7 @@ class BetaApp:
             self._proyecto_registrar_chat("Beta", respuesta_constructor, fuentes_constructor)
             self._aula_chat_insertar("Beta", respuesta_constructor, fuentes_constructor)
             self.responder(respuesta_constructor, "normal", tipo_contexto="proyecto")
-            print(f"CONSTRUCTOR v3.3.2: acción local resuelta; foco={self.proyecto_seccion_foco or self.proyecto_pregunta_foco}")
+            print(f"CONSTRUCTOR v3.3.3: acción local resuelta; foco={self.proyecto_seccion_foco or self.proyecto_pregunta_foco}")
             return
 
         # v3.2.1: las preguntas sobre el funcionamiento de Beta no se buscan en el PDF.
@@ -7754,7 +7768,7 @@ class BetaApp:
             self._proyecto_registrar_chat("Beta", respuesta_meta, [])
             self._aula_chat_insertar("Beta", respuesta_meta, [])
             self.responder(respuesta_meta, "normal", tipo_contexto="proyecto")
-            print("AULA WORKSPACE v3.3.2: consulta meta respondida localmente.")
+            print("AULA WORKSPACE v3.3.3: consulta meta respondida localmente.")
             return
 
         # v3.2.1: preguntas estructurales del trabajo no dependen de Ollama.
@@ -7767,7 +7781,7 @@ class BetaApp:
             resumen_voz_fn = getattr(self, "_proyecto_resumen_voz", None)
             voz = resumen_voz_fn(respuesta_local, consulta) if callable(resumen_voz_fn) else respuesta_local
             self.responder(voz, "normal", tipo_contexto="proyecto")
-            print(f"AULA WORKSPACE v3.3.2: análisis local resuelto; fuentes={fuentes_locales}")
+            print(f"AULA WORKSPACE v3.3.3: análisis local resuelto; fuentes={fuentes_locales}")
             return
 
         if self._proyecto_es_pedir_redaccion(consulta):
@@ -7781,7 +7795,7 @@ class BetaApp:
                     self._aula_chat_insertar("Beta", redactada, fuentes_sec)
                     voz = f"Señor, preparé la {foco_sec}. La dejé completa en el chat para que la revise antes de agregarla al trabajo."
                     self.responder(voz, "normal", tipo_contexto="proyecto")
-                    print(f"AULA WORKSPACE v3.3.2: borrador local de sección={foco_sec} listo.")
+                    print(f"AULA WORKSPACE v3.3.3: borrador local de sección={foco_sec} listo.")
                     return
 
         if self._proyecto_es_pedir_explicacion(consulta) or self._proyecto_es_pedir_redaccion(consulta):
@@ -7801,7 +7815,7 @@ class BetaApp:
                     resumen_voz_fn = getattr(self, "_proyecto_resumen_voz", None)
                     voz = resumen_voz_fn(guiada, consulta) if callable(resumen_voz_fn) else guiada
                     self.responder(voz, "normal", tipo_contexto="proyecto")
-                    print(f"AULA WORKSPACE v3.3.2: seguimiento guiado local pregunta={self.proyecto_pregunta_foco} fuentes={fuentes_guiada}")
+                    print(f"AULA WORKSPACE v3.3.3: seguimiento guiado local pregunta={self.proyecto_pregunta_foco} fuentes={fuentes_guiada}")
                     return
 
         self.proyecto_consulta_en_curso = True
@@ -7870,10 +7884,10 @@ class BetaApp:
                             for ref in fuentes_guiada:
                                 if ref not in fuentes_labels:
                                     fuentes_labels.append(ref)
-                            print("AULA WORKSPACE v3.3.2: fallback guiado por pregunta activa tras fallo/timeout de Ollama.")
+                            print("AULA WORKSPACE v3.3.3: fallback guiado por pregunta activa tras fallo/timeout de Ollama.")
                         else:
                             respuesta = self._proyecto_fallback_documental(consulta, fuentes)
-                            print("AULA WORKSPACE v3.3.2: fallback documental activado tras fallo/timeout de Ollama.")
+                            print("AULA WORKSPACE v3.3.3: fallback documental activado tras fallo/timeout de Ollama.")
                     else:
                         self.proyecto_ultimo_error = ""
             except Exception as error:
@@ -7918,7 +7932,7 @@ class BetaApp:
             self.aula_chat_entrada.delete("1.0", "end")
         except Exception:
             pass
-        print(f"AULA WORKSPACE v3.3.2: consulta escrita='{consulta}'")
+        print(f"AULA WORKSPACE v3.3.3: consulta escrita='{consulta}'")
         self.consultar_proyecto_estudio_async(consulta, desde_voz=False)
 
     def _aula_cargar_borrador(self):
@@ -7949,10 +7963,10 @@ class BetaApp:
             ruta = self._proyecto_borrador_ruta(proyecto["ruta"])
             ruta.write_text(contenido, encoding="utf-8")
             if not silencioso:
-                print(f"CONSTRUCTOR v3.3.2: borrador manual guardado en {ruta}.")
+                print(f"CONSTRUCTOR v3.3.3: borrador manual guardado en {ruta}.")
             return True
         except Exception as error:
-            print("CONSTRUCTOR v3.3.2: no pude guardar borrador:", error)
+            print("CONSTRUCTOR v3.3.3: no pude guardar borrador:", error)
             return False
 
     def aula_editar_datos_entrega(self):
@@ -7998,7 +8012,7 @@ class BetaApp:
                 datos["metadatos"][clave] = var.get().strip()
             self.proyecto_trabajo_estructurado = datos
             self._proyecto_guardar_trabajo_estructurado()
-            print("EXPORTADOR WORD v3.3.2: datos de entrega actualizados.")
+            print("EXPORTADOR WORD v3.3.3: datos de entrega actualizados.")
             win.destroy()
 
         botones = ttk.Frame(marco)
@@ -13754,6 +13768,7 @@ Recuerdos relevantes:
                 if primer_audio:
                     primer_audio = False
                     self.hablando = True
+                    self.activar_mirada_frontal_voz()
                     inicio_peticion = sesion.get("inicio_peticion")
                     if inicio_peticion:
                         print(
@@ -13763,6 +13778,7 @@ Recuerdos relevantes:
                 self.reproducir_wav_daniela_streaming(ruta, texto_voz)
 
             self.hablando = False
+            self.desactivar_mirada_frontal_voz()
             if sesion["cancelar_finalizacion"]:
                 return
 
@@ -20648,6 +20664,7 @@ $voz.Speak($texto)
             except Exception:
                 pass
 
+            self.activar_mirada_frontal_voz()
             winsound.PlaySound(None, winsound.SND_PURGE)
             winsound.PlaySound(str(ruta_wav), winsound.SND_FILENAME)
 
@@ -20801,6 +20818,7 @@ $voz.Speak($texto)
                         )
                     except Exception:
                         pass
+                    self.activar_mirada_frontal_voz()
                     self.reproducir_voz_windows_respaldo(texto_voz)
                     try:
                         self.root.after(0, self.detener_sincronizacion_boca)
@@ -20816,6 +20834,7 @@ $voz.Speak($texto)
                     )
                 except Exception:
                     pass
+                self.activar_mirada_frontal_voz()
                 self.reproducir_voz_windows_respaldo(texto_voz)
                 try:
                     self.root.after(0, self.detener_sincronizacion_boca)
@@ -20830,6 +20849,7 @@ $voz.Speak($texto)
                     pass
 
                 self.hablando = False
+                self.desactivar_mirada_frontal_voz()
 
                 try:
                     self.root.after(
@@ -21470,31 +21490,48 @@ $voz.Speak($texto)
     # PUPILAS SIGUEN CURSOR
     # ======================================================
 
+    def activar_mirada_frontal_voz(self):
+        """Fija la mirada al frente mientras Beta pronuncia una respuesta."""
+        if not getattr(self, "mirada_frontal_voz", False):
+            self.mirada_frontal_voz = True
+            print("MIRADA v3.3.3: frontal durante la respuesta hablada.")
+
+    def desactivar_mirada_frontal_voz(self):
+        """Devuelve el control de las pupilas al seguimiento del puntero."""
+        if getattr(self, "mirada_frontal_voz", False):
+            self.mirada_frontal_voz = False
+            print("MIRADA v3.3.3: seguimiento del puntero restaurado.")
+
     def actualizar_pupilas(self):
         if not self.ojos_cerrados:
             try:
-                mouse_x = self.root.winfo_pointerx() - self.canvas.winfo_rootx()
-                mouse_y = self.root.winfo_pointery() - self.canvas.winfo_rooty()
+                if getattr(self, "mirada_frontal_voz", False):
+                    # Mirar al frente = cada pupila centrada en su propio ojo.
+                    izq_x, izq_y = self.centro_ojo_izquierdo
+                    der_x, der_y = self.centro_ojo_derecho
+                    self.mover_pupila(
+                        "izquierda", self.centro_ojo_izquierdo, izq_x, izq_y
+                    )
+                    self.mover_pupila(
+                        "derecha", self.centro_ojo_derecho, der_x, der_y
+                    )
+                else:
+                    mouse_x = self.root.winfo_pointerx() - self.canvas.winfo_rootx()
+                    mouse_y = self.root.winfo_pointery() - self.canvas.winfo_rooty()
 
-                if self.expresion_actual == "impaciente":
-                    mouse_x = 0
-                    mouse_y = self.canvas.winfo_height() / 2
-                elif self.expresion_actual == "pensando":
-                    mouse_x = self.canvas.winfo_width() * 0.85
-                    mouse_y = self.canvas.winfo_height() * 0.08
+                    if self.expresion_actual == "impaciente":
+                        mouse_x = 0
+                        mouse_y = self.canvas.winfo_height() / 2
+                    elif self.expresion_actual == "pensando":
+                        mouse_x = self.canvas.winfo_width() * 0.85
+                        mouse_y = self.canvas.winfo_height() * 0.08
 
-                self.mover_pupila(
-                    "izquierda",
-                    self.centro_ojo_izquierdo,
-                    mouse_x,
-                    mouse_y,
-                )
-                self.mover_pupila(
-                    "derecha",
-                    self.centro_ojo_derecho,
-                    mouse_x,
-                    mouse_y,
-                )
+                    self.mover_pupila(
+                        "izquierda", self.centro_ojo_izquierdo, mouse_x, mouse_y
+                    )
+                    self.mover_pupila(
+                        "derecha", self.centro_ojo_derecho, mouse_x, mouse_y
+                    )
 
             except Exception:
                 pass
@@ -21514,15 +21551,31 @@ $voz.Speak($texto)
         distancia = math.sqrt(dx * dx + dy * dy)
 
         if distancia == 0:
-            offset_x = 0
-            offset_y = 0
+            objetivo_offset_x = 0.0
+            objetivo_offset_y = 0.0
         else:
             escala = min(self.radio_movimiento_pupila / distancia, 1)
-            offset_x = dx * escala
-            offset_y = dy * escala
+            objetivo_offset_x = dx * escala
+            objetivo_offset_y = dy * escala
 
-        nuevo_x = ojo_x + offset_x
-        nuevo_y = ojo_y + offset_y
+        # v3.3.3: transición suave al centrar la mirada y al volver al cursor.
+        offsets = getattr(self, "mirada_offsets", None)
+        if not isinstance(offsets, dict):
+            offsets = {"izquierda": [0.0, 0.0], "derecha": [0.0, 0.0]}
+            self.mirada_offsets = offsets
+        actual = offsets.setdefault(lado, [0.0, 0.0])
+        factor = float(getattr(self, "mirada_suavizado", 0.34))
+        factor = max(0.05, min(1.0, factor))
+        actual[0] += (objetivo_offset_x - actual[0]) * factor
+        actual[1] += (objetivo_offset_y - actual[1]) * factor
+
+        if abs(actual[0] - objetivo_offset_x) < 0.03:
+            actual[0] = objetivo_offset_x
+        if abs(actual[1] - objetivo_offset_y) < 0.03:
+            actual[1] = objetivo_offset_y
+
+        nuevo_x = ojo_x + actual[0]
+        nuevo_y = ojo_y + actual[1]
 
         if lado == "izquierda":
             iris = self.iris_izquierda
