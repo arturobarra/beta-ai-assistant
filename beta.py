@@ -36,8 +36,10 @@ import urllib.request
 from datetime import datetime
 
 
+BETA_VERSION = "3.1.2"
+
 # ==========================================================
-# BETA v2.7.1 - RESPALDOS AUTOMÁTICOS + BIBLIOTECA TÉCNICA ESTABLE
+# BETA v3.1.2 - AULA WORKSPACE: CHAT DOCUMENTAL RESILIENTE + ANÁLISIS LOCAL
 # Mascota virtual + memoria + comandos aprendidos + clima
 # + Ollama/Qwen3 Instruct + memoria evolutiva + personalidad adaptativa
 # + voz híbrida: Vosk para activación y Faster-Whisper para dictado
@@ -84,6 +86,96 @@ from datetime import datetime
 # + seguimiento académico priorizado por ramo para evitar mezclar materias
 # + memoria inteligente diferida mientras hay conversación activa
 # + protección contra transcripciones parciales/duplicadas y colas de audio atrasadas
+# v2.9.4: evaluación conceptual tolerante a ASR + cierre de respuesta robusto + ejercicios responsivos
+# + normaliza REPL aunque Whisper/Vosk lo transcriban como RPL, repel o variantes fonéticas cercanas
+# + los ejercicios conceptuales ya no penalizan por repetir literalmente el término nombrado en la pregunta
+# + la verificación literal y sus límites de nota se reservan para ejercicios de respuesta exacta
+# + si Whisper alucina boilerplate cuando el Señor dice "listo/completo", se conserva el comando Vosk autenticado
+# v2.9.11: normalización contextual prim/prin para print, pide ejemplo antes de calificar
+# v3.0.0: aula interactiva propia activable por voz con "Beta, activa modo estudio"
+# v3.0.1: si un fragmento de respuesta tiene ASR dudoso, cancela la corrección pendiente
+# v3.1.0: Aula Workspace integra Clase/Pizarra + Proyecto/Chat + Trabajo/Borrador
+# v3.1.2: analiza localmente preguntas/instrucciones/estructura antes de depender de Ollama
+# + fallback documental verificable cuando Ollama falla o agota el tiempo
+# + separa consultas sobre Beta/Workspace de preguntas sobre los documentos
+# + fuentes visibles también en respuestas locales y fallbacks
+# + órdenes de abrir/cerrar modo estudio dejan de entrar a memoria inteligente
+# + proyectos académicos persistentes e independientes con sus propios archivos y chat
+# + carga local de PDF, DOCX, TXT y MD; copia portable dentro de Beta y extracción de texto
+# + recuperación contextual por pregunta/punto y referencias a archivo/página cuando existen
+# + modo "solo documentos" por defecto para no completar huecos con conocimiento general
+# + borrador persistente y botón para agregar respuestas del chat al trabajo
+# + mantiene abierto el ejercicio hasta recibir una repetición válida, sin calificar prematuramente
+# + registra en consola las respuestas escritas desde el Aula para diagnóstico voz/teclado
+# + desactiva Comprobar/Pista cuando no existe ejercicio pendiente
+# + pizarra sincronizada con explicaciones habladas y streaming de la tutora
+# + panel de código separado, ejercicio visible, respuesta escrita y controles de clase
+# + muestra en la pizarra lo que Whisper/Beta entendió de las respuestas habladas
+# + botones Pista, Comprobar, Otro ejercicio, Explicar de nuevo y Limpiar pizarra
+# + cierre por voz "Beta, termina modo estudio" sin depender de Word u Office
+# v2.9.13: rota ejercicios locales de Fundamentos sin caer a timeout de Ollama por repetición
+# + reconoce solicitudes plurales como "varios ejercicios" y "siguiente ejercicio"
+# + REPL: escribir/ejecutar instrucciones interactivamente cuenta como utilidad práctica
+# + "Meta" puede recuperarse como Beta solo ante una orden breve conocida y voz ya validada
+# + durante el arranque espera unos segundos a Whisper antes de confiar en un Vosk dudoso
+# + los resúmenes de conversación usan exclusivamente turnos de la sesión actual
+# + memoria inteligente descarta órdenes académicas plurales como preferencias personales
+# v2.9.12: cola ASR -> cerebro ordenada en el hilo principal para no perder fragmentos de respuestas
+# + evaluación local verificable de REPL: no exige expandir el acrónimo si el enunciado no lo pide
+# + ejercicios locales de Fundamentos se prefieren incluso cuando el repertorio reciente se agotó
+# + control histórico evita recomendaciones absolutas como "siempre debes usar python3"
+# + diccionario fonético personal local para correcciones explícitas de términos técnicos
+# + evaluación de print contra explicación y ejemplo, sin falsear progreso por ASR
+# + ranking léxico por frecuencia/definición y control histórico de Python 2/3
+# v2.9.10: exige evidencia de COMANDO y no solo de versión en preguntas exactas sobre python3
+# + conserva el ejercicio abierto cuando Whisper deja una frase pendiente o está transcribiendo
+# + prioriza ejercicios locales de fundamentos (inicial/intermedio) sin repetir ni bloquear en Ollama
+# + aplaza la precarga semántica inicial y agrega diagnósticos de PortAudio fuera del callback
+# v2.9.8: ancla contextual para conceptos técnicos cortos + control de calidad ASR en evaluaciones
+# + reconstruye preguntas elípticas como "¿y para qué sirve?" cuando el concepto activo es REPL
+# + corrige RL / REELP / RE-ELP / REAL / DREAD a REPL solo si hay sesión Python, REPL reciente y pregunta conceptual
+# + las consultas REPL se canonicalizan antes del RAG para evitar arrastre de transcripciones previas como repu/reelp
+# + compara Vosk y Whisper durante ejercicios conceptuales y marca fragmentos dudosos antes de calificarlos
+# + si el ASR produce alias deformados como realp/reelp/repu/dread durante una respuesta, Beta pide repetir y no baja el progreso
+# v2.9.7: fusión Vosk + Whisper para rescatar conceptos técnicos cortos dentro de contexto Python
+# + recupera REPL si Whisper pierde el término pero Vosk conserva una variante plausible
+# + normaliza R-E-P-U / R-E-P-E / REPU y variantes cercanas a REPL solo con contexto Python activo
+# + preguntas explícitas sobre REPL van directo a la biblioteca técnica y no arrastran contexto académico previo
+# + respuestas conceptuales claramente truncadas o contaminadas por ASR no se califican: Beta pide repetir el fragmento
+# + las lecciones y respuestas técnicas distinguen afirmaciones históricas del libro de hechos actuales cuando corresponde
+# v2.9.6: refuerzo de conceptos técnicos dictados y recuperación exacta desde libros locales
+# + normaliza RELP / R-E-P-L / RPL a REPL solo cuando existe contexto Python
+# + búsqueda híbrida añade recuperación léxica SQLite para REPL, python3, print y otras keywords
+# + ejercicios de respaldo usan criterios y fragmentos alineados con lo que realmente preguntan
+# + evita feedback irrelevante (por ejemplo exigir REPL en un ejercicio que solo pide print + ejemplo)
+# + mejora la lección de Fundamentos usando las palabras clave curriculares como ancla de recuperación
+# v2.9.5: normaliza variantes de voz de comandos como py -3 y evita penalizar ruido ASR irrelevante
+# + si todos los términos exactos requeridos están presentes, una palabra dudosa de transcripción no puede hundir la nota
+# + "completo" funciona también sin wake word durante una respuesta pendiente y se absorbe si llega justo después de evaluar
+# + feedback de corrección más breve para reducir tiempo de voz sin perder la mejora principal
+# + evita respuestas duplicadas cuando se pide el mismo ejercicio mientras todavía se está generando
+# + el generador rico usa un timeout corto y cae antes al respaldo local si Ollama está lento
+# v2.9.2: tutora Python con evaluación verificable, respuestas largas naturales y ejercicios no repetitivos
+# + la evaluación no puede atribuir al Señor términos que no aparecen realmente en su respuesta
+# + criterios y términos técnicos obligatorios quedan guardados junto al ejercicio para auditar la corrección
+# + espera dinámica: más tiempo si una frase termina en conectores como "por ejemplo, en"
+# + permite decir "listo" / "esa es mi respuesta" para corregir inmediatamente
+# + recuerda el último ejercicio corregido y puede explicar su respuesta correcta después
+# + evita repetir ejercicios recientes del mismo tema y varía el formato de práctica
+# + normaliza nuevas variantes ASR de Python como spyton/peyton/patton dentro del contexto técnico
+# v2.9.1: tutora Python robusta: comandos tolerantes, respuesta por fragmentos y memoria anti-ruido
+# + acumula breves continuaciones de voz antes de corregir un ejercicio
+# + evita memorizar órdenes/errores ASR de la tutora como preferencias personales
+# + reconoce "ejercicio" aun cuando Whisper deforma el verbo (ej. "unme un ejercicio")
+# + si un ejercicio ya fue corregido, una petición de pista no cae al chat general
+# + las lecciones guiadas usan un presupuesto mayor para cerrar ejemplos/código sin cortes
+# v2.9.0: tutora avanzada de Python con sesiones, ejercicios, revisión y progreso persistente
+# + currículo progresivo de Python basado en la biblioteca técnica local
+# + ejercicios generados desde fuentes locales y evaluación con evidencia real
+# + continuidad de estudio: Beta recuerda el tema actual y permite retomar donde quedó
+# + respuestas de ejercicios por voz o texto, pistas y solución sin inflar dominio artificialmente
+# + revisor de código Python explicativo; no ejecuta código ni concede shell a Qwen
+# + panel dedicado de progreso de Python por tema
 # v2.8.3: separación estricta de fuentes + uso inteligente de Internet
 # + evita que un seguimiento corto arrastre Python cuando el Señor cambia claramente a RAM/hardware u otro dominio
 # + reenvía cambios de dominio al enrutador global antes de heredar el contexto anterior
@@ -147,6 +239,7 @@ WHISPER_DEVICE = "cpu"
 WHISPER_COMPUTE_TYPE = "int8"
 WHISPER_LANGUAGE = "es"
 WHISPER_BEAM_SIZE = 1
+WHISPER_ESPERA_ARRANQUE_SEGUNDOS = 6
 
 # Reconocimiento biométrico de hablante (speaker verification).
 # El modelo se descarga una vez y luego funciona localmente.
@@ -227,6 +320,107 @@ EVALUACION_TOKENS_PREGUNTA = 150
 EVALUACION_TOKENS_CORRECCION = 180
 APRENDIZAJE_MAX_EVENTOS_UI = 200
 
+# Tutora avanzada de Python v2.9.4.
+# Los ejercicios y revisiones usan libros técnicos locales de la colección Python.
+# La tutora NO ejecuta código: analiza texto/código con Qwen y mantiene las acciones
+# de Windows fuera del modelo, igual que el resto de Beta.
+TUTOR_PYTHON_RESPUESTA_SEGUNDOS = 180
+# Pausa de silencio antes de corregir una respuesta hablada. Permite que una
+# respuesta natural llegue en dos frases (por ejemplo: "...PowerShell" + "es Python").
+TUTOR_PYTHON_PAUSA_RESPUESTA_MS = 10000
+TUTOR_PYTHON_PAUSA_INCOMPLETA_MS = 15000
+TUTOR_PYTHON_ULTIMO_EJERCICIO_SEGUNDOS = 10 * 60
+TUTOR_PYTHON_FUENTES = 4
+TUTOR_PYTHON_TOKENS_LECCION = 280
+TUTOR_PYTHON_TOKENS_EJERCICIO = 340
+# Si Qwen está frío/lento, no dejamos al Señor esperando medio minuto solo para un ejercicio.
+# Tras este tiempo la tutora usa el generador local anclado a sus libros.
+TUTOR_PYTHON_TIMEOUT_EJERCICIO = 14
+# Para los fundamentos iniciales, aprovechar primero ejercicios concretos
+# respaldados por los PDF. Qwen sigue disponible cuando estos se agotan.
+TUTOR_PYTHON_PREFERIR_LOCAL_FUNDAMENTOS = True
+# El precalentamiento semántico no debe coincidir con el arranque o las
+# primeras órdenes. Es una mejora de latencia, no una garantía de inactividad.
+SEMANTICO_PRECALENTAR_TRAS_INICIO_S = 120
+SEMANTICO_PRECALENTAR_INACTIVIDAD_S = 90
+TUTOR_PYTHON_TOKENS_CORRECCION = 260
+TUTOR_PYTHON_TOKENS_REVISION = 360
+
+TUTOR_PYTHON_CURRICULO = [
+    {
+        "id": "fundamentos",
+        "nombre": "Fundamentos y entorno",
+        "busqueda": "Python fundamentos sintaxis ejecutar programa REPL",
+        "aliases": ["fundamentos", "introduccion", "inicio", "sintaxis", "repl", "entorno"],
+    },
+    {
+        "id": "variables_tipos",
+        "nombre": "Variables y tipos de datos",
+        "busqueda": "Python variables tipos datos int float bool string",
+        "aliases": ["variables", "tipos", "tipos de datos", "int", "float", "boolean", "bool"],
+    },
+    {
+        "id": "strings",
+        "nombre": "Strings",
+        "busqueda": "Python strings cadenas texto metodos format f string",
+        "aliases": ["string", "strings", "cadena", "cadenas", "texto"],
+    },
+    {
+        "id": "operadores",
+        "nombre": "Números y operadores",
+        "busqueda": "Python numeros operadores aritmeticos comparacion logicos",
+        "aliases": ["operadores", "numeros", "aritmetica", "comparacion", "logicos"],
+    },
+    {
+        "id": "condicionales",
+        "nombre": "Condicionales",
+        "busqueda": "Python if elif else condicionales operadores logicos",
+        "aliases": ["if", "elif", "else", "condicional", "condicionales"],
+    },
+    {
+        "id": "bucles",
+        "nombre": "Bucles",
+        "busqueda": "Python for while loops bucles range break continue",
+        "aliases": ["for", "while", "bucle", "bucles", "loop", "loops", "range"],
+    },
+    {
+        "id": "funciones",
+        "nombre": "Funciones",
+        "busqueda": "Python funciones def parametros argumentos return scope",
+        "aliases": ["funcion", "funciones", "def", "return", "parametros", "argumentos"],
+    },
+    {
+        "id": "colecciones",
+        "nombre": "Listas, tuplas, sets y diccionarios",
+        "busqueda": "Python listas tuplas sets diccionarios colecciones",
+        "aliases": ["lista", "listas", "tupla", "tuplas", "set", "sets", "diccionario", "diccionarios"],
+    },
+    {
+        "id": "excepciones",
+        "nombre": "Excepciones",
+        "busqueda": "Python excepciones try except finally raise",
+        "aliases": ["excepcion", "excepciones", "try", "except", "finally", "raise"],
+    },
+    {
+        "id": "modulos",
+        "nombre": "Módulos y paquetes",
+        "busqueda": "Python modulos paquetes import pip entorno",
+        "aliases": ["modulo", "modulos", "paquete", "paquetes", "import", "pip"],
+    },
+    {
+        "id": "archivos",
+        "nombre": "Archivos y datos",
+        "busqueda": "Python archivos texto csv json rutas directorios",
+        "aliases": ["archivo", "archivos", "csv", "json", "rutas", "directorios"],
+    },
+    {
+        "id": "poo",
+        "nombre": "Programación orientada a objetos",
+        "busqueda": "Python clases objetos constructor herencia polimorfismo propiedades metodos",
+        "aliases": ["poo", "clase", "clases", "objeto", "objetos", "herencia", "polimorfismo", "constructor"],
+    },
+]
+
 # Memoria inteligente. El análisis se ejecuta en segundo plano y solo cuando
 # Beta lleva unos segundos sin recibir una nueva orden, para no aumentar la
 # latencia de las respuestas principales.
@@ -239,6 +433,13 @@ CONTEXTO_CONVERSACION_SEGUNDOS = 20 * 60
 # El modelo de embeddings se descarga una sola vez y luego queda guardado
 # dentro de la carpeta de Beta para consultas sin Internet.
 BIBLIOTECA_DIR = BASE_DIR / "biblioteca"
+# Beta v3.1.0: proyectos académicos independientes del índice permanente.
+# Cada proyecto conserva sus archivos, texto extraído, chat y borrador.
+PROYECTOS_ESTUDIO_DIR = BASE_DIR / "proyectos_estudio"
+PROYECTO_CONTEXTO_MAX_CARACTERES = 14000
+PROYECTO_FRAGMENTO_MAX = 1500
+PROYECTO_FRAGMENTO_OVERLAP = 180
+PROYECTO_CHAT_HISTORIAL_MAX = 80
 BIBLIOTECA_DOCUMENTOS_DIR = BIBLIOTECA_DIR / "documentos"
 BIBLIOTECA_TECNICA_DIR = BIBLIOTECA_DIR / "tecnica"
 INDICES_DIR = BASE_DIR / "indices"
@@ -559,6 +760,70 @@ class MemoriaBeta:
                 """
             )
 
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS tutor_python_ejercicios (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tema TEXT NOT NULL,
+                    nivel TEXT DEFAULT 'basico',
+                    enunciado TEXT NOT NULL,
+                    pista TEXT DEFAULT '',
+                    respuesta_clave TEXT DEFAULT '',
+                    criterios_json TEXT DEFAULT '[]',
+                    terminos_obligatorios_json TEXT DEFAULT '[]',
+                    modo_evaluacion TEXT DEFAULT 'conceptual',
+                    respuesta_usuario TEXT DEFAULT '',
+                    puntuacion REAL,
+                    feedback TEXT DEFAULT '',
+                    completado INTEGER DEFAULT 0,
+                    fecha_creacion TEXT NOT NULL,
+                    fecha_respuesta TEXT DEFAULT ''
+                )
+                """
+            )
+            con.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_tutor_python_tema
+                ON tutor_python_ejercicios(tema)
+                """
+            )
+
+            # v2.9.12: diccionario fonético personal. Solo guarda equivalencias
+            # que el Señor enseña explícitamente; no almacena audio.
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS asr_aliases_personales (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    alias TEXT NOT NULL,
+                    alias_normalizado TEXT NOT NULL,
+                    canonico TEXT NOT NULL,
+                    canonico_normalizado TEXT NOT NULL,
+                    contexto TEXT DEFAULT 'python',
+                    usos INTEGER DEFAULT 0,
+                    fecha TEXT NOT NULL,
+                    UNIQUE(alias_normalizado, contexto)
+                )
+                """
+            )
+
+            # v2.9.2: ampliación compatible de la tabla de ejercicios. No borra
+            # ejercicios ni progreso existentes en beta.db.
+            columnas_tutor = {
+                fila[1] for fila in con.execute(
+                    "PRAGMA table_info(tutor_python_ejercicios)"
+                ).fetchall()
+            }
+            migraciones_tutor = {
+                "criterios_json": "TEXT DEFAULT '[]'",
+                "terminos_obligatorios_json": "TEXT DEFAULT '[]'",
+                "modo_evaluacion": "TEXT DEFAULT 'conceptual'",
+            }
+            for columna, definicion in migraciones_tutor.items():
+                if columna not in columnas_tutor:
+                    con.execute(
+                        f"ALTER TABLE tutor_python_ejercicios ADD COLUMN {columna} {definicion}"
+                    )
+
             # Migración automática de memorias antiguas. No borra beta.db.
             columnas = {fila[1] for fila in con.execute("PRAGMA table_info(recuerdos)").fetchall()}
             migraciones = {
@@ -609,6 +874,9 @@ class MemoriaBeta:
             "ultima_memoria_iniciativa_id": "0",
             "modo_curioso": "1",
             "modo_aprendizaje_adaptativo": "1",
+            "modo_tutor_python": "1",
+            "tutor_python_tema_actual": "",
+            "tutor_python_ultimo_tema": "",
             "curiosidad_fecha_contador": "",
             "curiosidad_preguntas_hoy": "0",
             "respaldos_automaticos": "1",
@@ -1227,6 +1495,163 @@ class MemoriaBeta:
                 """SELECT ramo, tema, tipo, puntuacion, detalle, fecha
                    FROM aprendizaje_eventos ORDER BY id DESC LIMIT ?""", (int(limite),)
             ).fetchall()
+
+
+    # -------------------- tutora Python v2.9.3 --------------------
+
+    def guardar_ejercicio_python(
+        self,
+        tema,
+        enunciado,
+        pista="",
+        respuesta_clave="",
+        nivel="basico",
+        criterios=None,
+        terminos_obligatorios=None,
+        modo_evaluacion="conceptual",
+    ):
+        fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        criterios = criterios if isinstance(criterios, list) else []
+        terminos_obligatorios = (
+            terminos_obligatorios if isinstance(terminos_obligatorios, list) else []
+        )
+        with self.conectar() as con:
+            cur = con.execute(
+                """INSERT INTO tutor_python_ejercicios
+                   (tema, nivel, enunciado, pista, respuesta_clave,
+                    criterios_json, terminos_obligatorios_json, modo_evaluacion,
+                    fecha_creacion)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    (tema or "Python").strip(),
+                    (nivel or "basico").strip(),
+                    (enunciado or "").strip(),
+                    (pista or "").strip(),
+                    (respuesta_clave or "").strip(),
+                    json.dumps(criterios, ensure_ascii=False),
+                    json.dumps(terminos_obligatorios, ensure_ascii=False),
+                    (modo_evaluacion or "conceptual").strip().lower(),
+                    fecha,
+                ),
+            )
+            return int(cur.lastrowid)
+
+    def completar_ejercicio_python(
+        self, ejercicio_id, respuesta_usuario, puntuacion=None, feedback="", completado=True
+    ):
+        fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with self.conectar() as con:
+            con.execute(
+                """UPDATE tutor_python_ejercicios
+                   SET respuesta_usuario=?, puntuacion=?, feedback=?, completado=?, fecha_respuesta=?
+                   WHERE id=?""",
+                (
+                    (respuesta_usuario or "")[:6000],
+                    None if puntuacion is None else float(puntuacion),
+                    (feedback or "")[:3000],
+                    1 if completado else 0,
+                    fecha,
+                    int(ejercicio_id),
+                ),
+            )
+
+    def obtener_ejercicio_python(self, ejercicio_id):
+        with self.conectar() as con:
+            return con.execute(
+                """SELECT id, tema, nivel, enunciado, pista, respuesta_clave,
+                          respuesta_usuario, puntuacion, feedback, completado,
+                          fecha_creacion, fecha_respuesta,
+                          criterios_json, terminos_obligatorios_json, modo_evaluacion
+                   FROM tutor_python_ejercicios WHERE id=?""",
+                (int(ejercicio_id),),
+            ).fetchone()
+
+    def ultimos_ejercicios_python(self, limite=20):
+        with self.conectar() as con:
+            return con.execute(
+                """SELECT id, tema, nivel, enunciado, puntuacion, completado,
+                          fecha_creacion, fecha_respuesta
+                   FROM tutor_python_ejercicios
+                   ORDER BY id DESC LIMIT ?""",
+                (int(limite),),
+            ).fetchall()
+
+    def ultimo_ejercicio_python_completo(self):
+        """Devuelve el último ejercicio con todos sus campos, incluso tras reiniciar Beta."""
+        filas = self.ultimos_ejercicios_python(1)
+        if not filas:
+            return None
+        try:
+            return self.obtener_ejercicio_python(int(filas[0][0]))
+        except Exception:
+            return None
+
+    def progreso_ramo(self, ramo, limite=200):
+        rn = normalizar(ramo or "")
+        if not rn:
+            return []
+        with self.conectar() as con:
+            return con.execute(
+                """SELECT ramo, tema, dominio, evidencias, exposiciones, aciertos, errores,
+                          ultima_fecha, ultima_evidencia
+                   FROM aprendizaje_academico
+                   WHERE ramo_normalizado=?
+                   ORDER BY ultima_fecha DESC, tema COLLATE NOCASE
+                   LIMIT ?""",
+                (rn, int(limite)),
+            ).fetchall()
+
+    # -------------------- diccionario fonético personal v2.9.12 --------------------
+
+    def guardar_alias_asr_personal(self, alias, canonico, contexto="python"):
+        alias = (alias or "").strip()
+        canonico = (canonico or "").strip()
+        contexto = normalizar(contexto or "python") or "python"
+        an = normalizar(alias)
+        cn = normalizar(canonico)
+        if not an or not cn or an == cn or len(an) < 2 or len(cn) < 2:
+            return False
+        fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with self.conectar() as con:
+            con.execute(
+                """INSERT INTO asr_aliases_personales
+                   (alias, alias_normalizado, canonico, canonico_normalizado, contexto, usos, fecha)
+                   VALUES (?, ?, ?, ?, ?, 0, ?)
+                   ON CONFLICT(alias_normalizado, contexto) DO UPDATE SET
+                       alias=excluded.alias,
+                       canonico=excluded.canonico,
+                       canonico_normalizado=excluded.canonico_normalizado,
+                       fecha=excluded.fecha""",
+                (alias, an, canonico, cn, contexto, fecha),
+            )
+        return True
+
+    def listar_aliases_asr_personales(self, contexto=""):
+        contexto = normalizar(contexto or "")
+        with self.conectar() as con:
+            if contexto:
+                return con.execute(
+                    """SELECT id, alias, canonico, contexto, usos, fecha
+                       FROM asr_aliases_personales WHERE contexto=?
+                       ORDER BY usos DESC, id DESC""",
+                    (contexto,),
+                ).fetchall()
+            return con.execute(
+                """SELECT id, alias, canonico, contexto, usos, fecha
+                   FROM asr_aliases_personales ORDER BY contexto, usos DESC, id DESC"""
+            ).fetchall()
+
+    def eliminar_alias_asr_personal(self, alias_id):
+        with self.conectar() as con:
+            con.execute("DELETE FROM asr_aliases_personales WHERE id=?", (int(alias_id),))
+
+    def registrar_uso_alias_asr(self, alias_normalizado, contexto="python"):
+        with self.conectar() as con:
+            con.execute(
+                """UPDATE asr_aliases_personales SET usos=COALESCE(usos,0)+1
+                   WHERE alias_normalizado=? AND contexto=?""",
+                (normalizar(alias_normalizado), normalizar(contexto or "python") or "python"),
+            )
 
     # -------------------- estado --------------------
 
@@ -2800,7 +3225,7 @@ class GestorRespaldosBeta:
             )
 
             info = {
-                "beta_version": "2.7.1",
+                "beta_version": BETA_VERSION,
                 "fecha": ahora.strftime("%Y-%m-%d %H:%M:%S"),
                 "motivo": motivo,
                 "base_dir": str(BASE_DIR),
@@ -2984,7 +3409,10 @@ class BetaApp:
         self.boca_audio_intervalo_ms = 45
         self.boca_audio_job = None
 
-        self.audio_queue = queue.Queue()
+        self.audio_queue = queue.Queue(maxsize=32)
+        self.audio_estado_eventos = 0
+        self.audio_estado_ultimo = ""
+        self.audio_estado_ultimo_informe_ts = 0.0
         self.expresion_actual = "normal"
         self.modelo_vosk = None
 
@@ -3032,8 +3460,14 @@ class BetaApp:
         # mientras Whisper tarda varios segundos; al finalizar limpiamos esa
         # cola para no procesar una segunda versión atrasada de la misma orden.
         self.ultimo_texto_asr_aceptado = ""
+        self.penultimo_texto_asr_aceptado = ""
         self.ultimo_texto_asr_ts = 0.0
         self.transcribiendo_whisper = False
+        # v2.9.12: el hilo de micrófono solo produce textos. El hilo principal
+        # los consume en orden, evitando perder el primer fragmento de una
+        # respuesta cuando llegan varias transcripciones seguidas.
+        self.cola_textos_reconocidos = queue.Queue(maxsize=32)
+        self.asr_secuencia_texto = 0
         try:
             self.umbral_hablante = float(
                 self.memoria.obtener_estado(
@@ -3161,6 +3595,7 @@ class BetaApp:
 
         # Modo compañera: iniciativa conversacional muy moderada.
         self.modo_companera = self.memoria.obtener_estado("modo_companera", "1") == "1"
+        self.beta_inicio_ts = time.time()
         self.ultima_interaccion_voz = time.time()
         self.ultima_iniciativa_ts = time.time()
         self.proxima_iniciativa_ts = time.time() + random.randint(
@@ -3190,6 +3625,85 @@ class BetaApp:
         self.evaluacion_academica_hasta = 0.0
         self.ultimo_ramo_evaluacion = ""
         self.ultimo_tema_evaluacion = ""
+
+        # Beta v3.1.0: Aula Workspace / Modo Estudio. La ventana se crea bajo demanda y
+        # no se restaura automáticamente al iniciar para no invadir el escritorio.
+        self.modo_estudio_activo = False
+        self.ventana_modo_estudio = None
+        self.aula_tema_var = None
+        self.aula_estado_var = None
+        self.aula_progreso_var = None
+        self.aula_pizarra = None
+        self.aula_codigo = None
+        self.aula_ejercicio_var = None
+        self.aula_respuesta = None
+        self.aula_btn_comprobar = None
+        self.aula_btn_pista = None
+        self.aula_ultimo_texto_beta = ""
+        self.aula_ultimo_codigo = ""
+
+        # Beta v3.1.0: Workspace académico dentro del Aula.
+        self.aula_notebook = None
+        self.aula_tab_clase = None
+        self.aula_tab_proyecto = None
+        self.aula_tab_trabajo = None
+        self.aula_proyecto_var = None
+        self.aula_chat = None
+        self.aula_chat_entrada = None
+        self.aula_archivos_tree = None
+        self.aula_trabajo = None
+        self.aula_btn_agregar_archivos = None
+        self.aula_solo_documentos_var = None
+        self.aula_modo_principal = "clase"
+        self.proyecto_estudio_actual = None
+        self.proyecto_ultima_respuesta = ""
+        self.proyecto_consulta_en_curso = False
+        # v3.1.2: conserva el foco conversacional del trabajo (p. ej. pregunta 1).
+        self.proyecto_pregunta_foco = ""
+        self.proyecto_ultimo_error = ""
+        self.proyecto_estudio_nombre_guardado = (
+            self.memoria.obtener_estado("proyecto_estudio_actual", "") or ""
+        ).strip()
+        try:
+            PROYECTOS_ESTUDIO_DIR.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+
+        # Tutora avanzada de Python v2.9.4. Mantiene un tema persistente,
+        # un único ejercicio pendiente y permite responder por voz o por texto.
+        self.modo_tutor_python = (
+            self.memoria.obtener_estado("modo_tutor_python", "1") == "1"
+        )
+        self.tutor_python_tema_actual = (
+            self.memoria.obtener_estado("tutor_python_tema_actual", "") or ""
+        )
+        self.tutor_python_ultimo_tema = (
+            self.memoria.obtener_estado("tutor_python_ultimo_tema", "") or ""
+        )
+        self.tutor_python_pendiente = None
+        self.tutor_python_hasta = 0.0
+        try:
+            _ultimo_ejercicio_python = self.memoria.ultimo_ejercicio_python_completo()
+            self.tutor_python_ultimo_ejercicio_id = (
+                int(_ultimo_ejercicio_python[0]) if _ultimo_ejercicio_python else 0
+            )
+        except Exception:
+            self.tutor_python_ultimo_ejercicio_id = 0
+        # v2.9.2: una respuesta hablada puede llegar en varios fragmentos.
+        self.tutor_python_respuesta_buffer = []
+        self.tutor_python_respuesta_timer = None
+        self.tutor_python_ultimo_resultado_ts = 0.0
+        # v2.9.3: diagnóstico del último intento de generación. Sirve para
+        # responder con honestidad si el Señor pregunta por qué falló un ejercicio.
+        self.tutor_python_ultimo_error_ejercicio = ""
+        # v2.9.4: evita lanzar dos generadores si la misma orden se repite mientras
+        # Qwen todavía está preparando el primer ejercicio.
+        self.tutor_python_generando_ejercicio = False
+        # v2.9.8: diagnóstico efímero de la última fusión Vosk/Whisper durante
+        # una respuesta de la tutora. Nunca se persiste ni se usa como calificación;
+        # solo evita puntuar audio claramente deteriorado.
+        self.tutor_python_asr_calidad_ultima = "normal"
+        self.tutor_python_asr_detalle_ultimo = {}
 
         # Memoria inteligente y continuidad conversacional.
         self.modo_memoria_inteligente = (
@@ -3410,6 +3924,7 @@ class BetaApp:
         self.root.after(500, self.vigilar_inactividad)
         self.root.after(1000, self.vigilar_procesamiento)
         self.root.after(500, self.mantener_siempre_visible)
+        self.root.after(40, self._drenar_cola_textos_reconocidos)
 
         # Cargas pesadas en segundo plano. Piper primero para que la voz quede
         # lista; Whisper y Ollama se preparan después sin congelar la interfaz.
@@ -3560,6 +4075,64 @@ class BetaApp:
             command=self.cambiar_aprendizaje_adaptativo
         )
         self.menu.add_cascade(label="Unidad de aprendizaje", menu=self.menu_aprendizaje)
+
+        self.menu_modo_estudio = tk.Menu(self.menu, tearoff=0)
+        self.menu_modo_estudio.add_command(
+            label="Abrir aula / pizarra",
+            command=lambda: self.activar_modo_estudio(anunciar=False),
+        )
+        self.menu_modo_estudio.add_command(
+            label="Limpiar pizarra",
+            command=self.aula_limpiar_pizarra,
+        )
+        self.menu_modo_estudio.add_command(
+            label="Cerrar modo estudio",
+            command=lambda: self.cerrar_modo_estudio(anunciar=False),
+        )
+        self.menu.add_cascade(label="Modo estudio", menu=self.menu_modo_estudio)
+
+        self.menu_tutor_python = tk.Menu(self.menu, tearoff=0)
+        self.menu_tutor_python.add_command(
+            label="Iniciar / continuar sesión",
+            command=self.iniciar_o_continuar_tutor_python,
+        )
+        self.menu_tutor_python.add_command(
+            label="Elegir tema...",
+            command=self.elegir_tema_tutor_python,
+        )
+        self.menu_tutor_python.add_command(
+            label="Ponme un ejercicio...",
+            command=self.ejercicio_python_manual,
+        )
+        self.menu_tutor_python.add_command(
+            label="Responder ejercicio por texto...",
+            command=self.ventana_responder_ejercicio_python,
+        )
+        self.menu_tutor_python.add_command(
+            label="Dame una pista",
+            command=self.dar_pista_tutor_python,
+        )
+        self.menu_tutor_python.add_command(
+            label="Explicar respuesta del último ejercicio",
+            command=self.explicar_ultimo_ejercicio_python,
+        )
+        self.menu_tutor_python.add_separator()
+        self.menu_tutor_python.add_command(
+            label="Ver progreso de Python...",
+            command=self.ventana_progreso_python,
+        )
+        self.menu_tutor_python.add_command(
+            label="Revisar código Python...",
+            command=self.ventana_revisar_codigo_python,
+        )
+        self.menu_tutor_python.add_separator()
+        self.var_tutor_python = tk.BooleanVar(value=self.modo_tutor_python)
+        self.menu_tutor_python.add_checkbutton(
+            label="Tutora Python activa",
+            variable=self.var_tutor_python,
+            command=self.cambiar_modo_tutor_python,
+        )
+        self.menu.add_cascade(label="Tutora Python", menu=self.menu_tutor_python)
 
         self.menu.add_separator()
         self.menu.add_command(
@@ -4865,6 +5438,3548 @@ class BetaApp:
             self.root.after(0,lambda m=mensaje:self.responder(m,"feliz" if puntuacion>=70 else "normal",tipo_contexto="evaluacion"))
         threading.Thread(target=trabajo,daemon=True).start()
 
+
+    # ======================================================
+    # BETA v3.1.0 - AULA WORKSPACE / MODO ESTUDIO
+    # ======================================================
+
+    def _aula_esta_abierta(self):
+        ventana = getattr(self, "ventana_modo_estudio", None)
+        if ventana is None:
+            return False
+        try:
+            return bool(ventana.winfo_exists())
+        except Exception:
+            return False
+
+    def _aula_contexto_visible(self, tipo_contexto=""):
+        return (tipo_contexto or "general") in {
+            "tecnico", "academico", "evaluacion",
+            "tutor_python", "tutor_python_resultado",
+        }
+
+    def _aula_insertar_texto(self, widget, texto, etiqueta=None, salto=True):
+        if widget is None or not texto:
+            return
+        try:
+            widget.configure(state="normal")
+            if etiqueta:
+                widget.insert("end", texto, etiqueta)
+            else:
+                widget.insert("end", texto)
+            if salto and not texto.endswith("\n"):
+                widget.insert("end", "\n")
+            widget.see("end")
+            widget.configure(state="disabled")
+        except (tk.TclError, AttributeError):
+            pass
+
+    def _aula_extraer_codigo(self, texto):
+        """Extrae bloques Markdown y expresiones inline útiles para la pizarra."""
+        texto = texto or ""
+        bloques = re.findall(r"```(?:python)?\s*(.*?)```", texto, flags=re.IGNORECASE | re.DOTALL)
+        if bloques:
+            return "\n\n".join(b.strip() for b in bloques if b.strip())
+        # Si no hay bloque, mostramos ejemplos inline que parezcan código Python.
+        inline = re.findall(r"`([^`\n]{2,180})`", texto)
+        utiles = []
+        for item in inline:
+            n = normalizar(item)
+            if any(x in n for x in ["print", "python", ">>>", "def ", "if ", "for ", "while ", "="]) \
+                    or re.search(r"\d\s*[+\-*/]\s*\d", item):
+                utiles.append(item.strip())
+        return "\n".join(dict.fromkeys(utiles))
+
+    def _aula_texto_sin_bloques_codigo(self, texto):
+        limpio = re.sub(r"```(?:python)?\s*.*?```", "", texto or "", flags=re.IGNORECASE | re.DOTALL)
+        limpio = re.sub(r"\n{3,}", "\n\n", limpio)
+        return limpio.strip()
+
+    def _aula_actualizar_encabezado(self):
+        if not self._aula_esta_abierta():
+            return
+        item = self._tema_python_por_id(getattr(self, "tutor_python_tema_actual", ""))
+        tema = item.get("nombre") if item else "Seleccione un tema"
+        try:
+            self.aula_tema_var.set(f"Tema: {tema}")
+        except Exception:
+            pass
+        estado = "Clase activa" if self.modo_estudio_activo else "Aula pausada"
+        if getattr(self, "tutor_python_pendiente", None):
+            estado = "Ejercicio pendiente"
+        try:
+            self.aula_estado_var.set(estado)
+        except Exception:
+            pass
+        progreso_txt = "Sin evaluación todavía"
+        if item:
+            try:
+                prog = self.memoria.obtener_progreso_tema("Python", item["nombre"])
+                if prog and int(prog[3] or 0) > 0:
+                    progreso_txt = f"Progreso estimado: {float(prog[2] or 0):.0f}% · {int(prog[3])} evidencia(s)"
+            except Exception:
+                pass
+        try:
+            self.aula_progreso_var.set(progreso_txt)
+        except Exception:
+            pass
+        try:
+            nombre_proyecto = (self.proyecto_estudio_actual or {}).get("nombre", "")
+            self.aula_proyecto_var.set(
+                f"Proyecto: {nombre_proyecto}" if nombre_proyecto else "Proyecto: ninguno"
+            )
+        except Exception:
+            pass
+
+    def _crear_ventana_modo_estudio(self):
+        if self._aula_esta_abierta():
+            try:
+                self.ventana_modo_estudio.deiconify()
+                self.ventana_modo_estudio.lift()
+                self.ventana_modo_estudio.focus_force()
+            except Exception:
+                pass
+            return self.ventana_modo_estudio
+
+        ventana = tk.Toplevel(self.root)
+        self.ventana_modo_estudio = ventana
+        ventana.title(f"Beta Aula Workspace - Modo Estudio v{BETA_VERSION}")
+        ventana.geometry("1280x820")
+        ventana.minsize(980, 650)
+        ventana.protocol("WM_DELETE_WINDOW", lambda: self.cerrar_modo_estudio(anunciar=False))
+
+        exterior = ttk.Frame(ventana, padding=10)
+        exterior.pack(fill="both", expand=True)
+
+        cabecera = ttk.Frame(exterior)
+        cabecera.pack(fill="x", pady=(0, 8))
+        self.aula_tema_var = tk.StringVar(value="Tema: Seleccione un tema")
+        self.aula_estado_var = tk.StringVar(value="Clase activa")
+        self.aula_progreso_var = tk.StringVar(value="Sin evaluación todavía")
+        self.aula_proyecto_var = tk.StringVar(value="Proyecto: ninguno")
+        ttk.Label(cabecera, text="BETA · AULA WORKSPACE", font=("Segoe UI", 15, "bold")).pack(side="left")
+        ttk.Label(cabecera, textvariable=self.aula_tema_var, font=("Segoe UI", 10, "bold")).pack(side="left", padx=(22, 8))
+        ttk.Label(cabecera, textvariable=self.aula_proyecto_var, font=("Segoe UI", 10, "bold")).pack(side="left", padx=8)
+        ttk.Label(cabecera, textvariable=self.aula_estado_var).pack(side="left", padx=8)
+        ttk.Label(cabecera, textvariable=self.aula_progreso_var).pack(side="right")
+
+        # La misma ventana reúne clase, proyecto/chat y borrador.
+        self.aula_notebook = ttk.Notebook(exterior)
+        self.aula_notebook.pack(fill="both", expand=True)
+        self.aula_tab_clase = ttk.Frame(self.aula_notebook, padding=8)
+        self.aula_tab_proyecto = ttk.Frame(self.aula_notebook, padding=8)
+        self.aula_tab_trabajo = ttk.Frame(self.aula_notebook, padding=8)
+        self.aula_notebook.add(self.aula_tab_clase, text="Clase / Pizarra")
+        self.aula_notebook.add(self.aula_tab_proyecto, text="Proyecto / Chat")
+        self.aula_notebook.add(self.aula_tab_trabajo, text="Trabajo / Borrador")
+        self.aula_notebook.bind("<<NotebookTabChanged>>", self._aula_al_cambiar_pestana)
+
+        # ---------------------- CLASE / PIZARRA ----------------------
+        panel = ttk.Panedwindow(self.aula_tab_clase, orient="horizontal")
+        panel.pack(fill="both", expand=True)
+        izquierda = ttk.Frame(panel, padding=(0, 0, 8, 0))
+        derecha = ttk.Frame(panel, padding=(8, 0, 0, 0))
+        panel.add(izquierda, weight=3)
+        panel.add(derecha, weight=2)
+
+        ttk.Label(izquierda, text="Pizarra / explicación", font=("Segoe UI", 11, "bold")).pack(anchor="w")
+        self.aula_pizarra = tk.Text(
+            izquierda, wrap="word", font=("Segoe UI", 11), padx=12, pady=10,
+            undo=False, state="disabled",
+        )
+        self.aula_pizarra.pack(fill="both", expand=True, pady=(5, 0))
+        self.aula_pizarra.tag_configure("beta", font=("Segoe UI", 11, "bold"), spacing1=8)
+        self.aula_pizarra.tag_configure("usuario", font=("Segoe UI", 10, "italic"), spacing1=8)
+        self.aula_pizarra.tag_configure("titulo", font=("Segoe UI", 13, "bold"), spacing1=10, spacing3=5)
+
+        ttk.Label(derecha, text="Ejemplo / código", font=("Segoe UI", 11, "bold")).pack(anchor="w")
+        self.aula_codigo = tk.Text(
+            derecha, wrap="none", height=12, font=("Consolas", 11), padx=10, pady=8,
+            state="disabled",
+        )
+        self.aula_codigo.pack(fill="both", expand=False, pady=(5, 12))
+
+        ejercicio_box = ttk.LabelFrame(derecha, text="Ejercicio", padding=10)
+        ejercicio_box.pack(fill="both", expand=True)
+        self.aula_ejercicio_var = tk.StringVar(value="Aún no hay un ejercicio pendiente.")
+        ttk.Label(
+            ejercicio_box, textvariable=self.aula_ejercicio_var,
+            wraplength=445, justify="left",
+        ).pack(fill="x", anchor="w", pady=(0, 8))
+        ttk.Label(ejercicio_box, text="Tu respuesta:").pack(anchor="w")
+        self.aula_respuesta = tk.Text(ejercicio_box, wrap="word", height=8, font=("Segoe UI", 10))
+        self.aula_respuesta.pack(fill="both", expand=True, pady=(4, 8))
+
+        botones_resp = ttk.Frame(ejercicio_box)
+        botones_resp.pack(fill="x")
+        self.aula_btn_comprobar = ttk.Button(
+            botones_resp, text="Comprobar", command=self.aula_comprobar_respuesta
+        )
+        self.aula_btn_comprobar.pack(side="left")
+        self.aula_btn_pista = ttk.Button(
+            botones_resp, text="Pista", command=self.dar_pista_tutor_python
+        )
+        self.aula_btn_pista.pack(side="left", padx=5)
+        ttk.Button(botones_resp, text="Otro ejercicio", command=self.aula_otro_ejercicio).pack(side="left", padx=5)
+        ttk.Button(botones_resp, text="Explicar de nuevo", command=self.aula_explicar_de_nuevo).pack(side="left", padx=5)
+
+        # ---------------------- PROYECTO / CHAT ----------------------
+        proyecto_panel = ttk.Panedwindow(self.aula_tab_proyecto, orient="horizontal")
+        proyecto_panel.pack(fill="both", expand=True)
+        proyecto_izq = ttk.Frame(proyecto_panel, padding=(0, 0, 8, 0))
+        proyecto_der = ttk.Frame(proyecto_panel, padding=(8, 0, 0, 0))
+        proyecto_panel.add(proyecto_izq, weight=1)
+        proyecto_panel.add(proyecto_der, weight=3)
+
+        ttk.Label(proyecto_izq, text="Proyecto académico", font=("Segoe UI", 11, "bold")).pack(anchor="w")
+        acciones = ttk.Frame(proyecto_izq)
+        acciones.pack(fill="x", pady=(6, 8))
+        ttk.Button(acciones, text="Nuevo", command=self.aula_nuevo_proyecto).pack(side="left")
+        ttk.Button(acciones, text="Abrir", command=self.aula_abrir_proyecto).pack(side="left", padx=5)
+        self.aula_btn_agregar_archivos = ttk.Button(
+            proyecto_izq, text="Agregar archivos…", command=self.aula_agregar_archivos_proyecto
+        )
+        self.aula_btn_agregar_archivos.pack(fill="x", pady=(0, 8))
+
+        ttk.Label(proyecto_izq, text="Archivos del proyecto:").pack(anchor="w")
+        self.aula_archivos_tree = ttk.Treeview(
+            proyecto_izq, columns=("tipo", "estado"), show="tree headings", height=18
+        )
+        self.aula_archivos_tree.heading("#0", text="Archivo")
+        self.aula_archivos_tree.heading("tipo", text="Tipo")
+        self.aula_archivos_tree.heading("estado", text="Estado")
+        self.aula_archivos_tree.column("#0", width=210)
+        self.aula_archivos_tree.column("tipo", width=65, anchor="center")
+        self.aula_archivos_tree.column("estado", width=80, anchor="center")
+        self.aula_archivos_tree.pack(fill="both", expand=True, pady=(4, 8))
+
+        self.aula_solo_documentos_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            proyecto_izq,
+            text="Responder solo con los documentos",
+            variable=self.aula_solo_documentos_var,
+        ).pack(anchor="w", pady=(0, 6))
+        ttk.Label(
+            proyecto_izq,
+            text="PDF, DOCX, TXT y MD. Los archivos quedan guardados dentro de la carpeta de Beta.",
+            wraplength=300, justify="left",
+        ).pack(anchor="w")
+
+        ttk.Label(proyecto_der, text="Chat con Beta", font=("Segoe UI", 11, "bold")).pack(anchor="w")
+        self.aula_chat = tk.Text(
+            proyecto_der, wrap="word", font=("Segoe UI", 10), padx=12, pady=10,
+            state="disabled",
+        )
+        self.aula_chat.pack(fill="both", expand=True, pady=(5, 8))
+        self.aula_chat.tag_configure("chat_beta", font=("Segoe UI", 10), spacing1=6, spacing3=6)
+        self.aula_chat.tag_configure("chat_usuario", font=("Segoe UI", 10, "bold"), spacing1=6, spacing3=6)
+        self.aula_chat.tag_configure("chat_fuente", font=("Segoe UI", 9, "italic"), spacing1=2, spacing3=4)
+
+        entrada_marco = ttk.Frame(proyecto_der)
+        entrada_marco.pack(fill="x")
+        self.aula_chat_entrada = tk.Text(entrada_marco, wrap="word", height=4, font=("Segoe UI", 10))
+        self.aula_chat_entrada.pack(side="left", fill="x", expand=True)
+        self.aula_chat_entrada.bind("<Control-Return>", lambda _e: (self.aula_enviar_chat(), "break")[1])
+        botones_chat = ttk.Frame(entrada_marco)
+        botones_chat.pack(side="right", padx=(8, 0), fill="y")
+        ttk.Button(botones_chat, text="Enviar", command=self.aula_enviar_chat).pack(fill="x")
+        ttk.Button(
+            botones_chat, text="Agregar respuesta al trabajo",
+            command=self.aula_agregar_ultima_respuesta_al_trabajo,
+        ).pack(fill="x", pady=(5, 0))
+
+        # ---------------------- TRABAJO / BORRADOR ----------------------
+        trabajo_cab = ttk.Frame(self.aula_tab_trabajo)
+        trabajo_cab.pack(fill="x", pady=(0, 6))
+        ttk.Label(trabajo_cab, text="Borrador del trabajo", font=("Segoe UI", 11, "bold")).pack(side="left")
+        ttk.Button(trabajo_cab, text="Guardar borrador", command=self.aula_guardar_borrador).pack(side="right")
+        ttk.Button(
+            trabajo_cab, text="Agregar última respuesta de Beta",
+            command=self.aula_agregar_ultima_respuesta_al_trabajo,
+        ).pack(side="right", padx=6)
+        self.aula_trabajo = tk.Text(
+            self.aula_tab_trabajo, wrap="word", font=("Segoe UI", 11), padx=14, pady=12, undo=True
+        )
+        self.aula_trabajo.pack(fill="both", expand=True)
+
+        pie = ttk.Frame(exterior)
+        pie.pack(fill="x", pady=(8, 0))
+        ttk.Button(pie, text="Limpiar pizarra", command=self.aula_limpiar_pizarra).pack(side="left")
+        ttk.Button(pie, text="Ver progreso Python", command=self.ventana_progreso_python).pack(side="left", padx=6)
+        ttk.Button(pie, text="Cerrar aula", command=lambda: self.cerrar_modo_estudio(anunciar=False)).pack(side="right")
+
+        self._aula_insertar_texto(
+            self.aula_pizarra,
+            "Modo Estudio activo. La pestaña Clase mantiene la tutora. En Proyecto / Chat puede cargar archivos y conversar con Beta usando esos documentos. En Trabajo / Borrador puede construir el texto final.",
+            "titulo",
+        )
+        self._aula_actualizar_encabezado()
+        self._aula_refrescar_ejercicio()
+
+        # Restaurar el último proyecto sin obligar a seleccionarlo en cada inicio.
+        if self.proyecto_estudio_actual is None and self.proyecto_estudio_nombre_guardado:
+            try:
+                self._proyecto_abrir_nombre(self.proyecto_estudio_nombre_guardado, silencioso=True)
+            except Exception as error:
+                print("AULA WORKSPACE: no pude restaurar proyecto:", error)
+        self._proyecto_refrescar_ui()
+
+        try:
+            ventana.lift()
+            ventana.focus_force()
+        except Exception:
+            pass
+        return ventana
+
+    def activar_modo_estudio(self, anunciar=True):
+        self.modo_estudio_activo = True
+        try:
+            self.memoria.cambiar_estado("modo_estudio_ultimo", "1")
+        except Exception:
+            pass
+        self._crear_ventana_modo_estudio()
+        self._aula_actualizar_encabezado()
+        self._aula_refrescar_ejercicio()
+        print("MODO ESTUDIO v3.1.2: Aula Workspace activa.")
+        if anunciar:
+            self.responder(
+                "modo estudio activado. Abrí el aula de Beta. Las explicaciones, ejemplos y ejercicios quedarán visibles en la pizarra mientras seguimos conversando.",
+                "feliz",
+                tipo_contexto="tutor_python" if self.tutor_python_tema_actual else "general",
+            )
+
+    def cerrar_modo_estudio(self, anunciar=True):
+        try:
+            self.aula_guardar_borrador(silencioso=True)
+        except Exception:
+            pass
+        self.modo_estudio_activo = False
+        try:
+            self.memoria.cambiar_estado("modo_estudio_ultimo", "0")
+        except Exception:
+            pass
+        ventana = getattr(self, "ventana_modo_estudio", None)
+        self.ventana_modo_estudio = None
+        try:
+            if ventana is not None and ventana.winfo_exists():
+                ventana.destroy()
+        except Exception:
+            pass
+        self.aula_pizarra = None
+        self.aula_codigo = None
+        self.aula_respuesta = None
+        self.aula_btn_comprobar = None
+        self.aula_btn_pista = None
+        self.aula_notebook = None
+        self.aula_chat = None
+        self.aula_chat_entrada = None
+        self.aula_archivos_tree = None
+        self.aula_trabajo = None
+        print("MODO ESTUDIO v3.1.2: Aula Workspace cerrada.")
+        if anunciar:
+            self.responder(
+                "modo estudio finalizado. Conservaré el progreso y el tema de Python para retomarlos después.",
+                "normal",
+            )
+
+    def aula_limpiar_pizarra(self):
+        for widget in (getattr(self, "aula_pizarra", None), getattr(self, "aula_codigo", None)):
+            if widget is None:
+                continue
+            try:
+                widget.configure(state="normal")
+                widget.delete("1.0", "end")
+                widget.configure(state="disabled")
+            except Exception:
+                pass
+        self.aula_ultimo_texto_beta = ""
+        self.aula_ultimo_codigo = ""
+
+    def _aula_mostrar_texto(self, texto, tipo_contexto="general", desde_streaming=False):
+        if not self.modo_estudio_activo or not self._aula_esta_abierta():
+            return
+        if not self._aula_contexto_visible(tipo_contexto):
+            return
+        texto = (texto or "").strip()
+        if not texto:
+            return
+        codigo = self._aula_extraer_codigo(texto)
+        prosa = self._aula_texto_sin_bloques_codigo(texto)
+        if prosa:
+            # En streaming cada fragmento ya es una frase cerrada; lo agregamos
+            # inmediatamente para que la pizarra avance junto con Daniela.
+            self._aula_insertar_texto(self.aula_pizarra, prosa, "beta")
+            self.aula_ultimo_texto_beta = prosa
+        if codigo and codigo != self.aula_ultimo_codigo:
+            self._aula_insertar_texto(self.aula_codigo, codigo, None)
+            self.aula_ultimo_codigo = codigo
+        self._aula_actualizar_encabezado()
+
+    def _aula_mostrar_texto_async(self, texto, tipo_contexto="general", desde_streaming=False):
+        if not self.modo_estudio_activo:
+            return
+        try:
+            self.root.after(
+                0,
+                lambda t=texto, c=tipo_contexto, s=desde_streaming: self._aula_mostrar_texto(t, c, s),
+            )
+        except tk.TclError:
+            pass
+
+    def _aula_mostrar_respuesta_usuario(self, texto):
+        if not self.modo_estudio_activo or not self._aula_esta_abierta():
+            return
+        texto = (texto or "").strip()
+        if not texto:
+            return
+        self._aula_insertar_texto(
+            self.aula_pizarra,
+            "Lo que Beta entendió de su respuesta:\n" + texto,
+            "usuario",
+        )
+
+    def _aula_mostrar_respuesta_usuario_async(self, texto):
+        if not self.modo_estudio_activo:
+            return
+        try:
+            self.root.after(0, lambda t=texto: self._aula_mostrar_respuesta_usuario(t))
+        except tk.TclError:
+            pass
+
+    def _aula_refrescar_ejercicio(self):
+        if not self._aula_esta_abierta():
+            return
+        pendiente = getattr(self, "tutor_python_pendiente", None)
+        if pendiente:
+            enunciado = pendiente.get("enunciado", "") or "Ejercicio pendiente"
+            tema = pendiente.get("tema", "Python")
+            nivel = pendiente.get("nivel", "")
+            texto = f"{tema} · {nivel}\n\n{enunciado}" if nivel else f"{tema}\n\n{enunciado}"
+        else:
+            texto = "Aún no hay un ejercicio pendiente. Puede decir: Beta, ponme un ejercicio."
+        try:
+            self.aula_ejercicio_var.set(texto)
+        except Exception:
+            pass
+        estado = "normal" if pendiente else "disabled"
+        for boton in (getattr(self, "aula_btn_comprobar", None), getattr(self, "aula_btn_pista", None)):
+            if boton is not None:
+                try:
+                    boton.configure(state=estado)
+                except Exception:
+                    pass
+        self._aula_actualizar_encabezado()
+
+    def _aula_refrescar_ejercicio_async(self):
+        if not self.modo_estudio_activo:
+            return
+        try:
+            self.root.after(0, self._aula_refrescar_ejercicio)
+        except tk.TclError:
+            pass
+
+    def aula_comprobar_respuesta(self):
+        if not self.tutor_python_pendiente:
+            self.responder("no hay un ejercicio pendiente para comprobar.", "normal")
+            return
+        if self.aula_respuesta is None:
+            return
+        respuesta = self.aula_respuesta.get("1.0", "end").strip()
+        if not respuesta:
+            try:
+                self.aula_respuesta.focus_set()
+            except Exception:
+                pass
+            return
+        if self.tutor_python_respuesta_timer is not None:
+            try:
+                self.root.after_cancel(self.tutor_python_respuesta_timer)
+            except Exception:
+                pass
+            self.tutor_python_respuesta_timer = None
+        self.tutor_python_respuesta_buffer = []
+        print(f"AULA WORKSPACE v3.1.2: respuesta de ejercicio escrita='{respuesta}'")
+        self._aula_mostrar_respuesta_usuario("[Respuesta escrita] " + respuesta)
+        try:
+            self.memoria.guardar_conversacion("Señor", respuesta)
+            self.actualizar_contexto_turno("Señor", respuesta)
+        except Exception:
+            pass
+        try:
+            self.aula_respuesta.delete("1.0", "end")
+        except Exception:
+            pass
+        self.procesar_respuesta_tutor_python(respuesta)
+
+    def aula_otro_ejercicio(self):
+        # El botón expresa una decisión explícita de abandonar la práctica actual.
+        # Cerramos el ejercicio pendiente sin modificar el progreso y generamos otro.
+        if self.tutor_python_pendiente:
+            self.cancelar_ejercicio_python(anunciar=False)
+            self._aula_refrescar_ejercicio()
+        item = self._tema_python_por_id(self.tutor_python_tema_actual)
+        self.generar_ejercicio_python_async(item=item)
+
+    def aula_explicar_de_nuevo(self):
+        item = self._tema_python_por_id(self.tutor_python_tema_actual)
+        if item:
+            self.iniciar_sesion_python(item)
+        else:
+            self.responder(
+                "primero elija un tema de estudio. Puede decir, por ejemplo: Beta, quiero estudiar Python.",
+                "normal",
+            )
+
+    # ======================================================
+    # BETA v3.1.0 - WORKSPACE ACADÉMICO / PROYECTOS
+    # ======================================================
+
+    def _aula_al_cambiar_pestana(self, _event=None):
+        if self.aula_notebook is None:
+            return
+        try:
+            seleccion = self.aula_notebook.select()
+            texto = self.aula_notebook.tab(seleccion, "text")
+            if "Proyecto" in texto or "Trabajo" in texto:
+                self.aula_modo_principal = "proyecto"
+            else:
+                self.aula_modo_principal = "clase"
+        except Exception:
+            pass
+
+    def _aula_seleccionar_pestana_proyecto(self):
+        if self.aula_notebook is None or self.aula_tab_proyecto is None:
+            return
+        try:
+            self.aula_notebook.select(self.aula_tab_proyecto)
+            self.aula_modo_principal = "proyecto"
+        except Exception:
+            pass
+
+    def _proyecto_nombre_seguro(self, nombre):
+        limpio = normalizar(nombre or "proyecto")
+        limpio = re.sub(r"[^a-z0-9_-]+", "_", limpio).strip("_")
+        return limpio[:80] or "proyecto"
+
+    def _proyecto_ruta_por_nombre(self, nombre):
+        return PROYECTOS_ESTUDIO_DIR / self._proyecto_nombre_seguro(nombre)
+
+    def _proyecto_manifest_ruta(self, ruta_proyecto):
+        return Path(ruta_proyecto) / "proyecto.json"
+
+    def _proyecto_borrador_ruta(self, ruta_proyecto):
+        return Path(ruta_proyecto) / "borrador.md"
+
+    def _proyecto_manifest_nuevo(self, nombre, ruta):
+        ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return {
+            "version": 1,
+            "nombre": (nombre or "Proyecto académico").strip(),
+            "ruta": str(Path(ruta)),
+            "fecha_creacion": ahora,
+            "actualizado": ahora,
+            "archivos": [],
+            "chat": [],
+        }
+
+    def _proyecto_guardar_manifest(self):
+        proyecto = self.proyecto_estudio_actual
+        if not proyecto:
+            return False
+        try:
+            ruta = Path(proyecto["ruta"])
+            ruta.mkdir(parents=True, exist_ok=True)
+            proyecto["actualizado"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            chat = proyecto.get("chat") or []
+            proyecto["chat"] = chat[-PROYECTO_CHAT_HISTORIAL_MAX:]
+            self._proyecto_manifest_ruta(ruta).write_text(
+                json.dumps(proyecto, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            return True
+        except Exception as error:
+            print("PROYECTO: no pude guardar manifiesto:", error)
+            return False
+
+    def _proyecto_abrir_nombre(self, nombre, silencioso=False):
+        nombre = (nombre or "").strip()
+        if not nombre:
+            return False
+        ruta = self._proyecto_ruta_por_nombre(nombre)
+        manifest = self._proyecto_manifest_ruta(ruta)
+        if not manifest.exists():
+            if not silencioso:
+                return False
+            return False
+        try:
+            datos = json.loads(manifest.read_text(encoding="utf-8"))
+            if not isinstance(datos, dict):
+                return False
+            datos["ruta"] = str(ruta)
+            datos.setdefault("archivos", [])
+            datos.setdefault("chat", [])
+            self.proyecto_estudio_actual = datos
+            self.proyecto_estudio_nombre_guardado = datos.get("nombre", nombre)
+            self.memoria.cambiar_estado("proyecto_estudio_actual", self.proyecto_estudio_nombre_guardado)
+            self._proyecto_refrescar_ui()
+            if not silencioso:
+                print(f"PROYECTO v3.1.2: abierto '{self.proyecto_estudio_nombre_guardado}'.")
+            return True
+        except Exception as error:
+            print("PROYECTO: error abriendo proyecto:", error)
+            return False
+
+    def _proyecto_buscar_nombre_similar(self, consulta):
+        consulta_n = normalizar(consulta or "")
+        if not consulta_n:
+            return ""
+        candidatos = []
+        try:
+            for carpeta in PROYECTOS_ESTUDIO_DIR.iterdir():
+                if not carpeta.is_dir():
+                    continue
+                manifest = self._proyecto_manifest_ruta(carpeta)
+                nombre = carpeta.name
+                if manifest.exists():
+                    try:
+                        datos = json.loads(manifest.read_text(encoding="utf-8"))
+                        nombre = datos.get("nombre") or nombre
+                    except Exception:
+                        pass
+                n = normalizar(nombre)
+                score = 1.0 if (n in consulta_n or consulta_n in n) else difflib.SequenceMatcher(None, n, consulta_n).ratio()
+                candidatos.append((score, nombre))
+        except Exception:
+            return ""
+        if not candidatos:
+            return ""
+        candidatos.sort(reverse=True)
+        return candidatos[0][1] if candidatos[0][0] >= 0.48 else ""
+
+    def crear_proyecto_estudio(self, nombre, anunciar=True):
+        nombre = (nombre or "").strip()
+        if not nombre:
+            return False
+        ruta = self._proyecto_ruta_por_nombre(nombre)
+        ruta.mkdir(parents=True, exist_ok=True)
+        (ruta / "archivos").mkdir(parents=True, exist_ok=True)
+        (ruta / "textos").mkdir(parents=True, exist_ok=True)
+        manifest = self._proyecto_manifest_ruta(ruta)
+        if manifest.exists():
+            try:
+                datos = json.loads(manifest.read_text(encoding="utf-8"))
+            except Exception:
+                datos = self._proyecto_manifest_nuevo(nombre, ruta)
+        else:
+            datos = self._proyecto_manifest_nuevo(nombre, ruta)
+        datos["nombre"] = nombre
+        datos["ruta"] = str(ruta)
+        datos.setdefault("archivos", [])
+        datos.setdefault("chat", [])
+        self.proyecto_estudio_actual = datos
+        self.proyecto_estudio_nombre_guardado = nombre
+        self.memoria.cambiar_estado("proyecto_estudio_actual", nombre)
+        self._proyecto_guardar_manifest()
+        self._proyecto_refrescar_ui()
+        self._aula_seleccionar_pestana_proyecto()
+        print(f"PROYECTO v3.1.2: activo '{nombre}'.")
+        if anunciar:
+            self.responder(
+                f"proyecto {nombre} preparado. Puede agregar los PDF, Word o textos y trabajar conmigo desde el chat del Aula.",
+                "feliz", tipo_contexto="proyecto",
+            )
+        return True
+
+    def aula_nuevo_proyecto(self):
+        nombre = simpledialog.askstring(
+            "Nuevo proyecto académico",
+            "Nombre del proyecto:\nEjemplo: IoT Módulo 4",
+            parent=self.ventana_modo_estudio,
+        )
+        if nombre:
+            self.crear_proyecto_estudio(nombre.strip(), anunciar=False)
+
+    def aula_abrir_proyecto(self):
+        proyectos = []
+        try:
+            for carpeta in sorted(PROYECTOS_ESTUDIO_DIR.iterdir(), key=lambda p: p.name.lower()):
+                if not carpeta.is_dir():
+                    continue
+                manifest = self._proyecto_manifest_ruta(carpeta)
+                nombre = carpeta.name
+                if manifest.exists():
+                    try:
+                        datos = json.loads(manifest.read_text(encoding="utf-8"))
+                        nombre = datos.get("nombre") or nombre
+                    except Exception:
+                        pass
+                proyectos.append(nombre)
+        except Exception:
+            pass
+        if not proyectos:
+            messagebox.showinfo("Beta Aula", "Todavía no hay proyectos guardados.", parent=self.ventana_modo_estudio)
+            return
+
+        ventana = tk.Toplevel(self.ventana_modo_estudio)
+        ventana.title("Abrir proyecto")
+        ventana.geometry("480x380")
+        lista = tk.Listbox(ventana, font=("Segoe UI", 10))
+        lista.pack(fill="both", expand=True, padx=12, pady=12)
+        for nombre in proyectos:
+            lista.insert("end", nombre)
+        if proyectos:
+            lista.selection_set(0)
+
+        def abrir():
+            sel = lista.curselection()
+            if not sel:
+                return
+            nombre = lista.get(sel[0])
+            if self._proyecto_abrir_nombre(nombre, silencioso=False):
+                ventana.destroy()
+                self._aula_seleccionar_pestana_proyecto()
+
+        ttk.Button(ventana, text="Abrir", command=abrir).pack(pady=(0, 12))
+        lista.bind("<Double-1>", lambda _e: abrir())
+
+    def _proyecto_extraer_texto(self, ruta):
+        ruta = Path(ruta)
+        suf = ruta.suffix.lower()
+        if suf == ".pdf":
+            try:
+                import pymupdf
+            except Exception as error:
+                raise RuntimeError("Falta PyMuPDF para leer PDF.") from error
+            partes = []
+            doc = pymupdf.open(str(ruta))
+            try:
+                for i in range(doc.page_count):
+                    pagina = doc.load_page(i)
+                    contenido = (pagina.get_text("text") or "").strip()
+                    if contenido:
+                        partes.append(f"[[PÁGINA {i + 1}]]\n{contenido}")
+            finally:
+                doc.close()
+            return "\n\n".join(partes)
+
+        if suf == ".docx":
+            try:
+                from docx import Document
+            except Exception as error:
+                raise RuntimeError("Falta python-docx para leer documentos Word.") from error
+            doc = Document(str(ruta))
+            partes = []
+            for p in doc.paragraphs:
+                txt = (p.text or "").strip()
+                if txt:
+                    partes.append(txt)
+            for tabla in doc.tables:
+                for fila in tabla.rows:
+                    celdas = [re.sub(r"\s+", " ", (c.text or "").strip()) for c in fila.cells]
+                    if any(celdas):
+                        partes.append(" | ".join(celdas))
+            return "\n\n".join(partes)
+
+        if suf in {".txt", ".md", ".py", ".csv"}:
+            for encoding in ("utf-8", "utf-8-sig", "cp1252", "latin-1"):
+                try:
+                    return ruta.read_text(encoding=encoding)
+                except UnicodeDecodeError:
+                    continue
+            return ruta.read_text(errors="replace")
+        raise RuntimeError(f"Formato no soportado todavía: {suf or 'sin extensión'}")
+
+    def _proyecto_fragmentar_documento(self, texto, nombre=""):
+        texto = (texto or "").replace("\x00", " ").strip()
+        if not texto:
+            return []
+        # Mantener página cuando viene desde PDF.
+        partes = re.split(r"(?=\[\[PÁGINA \d+\]\])", texto, flags=re.IGNORECASE)
+        fragmentos = []
+        for parte in partes:
+            if not parte.strip():
+                continue
+            pagina = None
+            m = re.match(r"\[\[PÁGINA (\d+)\]\]\s*", parte, flags=re.IGNORECASE)
+            if m:
+                pagina = int(m.group(1))
+                parte = parte[m.end():]
+            parrafos = [re.sub(r"\s+", " ", p).strip() for p in re.split(r"\n\s*\n|\n", parte) if p.strip()]
+            actual = ""
+            for parrafo in parrafos:
+                candidato = (actual + " " + parrafo).strip() if actual else parrafo
+                if len(candidato) <= PROYECTO_FRAGMENTO_MAX:
+                    actual = candidato
+                else:
+                    if actual:
+                        fragmentos.append({"texto": actual, "pagina": pagina, "documento": nombre})
+                    cola = actual[-PROYECTO_FRAGMENTO_OVERLAP:] if actual else ""
+                    actual = (cola + " " + parrafo).strip() if cola else parrafo
+            if actual:
+                fragmentos.append({"texto": actual, "pagina": pagina, "documento": nombre})
+        return fragmentos
+
+    def agregar_archivos_proyecto_estudio(self, rutas):
+        proyecto = self.proyecto_estudio_actual
+        if not proyecto:
+            return {"ok": 0, "errores": ["No hay un proyecto activo."]}
+        ruta_proyecto = Path(proyecto["ruta"])
+        carpeta_archivos = ruta_proyecto / "archivos"
+        carpeta_textos = ruta_proyecto / "textos"
+        carpeta_archivos.mkdir(parents=True, exist_ok=True)
+        carpeta_textos.mkdir(parents=True, exist_ok=True)
+        existentes = {str(x.get("sha256", "")) for x in proyecto.get("archivos", [])}
+        ok = 0
+        errores = []
+        for origen in rutas:
+            origen = Path(origen)
+            try:
+                if not origen.exists() or not origen.is_file():
+                    raise RuntimeError("El archivo no existe.")
+                sha = hashlib.sha256(origen.read_bytes()).hexdigest()
+                if sha in existentes:
+                    continue
+                texto = self._proyecto_extraer_texto(origen)
+                if len(normalizar(texto)) < 20:
+                    raise RuntimeError("No pude extraer texto suficiente del archivo.")
+                nombre_seguro = re.sub(r"[^A-Za-z0-9._ -]+", "_", origen.name)[:120]
+                destino = carpeta_archivos / f"{sha[:10]}_{nombre_seguro}"
+                shutil.copy2(origen, destino)
+                texto_ruta = carpeta_textos / f"{sha[:16]}.txt"
+                texto_ruta.write_text(texto, encoding="utf-8")
+                proyecto.setdefault("archivos", []).append({
+                    "nombre": origen.name,
+                    "sha256": sha,
+                    "tipo": origen.suffix.lower().lstrip(".") or "archivo",
+                    "ruta": str(destino.relative_to(ruta_proyecto)),
+                    "texto": str(texto_ruta.relative_to(ruta_proyecto)),
+                    "caracteres": len(texto),
+                    "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                })
+                existentes.add(sha)
+                ok += 1
+                print(f"PROYECTO v3.1.2: agregado {origen.name} ({len(texto)} caracteres).")
+            except Exception as error:
+                errores.append(f"{origen.name}: {error}")
+                print("PROYECTO: archivo omitido:", origen.name, error)
+        self._proyecto_guardar_manifest()
+        return {"ok": ok, "errores": errores}
+
+    def aula_agregar_archivos_proyecto(self):
+        if not self.proyecto_estudio_actual:
+            self.aula_nuevo_proyecto()
+            if not self.proyecto_estudio_actual:
+                return
+        rutas = filedialog.askopenfilenames(
+            title="Agregar archivos al proyecto de Beta",
+            parent=self.ventana_modo_estudio,
+            filetypes=[
+                ("Documentos compatibles", "*.pdf *.docx *.txt *.md"),
+                ("PDF", "*.pdf"),
+                ("Word", "*.docx"),
+                ("Texto", "*.txt *.md"),
+                ("Todos los archivos", "*.*"),
+            ],
+        )
+        if not rutas:
+            return
+        if self.aula_btn_agregar_archivos is not None:
+            try:
+                self.aula_btn_agregar_archivos.configure(state="disabled")
+            except Exception:
+                pass
+        self._aula_chat_insertar("Beta", f"Procesando {len(rutas)} archivo(s)…")
+
+        def trabajo():
+            resultado = self.agregar_archivos_proyecto_estudio(rutas)
+            def terminar():
+                if self.aula_btn_agregar_archivos is not None:
+                    try:
+                        self.aula_btn_agregar_archivos.configure(state="normal")
+                    except Exception:
+                        pass
+                self._proyecto_refrescar_ui()
+                if resultado["errores"]:
+                    messagebox.showwarning(
+                        "Beta Aula",
+                        f"Agregados: {resultado['ok']}\n\n" + "\n".join(resultado["errores"][:8]),
+                        parent=self.ventana_modo_estudio,
+                    )
+                elif resultado["ok"]:
+                    messagebox.showinfo(
+                        "Beta Aula", f"Agregué {resultado['ok']} archivo(s) al proyecto.",
+                        parent=self.ventana_modo_estudio,
+                    )
+            try:
+                self.root.after(0, terminar)
+            except tk.TclError:
+                pass
+
+        threading.Thread(target=trabajo, daemon=True).start()
+
+    def _proyecto_refrescar_ui(self):
+        if not self._aula_esta_abierta():
+            return
+        self._aula_actualizar_encabezado()
+        if self.aula_archivos_tree is not None:
+            try:
+                for item in self.aula_archivos_tree.get_children():
+                    self.aula_archivos_tree.delete(item)
+                proyecto = self.proyecto_estudio_actual or {}
+                for archivo in proyecto.get("archivos", []):
+                    self.aula_archivos_tree.insert(
+                        "", "end", text=archivo.get("nombre", "archivo"),
+                        values=(archivo.get("tipo", ""), "Listo"),
+                    )
+            except Exception:
+                pass
+        self._aula_chat_restaurar()
+        self._aula_cargar_borrador()
+
+    def _aula_chat_insertar(self, autor, texto, fuentes=None):
+        if self.aula_chat is None or not texto:
+            return
+        try:
+            self.aula_chat.configure(state="normal")
+            etiqueta = "chat_usuario" if normalizar(autor) in {"senor", "usuario", "tu"} else "chat_beta"
+            self.aula_chat.insert("end", f"{autor}:\n", etiqueta)
+            self.aula_chat.insert("end", texto.strip() + "\n")
+            if fuentes:
+                self.aula_chat.insert("end", "Fuentes: " + "; ".join(fuentes) + "\n", "chat_fuente")
+            self.aula_chat.insert("end", "\n")
+            self.aula_chat.see("end")
+            self.aula_chat.configure(state="disabled")
+        except Exception:
+            pass
+
+    def _aula_chat_restaurar(self):
+        if self.aula_chat is None:
+            return
+        try:
+            self.aula_chat.configure(state="normal")
+            self.aula_chat.delete("1.0", "end")
+            self.aula_chat.configure(state="disabled")
+        except Exception:
+            return
+        proyecto = self.proyecto_estudio_actual
+        if not proyecto:
+            self._aula_chat_insertar(
+                "Beta",
+                "Cree o abra un proyecto y agregue sus documentos. Después puede preguntarme por el trabajo desde aquí.",
+            )
+            return
+        chat = proyecto.get("chat") or []
+        if not chat:
+            self._aula_chat_insertar(
+                "Beta",
+                f"Proyecto '{proyecto.get('nombre','')}' listo. Agregue sus archivos y pregúnteme qué pide el trabajo o qué parte quiere desarrollar.",
+            )
+            return
+        for entrada in chat[-40:]:
+            self._aula_chat_insertar(
+                entrada.get("autor", "Beta"),
+                entrada.get("texto", ""),
+                entrada.get("fuentes") or [],
+            )
+
+    def _proyecto_registrar_chat(self, autor, texto, fuentes=None):
+        if not self.proyecto_estudio_actual or not texto:
+            return
+        self.proyecto_estudio_actual.setdefault("chat", []).append({
+            "autor": autor,
+            "texto": texto.strip(),
+            "fuentes": list(fuentes or []),
+            "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        })
+        self.proyecto_estudio_actual["chat"] = self.proyecto_estudio_actual["chat"][-PROYECTO_CHAT_HISTORIAL_MAX:]
+        self._proyecto_guardar_manifest()
+
+    def _proyecto_documentos_texto(self):
+        proyecto = self.proyecto_estudio_actual
+        if not proyecto:
+            return []
+        base = Path(proyecto["ruta"])
+        salida = []
+        for archivo in proyecto.get("archivos", []):
+            try:
+                ruta_txt = base / archivo.get("texto", "")
+                texto = ruta_txt.read_text(encoding="utf-8")
+                salida.append((archivo, texto))
+            except Exception:
+                continue
+        return salida
+
+    def _proyecto_palabras_consulta(self, consulta):
+        stop = {
+            "que", "como", "cual", "cuales", "donde", "cuando", "para", "por", "con",
+            "una", "uno", "unos", "unas", "del", "las", "los", "este", "esta", "esto",
+            "son", "ser", "se", "el", "la", "de", "en", "y", "o", "a", "un", "me",
+            "mi", "mis", "beta", "quiero", "puedes", "podrias", "sobre",
+        }
+        palabras = [p for p in normalizar(consulta).split() if len(p) >= 3 and p not in stop]
+        return list(dict.fromkeys(palabras))
+
+    def _proyecto_buscar_contexto(self, consulta, limite=8):
+        documentos = self._proyecto_documentos_texto()
+        if not documentos:
+            return [], ""
+        consulta_n = normalizar(consulta)
+        palabras = set(self._proyecto_palabras_consulta(consulta))
+        if any(x in consulta_n for x in ["que tengo que hacer", "que pide", "instrucciones", "trabajo completo", "preguntas"]):
+            palabras.update({"actividad", "trabajo", "pregunta", "instrucciones", "desarrollo", "criterio", "evaluacion"})
+        num_pregunta = None
+        m = re.search(r"(?:pregunta|punto|item)\s*(\d+)", consulta_n)
+        if m:
+            num_pregunta = m.group(1)
+
+        candidatos = []
+        for archivo, texto in documentos:
+            nombre = archivo.get("nombre", "documento")
+            nombre_n = normalizar(nombre)
+            frags = self._proyecto_fragmentar_documento(texto, nombre=nombre)
+            for idx, frag in enumerate(frags):
+                frag_n = normalizar(frag["texto"])
+                tokens = set(frag_n.split())
+                inter = len(palabras & tokens)
+                score = inter * 2.2
+                for p in palabras:
+                    if p and p in frag_n:
+                        score += 0.35
+                if num_pregunta and re.search(rf"(?:pregunta|punto|item)\s*{re.escape(num_pregunta)}\b", frag_n):
+                    score += 12.0
+                if any(p in nombre_n for p in palabras):
+                    score += 1.2
+                if idx == 0:
+                    score += 0.35
+                # Para consultas amplias, prioriza instrucciones y actividades.
+                if any(x in consulta_n for x in ["que tengo que hacer", "que pide", "instrucciones"]):
+                    score += 2.0 * sum(1 for k in ("actividad", "pregunta", "instrucciones", "trabajo") if k in frag_n)
+                candidatos.append((score, idx, frag))
+
+        candidatos.sort(key=lambda x: (x[0], -x[1]), reverse=True)
+        elegidos = []
+        total = 0
+        vistos = set()
+        for score, _idx, frag in candidatos:
+            if score <= 0 and elegidos:
+                continue
+            clave = (frag.get("documento"), frag.get("pagina"), frag.get("texto", "")[:100])
+            if clave in vistos:
+                continue
+            vistos.add(clave)
+            bloque = frag.get("texto", "").strip()
+            if not bloque:
+                continue
+            if total + len(bloque) > PROYECTO_CONTEXTO_MAX_CARACTERES and elegidos:
+                continue
+            elegidos.append(frag)
+            total += len(bloque)
+            if len(elegidos) >= limite or total >= PROYECTO_CONTEXTO_MAX_CARACTERES:
+                break
+
+        # Si no hubo coincidencia lexical suficiente, entregar fragmentos iniciales
+        # para que Beta al menos pueda reconocer el propósito de los documentos.
+        if not elegidos:
+            for archivo, texto in documentos:
+                for frag in self._proyecto_fragmentar_documento(texto, archivo.get("nombre", "documento"))[:2]:
+                    elegidos.append(frag)
+                    if len(elegidos) >= limite:
+                        break
+                if len(elegidos) >= limite:
+                    break
+
+        partes = []
+        for frag in elegidos:
+            ref = frag.get("documento", "documento")
+            if frag.get("pagina"):
+                ref += f" | página {frag['pagina']}"
+            partes.append(f"[FUENTE: {ref}]\n{frag.get('texto','')}")
+        return elegidos, "\n\n".join(partes)
+
+    def _proyecto_paginas_desde_texto(self, texto):
+        """Devuelve [(pagina, contenido)] conservando marcadores PDF cuando existen."""
+        texto = (texto or "").replace("\x00", " ")
+        if not texto.strip():
+            return []
+        partes = re.split(r"(?=\[\[PÁGINA \d+\]\])", texto, flags=re.IGNORECASE)
+        salida = []
+        for parte in partes:
+            if not parte.strip():
+                continue
+            pagina = None
+            m = re.match(r"\[\[PÁGINA (\d+)\]\]\s*", parte, flags=re.IGNORECASE)
+            if m:
+                pagina = int(m.group(1))
+                parte = parte[m.end():]
+            salida.append((pagina, parte.strip()))
+        return salida or [(None, texto.strip())]
+
+    def _proyecto_extraer_items_numerados(self, bloque, detener_en=None):
+        """Extrae 1., 2., 3. conservando subapartados a., b., etc."""
+        bloque = (bloque or "").strip()
+        if not bloque:
+            return []
+        if detener_en:
+            patron_fin = "|".join(re.escape(x) for x in detener_en if x)
+            if patron_fin:
+                bloque = re.split(patron_fin, bloque, maxsplit=1, flags=re.IGNORECASE)[0]
+        patron = re.compile(
+            r"(?ms)^\s*(\d+)\.\s*(.+?)(?=^\s*\d+\.\s+|\Z)"
+        )
+        items = []
+        for m in patron.finditer(bloque):
+            numero = m.group(1)
+            contenido = re.sub(r"[ \t]+", " ", m.group(2)).strip()
+            contenido = re.sub(r"\n{3,}", "\n\n", contenido)
+            if contenido:
+                items.append((numero, contenido))
+        return items
+
+    def _proyecto_elementos_trabajo_local(self):
+        """Lee hechos estructurales de los archivos sin usar IA generativa."""
+        elementos = {
+            "modulo": "",
+            "curso": "",
+            "preguntas": [],
+            "instrucciones": [],
+            "estructura": [],
+            "resultado_aprendizaje": "",
+            "fuentes": [],
+        }
+        vistos_preg = set()
+        vistos_inst = set()
+        vistos_estructura = set()
+        for archivo, texto in self._proyecto_documentos_texto():
+            nombre = archivo.get("nombre", "documento")
+            texto_total = texto or ""
+            if not elementos["modulo"]:
+                m = re.search(r"\bM[oó]dulo\s*:\s*([^\n\r]+)", texto_total, flags=re.IGNORECASE)
+                if m:
+                    elementos["modulo"] = re.sub(r"\s+", " ", m.group(1)).strip()
+            if not elementos["curso"]:
+                m = re.search(r"\b(?:Curso|Asignatura)\s*:\s*([^\n\r]+)", texto_total, flags=re.IGNORECASE)
+                if m:
+                    valor = re.sub(r"\s+", " ", m.group(1)).strip()
+                    if valor and normalizar(valor) not in {"titulo de la asignatura"}:
+                        elementos["curso"] = valor
+
+            for pagina, contenido in self._proyecto_paginas_desde_texto(texto_total):
+                ref = nombre + (f" p.{pagina}" if pagina else "")
+                # Preguntas/actividad evaluada.
+                m_p = re.search(r"\bPreguntas\b(.*?)(?=\bResultado de aprendizaje\b|\bInstrucciones\b|\Z)", contenido, flags=re.IGNORECASE | re.DOTALL)
+                if m_p:
+                    for numero, cuerpo in self._proyecto_extraer_items_numerados(m_p.group(1)):
+                        clave = (numero, normalizar(cuerpo)[:180])
+                        if clave not in vistos_preg:
+                            vistos_preg.add(clave)
+                            elementos["preguntas"].append({"numero": numero, "texto": cuerpo, "fuente": ref})
+
+                # Instrucciones formales.
+                m_i = re.search(r"\bInstrucciones\b(.*?)(?=¡?A trabajar!?|\bAtenci[oó]n\b|\Z)", contenido, flags=re.IGNORECASE | re.DOTALL)
+                if m_i:
+                    for numero, cuerpo in self._proyecto_extraer_items_numerados(m_i.group(1)):
+                        clave = (numero, normalizar(cuerpo)[:180])
+                        if clave not in vistos_inst:
+                            vistos_inst.add(clave)
+                            elementos["instrucciones"].append({"numero": numero, "texto": cuerpo, "fuente": ref})
+
+                if not elementos["resultado_aprendizaje"]:
+                    m_ra = re.search(r"\bResultado de aprendizaje\b\s*(.*?)(?=\bInstrucciones\b|\Z)", contenido, flags=re.IGNORECASE | re.DOTALL)
+                    if m_ra:
+                        ra = re.sub(r"\s+", " ", m_ra.group(1)).strip()
+                        if ra:
+                            elementos["resultado_aprendizaje"] = ra[:900]
+                            if ref not in elementos["fuentes"]:
+                                elementos["fuentes"].append(ref)
+
+                # Plantilla/formato de entrega.
+                contenido_n = normalizar(contenido)
+                for titulo in ("Introducción", "Desarrollo", "Conclusión", "Bibliografía"):
+                    if normalizar(titulo) in contenido_n and titulo not in vistos_estructura:
+                        vistos_estructura.add(titulo)
+                        elementos["estructura"].append({"titulo": titulo, "fuente": ref})
+
+            for item in elementos["preguntas"] + elementos["instrucciones"] + elementos["estructura"]:
+                ref = item.get("fuente")
+                if ref and ref not in elementos["fuentes"]:
+                    elementos["fuentes"].append(ref)
+        return elementos
+
+    def _proyecto_intencion_local(self, consulta):
+        t = normalizar(consulta or "")
+        if not t:
+            return ""
+        m = re.search(r"(?:pregunta|punto|item)\s*(\d+)", t)
+        if m:
+            return f"pregunta:{m.group(1)}"
+        if any(x in t for x in (
+            "revisa los documentos", "revisa mis documentos", "que tengo que hacer",
+            "que debo hacer", "dime exactamente que", "que pide el trabajo",
+            "que pide la actividad", "cuales son las preguntas", "que preguntas",
+            "resume el trabajo", "analiza el trabajo", "instrucciones de entrega",
+        )):
+            return "resumen_trabajo"
+        if any(x in t for x in ("formato de entrega", "estructura del trabajo", "plantilla", "formato word")):
+            return "estructura"
+        return ""
+
+    def _proyecto_respuesta_local(self, consulta):
+        """Respuestas deterministas para estructura/preguntas; retorna (texto, fuentes)."""
+        intencion = self._proyecto_intencion_local(consulta)
+        if not intencion:
+            return "", []
+        e = self._proyecto_elementos_trabajo_local()
+        fuentes = []
+        def addfuente(ref):
+            if ref and ref not in fuentes:
+                fuentes.append(ref)
+
+        if intencion.startswith("pregunta:"):
+            numero = intencion.split(":", 1)[1]
+            self.proyecto_pregunta_foco = str(numero)
+            coincidencias = [x for x in e["preguntas"] if str(x.get("numero")) == numero]
+            if not coincidencias:
+                return "", []
+            item = coincidencias[0]
+            addfuente(item.get("fuente"))
+            texto = re.sub(r"\s*\n\s*", "\n", item.get("texto", "")).strip()
+            return (
+                f"La pregunta {numero} pide lo siguiente:\n\n{texto}\n\n"
+                "Esta descripción proviene directamente de los archivos del proyecto; todavía no estoy agregando contenido externo.",
+                fuentes,
+            )
+
+        if intencion == "estructura":
+            if not e["estructura"]:
+                return "", []
+            secciones = []
+            for x in e["estructura"]:
+                secciones.append(x["titulo"])
+                addfuente(x.get("fuente"))
+            return (
+                "El formato de entrega cargado contempla estas secciones principales: "
+                + ", ".join(secciones) + ". Puede usar el chat para desarrollar cada parte y luego agregarla al borrador.",
+                fuentes,
+            )
+
+        # resumen_trabajo
+        lineas = ["Revisé los documentos del proyecto."]
+        if e["modulo"] or e["curso"]:
+            datos = []
+            if e["modulo"]:
+                datos.append(f"Módulo {e['modulo']}")
+            if e["curso"]:
+                datos.append(e["curso"])
+            lineas.append("El trabajo corresponde a " + " · ".join(datos) + ".")
+        if e["preguntas"]:
+            lineas.append(f"Debe desarrollar {len(e['preguntas'])} actividad(es) principal(es):")
+            for item in e["preguntas"][:8]:
+                cuerpo = re.sub(r"\s*\n\s*", " ", item["texto"]).strip()
+                if len(cuerpo) > 700:
+                    cuerpo = cuerpo[:697].rstrip() + "..."
+                lineas.append(f"{item['numero']}. {cuerpo}")
+                addfuente(item.get("fuente"))
+        if e["instrucciones"]:
+            lineas.append("Instrucciones de entrega identificadas:")
+            for item in e["instrucciones"][:6]:
+                cuerpo = re.sub(r"\s*\n\s*", " ", item["texto"]).strip()
+                if len(cuerpo) > 420:
+                    cuerpo = cuerpo[:417].rstrip() + "..."
+                lineas.append(f"- {cuerpo}")
+                addfuente(item.get("fuente"))
+        if e["estructura"]:
+            secs = [x["titulo"] for x in e["estructura"]]
+            lineas.append("El formato Word cargado organiza la entrega en: " + ", ".join(secs) + ".")
+            for x in e["estructura"]:
+                addfuente(x.get("fuente"))
+        if e["resultado_aprendizaje"]:
+            lineas.append("Resultado de aprendizaje indicado: " + e["resultado_aprendizaje"])
+        if len(lineas) <= 1:
+            return "", []
+        lineas.append("Puedo continuar con una pregunta específica y trabajarla paso a paso usando estos mismos archivos.")
+        return "\n\n".join(lineas), fuentes
+
+    def _proyecto_es_pedir_explicacion(self, consulta):
+        t = normalizar(consulta or "")
+        return any(x in t for x in (
+            "explicame primero", "explica primero", "que necesito saber",
+            "que debo saber", "ayudame a entender", "ensename primero",
+            "como puedo responder", "como responderla", "como respondo",
+        ))
+
+    def _proyecto_es_pedir_redaccion(self, consulta):
+        t = normalizar(consulta or "")
+        return any(x in t for x in (
+            "ahora redactemos", "redactemos la respuesta", "redacta la respuesta",
+            "desarrolla la respuesta", "hagamos la respuesta", "escribamos la respuesta",
+            "prepara la respuesta", "redactemos el punto", "redactemos la pregunta",
+        ))
+
+    def _proyecto_escenario_actividad_local(self):
+        """Obtiene el enunciado de la actividad antes del bloque Preguntas."""
+        for archivo, texto in self._proyecto_documentos_texto():
+            nombre = archivo.get("nombre", "documento")
+            for pagina, contenido in self._proyecto_paginas_desde_texto(texto):
+                m = re.search(
+                    r"\bActividad\b\s*(.*?)(?=\bPreguntas\b)", contenido,
+                    flags=re.IGNORECASE | re.DOTALL,
+                )
+                if m:
+                    bloque = re.sub(r"\s+", " ", m.group(1)).strip()
+                    if bloque:
+                        ref = nombre + (f" p.{pagina}" if pagina else "")
+                        return bloque, ref
+        return "", ""
+
+    def _proyecto_guia_foco_local(self, consulta, redactar=False):
+        """Guía verificable de la pregunta activa sin depender de Ollama."""
+        numero = str(getattr(self, "proyecto_pregunta_foco", "") or "").strip()
+        if not numero:
+            return "", []
+        e = self._proyecto_elementos_trabajo_local()
+        items = [x for x in e["preguntas"] if str(x.get("numero")) == numero]
+        if not items:
+            return "", []
+        item = items[0]
+        pregunta = re.sub(r"\s+", " ", item.get("texto", "")).strip()
+        fuente_q = item.get("fuente", "")
+        escenario, fuente_e = self._proyecto_escenario_actividad_local()
+        fuentes = list(dict.fromkeys([x for x in (fuente_q, fuente_e) if x]))
+        pn = normalizar(pregunta)
+
+        if "bpmn" in pn:
+            hitos = []
+            if escenario:
+                reglas = [
+                    ("Inicio", "cliente ingresa al taller", "El proceso comienza cuando el cliente ingresa al taller con su vehículo."),
+                    ("Registro", "ingresa los datos del vehiculo", "El recepcionista ingresa los datos del vehículo."),
+                    ("Pago", "puede pagar la revision", "Luego de ingresar los datos, el cliente puede pagar la revisión y recibir la boleta."),
+                    ("Inspección", "revisa los gases", "Mientras ocurre lo anterior, el personal revisa gases, luces, amortiguación y dirección; después revisa los frenos."),
+                    ("Decisión", "si el vehiculo aprueba", "Se debe representar la decisión de si el vehículo aprueba la revisión."),
+                    ("Aprobado", "jefe debe firmar", "Si aprueba, el jefe firma los papeles correspondientes."),
+                    ("Rechazado", "imprimir el detalle de los defectos", "Si no aprueba, el personal imprime el detalle de los defectos."),
+                    ("Cierre", "se le entrega la revision tecnica", "Finalmente, y solo si el cliente ya recibió la boleta, se entrega la revisión técnica."),
+                ]
+                en = normalizar(escenario)
+                for titulo, aguja, texto_hito in reglas:
+                    if aguja in en:
+                        hitos.append((titulo, texto_hito))
+            if redactar:
+                lineas = [
+                    f"Borrador para desarrollar la pregunta {numero} (basado en el enunciado cargado):",
+                    "",
+                    "El proceso de revisión técnica puede organizarse desde el ingreso del cliente al taller hasta la entrega final de la revisión. El enunciado permite identificar los siguientes elementos que deben trasladarse al diagrama BPMN:",
+                ]
+                for titulo, txt in hitos:
+                    lineas.append(f"- {titulo}: {txt}")
+                lineas += [
+                    "",
+                    "Con esta secuencia puede construir el diagrama solicitado incorporando los eventos de inicio y fin, las tareas, los flujos y la decisión indicada en la actividad.",
+                    "",
+                    "Nota de fuentes: el documento entrega el escenario y los componentes que debe incluir el BPMN, pero no desarrolla teoría detallada sobre la notación BPMN. Si desea que Beta explique símbolos, tipos de gateway o buenas prácticas, desmarque 'Responder solo con los documentos' para permitir complemento de conocimiento general, que quedará identificado como tal.",
+                ]
+            else:
+                lineas = [
+                    f"Para responder la pregunta {numero}, primero conviene transformar el relato del taller en una secuencia de proceso.",
+                    "El propio enunciado ya contiene casi todos los elementos que debe representar:",
+                ]
+                for titulo, txt in hitos:
+                    lineas.append(f"- {titulo}: {txt}")
+                lineas += [
+                    "",
+                    "La pregunta exige que el diagrama incluya eventos de inicio y fin, tareas, flujos y compuertas para dirigir el proceso.",
+                    "El material cargado no explica la teoría de BPMN en detalle; por eso, en modo 'solo documentos' puedo guiarlo con el escenario, pero no atribuir al PDF definiciones que no contiene.",
+                ]
+            return "\n".join(lineas), fuentes
+
+        if "soaml" in pn or "arquitectura" in pn:
+            base = [
+                f"La pregunta {numero} parte del diagrama anterior y exige cuatro productos: interfaces de servicio para cada participante, diagrama de cada participante, contratos de servicio y una arquitectura de servicios SOA.",
+            ]
+            if redactar:
+                base.append("El documento cargado especifica esos entregables, pero no incluye teoría suficiente para construir correctamente una arquitectura SoaML completa. En modo 'solo documentos' no sería responsable inventar participantes, contratos o notación que no estén explicados en el material.")
+            else:
+                base.append("Antes de desarrollarla, necesitará comprender qué representa un participante, una interfaz de servicio, un contrato de servicio y cómo se relacionan en SoaML. Esas definiciones no aparecen desarrolladas en los archivos actualmente cargados.")
+            base.append("Puede cargar el material teórico del módulo o desmarcar 'Responder solo con los documentos' para que Beta complemente con conocimiento general y lo identifique explícitamente.")
+            return "\n\n".join(base), fuentes
+        return "", []
+
+    def _proyecto_resumen_voz(self, texto, consulta=""):
+        """La pantalla conserva el desarrollo; Daniela entrega solo el resumen oral."""
+        limpio = re.sub(r"\s+", " ", (texto or "")).strip()
+        if not limpio:
+            return ""
+        if len(limpio) <= 420:
+            return limpio
+        numero = str(getattr(self, "proyecto_pregunta_foco", "") or "").strip()
+        t = normalizar(consulta or "")
+        if "revisa los documentos" in t or "que tengo que hacer" in t:
+            return "Señor, ya revisé el trabajo y dejé en el chat las actividades, instrucciones de entrega y estructura del formato. Podemos trabajar una pregunta específica cuando quiera."
+        if self._proyecto_es_pedir_explicacion(consulta):
+            return f"Señor, preparé en el chat una guía paso a paso para la pregunta {numero or 'actual'}. Léala con calma y podemos desarrollar cada parte juntos."
+        if self._proyecto_es_pedir_redaccion(consulta):
+            return f"Señor, dejé en el chat un borrador para la pregunta {numero or 'actual'}. Puede revisarlo y después lo ajustamos o lo agregamos al trabajo."
+        return limpio[:360].rstrip(" ,;:-") + ". Dejé el desarrollo completo en el chat del Aula."
+
+    def _proyecto_es_consulta_sobre_beta(self, consulta):
+        t = normalizar(consulta or "")
+        if not t:
+            return False
+        directas = (
+            "por que no puedes", "por que no pudiste", "por que no respondes",
+            "por que no respondiste", "por que fallo", "que fallo", "que paso",
+            "por que no generas", "por que no puedes generar", "que error tienes",
+            "que error hubo", "por que dio error", "por que te demoraste",
+        )
+        if any(x in t for x in directas):
+            return True
+        if "ollama" in t or "workspace" in t:
+            return True
+        return False
+
+    def _proyecto_respuesta_meta_local(self, consulta):
+        if not self._proyecto_es_consulta_sobre_beta(consulta):
+            return ""
+        ultimo = str(getattr(self, "proyecto_ultimo_error", "") or "").strip()
+        if ultimo:
+            return (
+                "La consulta anterior tuvo un problema en la capa de generación, no en la lectura de los archivos. "
+                f"Detalle: {ultimo} Los documentos permanecen cargados en el proyecto y puedo seguir consultándolos."
+            )
+        return (
+            "Los archivos del proyecto están disponibles. Si una respuesta anterior no se generó, el problema fue de la capa de "
+            "generación o del tiempo de respuesta, no necesariamente de los documentos. Puedo volver a analizar la pregunta localmente."
+        )
+
+    def _proyecto_fallback_documental(self, consulta, fuentes):
+        """Entrega evidencia útil aunque la generación falle."""
+        if not fuentes:
+            return "No encontré texto utilizable en los archivos del proyecto."
+        bloques = []
+        for frag in fuentes[:4]:
+            ref = frag.get("documento", "documento")
+            if frag.get("pagina"):
+                ref += f" p.{frag['pagina']}"
+            txt = re.sub(r"\s+", " ", frag.get("texto", "")).strip()
+            if len(txt) > 650:
+                txt = txt[:647].rstrip() + "..."
+            if txt:
+                bloques.append(f"[{ref}] {txt}")
+        if not bloques:
+            return "No encontré texto utilizable en los archivos del proyecto."
+        return (
+            "El modelo de redacción no respondió a tiempo, pero sí pude recuperar información verificable de sus documentos:\n\n"
+            + "\n\n".join(bloques)
+            + "\n\nPuede hacer una pregunta más específica y seguiré trabajando con estas fuentes."
+        )
+
+    def consultar_proyecto_estudio_async(self, consulta, desde_voz=False):
+        consulta = (consulta or "").strip()
+        if not consulta:
+            return
+        proyecto = self.proyecto_estudio_actual
+        if not proyecto:
+            self._aula_chat_insertar("Beta", "Primero cree o abra un proyecto académico.")
+            if desde_voz:
+                self.responder("primero cree o abra un proyecto académico en el Aula.", "normal", tipo_contexto="proyecto")
+            return
+        if self.proyecto_consulta_en_curso:
+            self._aula_chat_insertar("Beta", "Estoy terminando la consulta anterior.")
+            return
+
+        self.aula_modo_principal = "proyecto"
+        self._aula_seleccionar_pestana_proyecto()
+        self._aula_chat_insertar("Señor", consulta)
+        self._proyecto_registrar_chat("Señor", consulta)
+
+        # v3.1.2: las preguntas sobre el funcionamiento de Beta no se buscan en el PDF.
+        respuesta_meta = self._proyecto_respuesta_meta_local(consulta)
+        if respuesta_meta:
+            self.proyecto_ultima_respuesta = respuesta_meta
+            self._proyecto_registrar_chat("Beta", respuesta_meta, [])
+            self._aula_chat_insertar("Beta", respuesta_meta, [])
+            self.responder(respuesta_meta, "normal", tipo_contexto="proyecto")
+            print("AULA WORKSPACE v3.1.2: consulta meta respondida localmente.")
+            return
+
+        # v3.1.2: preguntas estructurales del trabajo no dependen de Ollama.
+        respuesta_local, fuentes_locales = self._proyecto_respuesta_local(consulta)
+        if respuesta_local:
+            self.proyecto_ultima_respuesta = respuesta_local
+            self.proyecto_ultimo_error = ""
+            self._proyecto_registrar_chat("Beta", respuesta_local, fuentes_locales)
+            self._aula_chat_insertar("Beta", respuesta_local, fuentes_locales)
+            resumen_voz_fn = getattr(self, "_proyecto_resumen_voz", None)
+            voz = resumen_voz_fn(respuesta_local, consulta) if callable(resumen_voz_fn) else respuesta_local
+            self.responder(voz, "normal", tipo_contexto="proyecto")
+            print(f"AULA WORKSPACE v3.1.2: análisis local resuelto; fuentes={fuentes_locales}")
+            return
+
+        if self._proyecto_es_pedir_explicacion(consulta) or self._proyecto_es_pedir_redaccion(consulta):
+            try:
+                solo_docs_local = bool(self.aula_solo_documentos_var.get()) if self.aula_solo_documentos_var is not None else True
+            except Exception:
+                solo_docs_local = True
+            if solo_docs_local:
+                guiada, fuentes_guiada = self._proyecto_guia_foco_local(
+                    consulta, redactar=self._proyecto_es_pedir_redaccion(consulta)
+                )
+                if guiada:
+                    self.proyecto_ultima_respuesta = guiada
+                    self.proyecto_ultimo_error = ""
+                    self._proyecto_registrar_chat("Beta", guiada, fuentes_guiada)
+                    self._aula_chat_insertar("Beta", guiada, fuentes_guiada)
+                    resumen_voz_fn = getattr(self, "_proyecto_resumen_voz", None)
+                    voz = resumen_voz_fn(guiada, consulta) if callable(resumen_voz_fn) else guiada
+                    self.responder(voz, "normal", tipo_contexto="proyecto")
+                    print(f"AULA WORKSPACE v3.1.2: seguimiento guiado local pregunta={self.proyecto_pregunta_foco} fuentes={fuentes_guiada}")
+                    return
+
+        self.proyecto_consulta_en_curso = True
+        solo_docs = True
+        try:
+            solo_docs = bool(self.aula_solo_documentos_var.get()) if self.aula_solo_documentos_var is not None else True
+        except Exception:
+            solo_docs = True
+
+        def trabajo():
+            respuesta = ""
+            fuentes_labels = []
+            fuentes = []
+            try:
+                fuentes, contexto = self._proyecto_buscar_contexto(consulta, limite=9)
+                for f in fuentes:
+                    etiqueta = f.get("documento", "documento")
+                    if f.get("pagina"):
+                        etiqueta += f" p.{f['pagina']}"
+                    if etiqueta not in fuentes_labels:
+                        fuentes_labels.append(etiqueta)
+                historial = (proyecto.get("chat") or [])[-8:]
+                historial_txt = "\n".join(
+                    f"{x.get('autor','')}: {x.get('texto','')[:900]}" for x in historial
+                )
+                if solo_docs:
+                    sistema = (
+                        "Eres Beta, asistente académica local. Responde en español usando EXCLUSIVAMENTE "
+                        "los documentos del proyecto proporcionados. No completes huecos con conocimiento general. "
+                        "Si los documentos no respaldan una afirmación necesaria, dilo claramente. Conserva la terminología "
+                        "del material. Cuando uses información concreta, identifica la fuente entre corchetes con el nombre "
+                        "del archivo y página si está disponible. Ayuda a comprender y desarrollar el trabajo, no inventes requisitos. "
+                        "Si la pregunta se refiere al funcionamiento de Beta y no al contenido académico, no simules una respuesta documental."
+                    )
+                else:
+                    sistema = (
+                        "Eres Beta, asistente académica. Prioriza los documentos del proyecto. Puedes complementar con conocimiento "
+                        "general solo cuando sea necesario y debes marcar explícitamente qué parte es complemento externo a los documentos."
+                    )
+                if not contexto:
+                    respuesta = "No encontré texto utilizable en los archivos del proyecto. Agregue un PDF, DOCX o TXT con contenido legible."
+                    self.proyecto_ultimo_error = "No se encontró contexto legible relacionado con la consulta."
+                else:
+                    mensajes = [
+                        {"role": "system", "content": sistema},
+                        {"role": "user", "content": (
+                            f"PROYECTO: {proyecto.get('nombre','')}\n\n"
+                            f"HISTORIAL RECIENTE DEL PROYECTO:\n{historial_txt}\n\n"
+                            f"PREGUNTA O FOCO ACTUAL DEL TRABAJO: {getattr(self, 'proyecto_pregunta_foco', '') or 'no fijado'}\n\n"
+                            f"PREGUNTA DEL SEÑOR:\n{consulta}\n\n"
+                            f"DOCUMENTOS RECUPERADOS:\n{contexto}"
+                        )},
+                    ]
+                    respuesta = self.enviar_ollama(
+                        mensajes, temperatura=0.10, num_predict=320, num_ctx=4096, timeout=55
+                    ) or ""
+                    if not respuesta:
+                        self.proyecto_ultimo_error = (
+                            "Ollama no devolvió una respuesta dentro del tiempo disponible; la recuperación documental sí funcionó."
+                        )
+                        guiada, fuentes_guiada = self._proyecto_guia_foco_local(
+                            consulta, redactar=self._proyecto_es_pedir_redaccion(consulta)
+                        )
+                        if guiada:
+                            respuesta = guiada
+                            for ref in fuentes_guiada:
+                                if ref not in fuentes_labels:
+                                    fuentes_labels.append(ref)
+                            print("AULA WORKSPACE v3.1.2: fallback guiado por pregunta activa tras fallo/timeout de Ollama.")
+                        else:
+                            respuesta = self._proyecto_fallback_documental(consulta, fuentes)
+                            print("AULA WORKSPACE v3.1.2: fallback documental activado tras fallo/timeout de Ollama.")
+                    else:
+                        self.proyecto_ultimo_error = ""
+            except Exception as error:
+                print("PROYECTO CHAT ERROR:", error)
+                self.proyecto_ultimo_error = f"Error interno consultando el proyecto: {error}"
+                guiada, fuentes_guiada = self._proyecto_guia_foco_local(
+                    consulta, redactar=self._proyecto_es_pedir_redaccion(consulta)
+                )
+                respuesta = guiada or self._proyecto_fallback_documental(consulta, fuentes)
+                for ref in fuentes_guiada:
+                    if ref not in fuentes_labels:
+                        fuentes_labels.append(ref)
+                if not respuesta:
+                    respuesta = "Tuve un problema al consultar los archivos del proyecto."
+            finally:
+                self.proyecto_consulta_en_curso = False
+
+            self.proyecto_ultima_respuesta = respuesta
+            self._proyecto_registrar_chat("Beta", respuesta, fuentes_labels)
+            def mostrar():
+                self._aula_chat_insertar("Beta", respuesta, fuentes_labels)
+                resumen_voz_fn = getattr(self, "_proyecto_resumen_voz", None)
+                voz = resumen_voz_fn(respuesta, consulta) if callable(resumen_voz_fn) else respuesta
+                self.responder(voz, "normal", tipo_contexto="proyecto")
+            try:
+                self.root.after(0, mostrar)
+            except tk.TclError:
+                pass
+
+        threading.Thread(target=trabajo, daemon=True).start()
+
+    def aula_enviar_chat(self):
+        if self.aula_chat_entrada is None:
+            return
+        consulta = self.aula_chat_entrada.get("1.0", "end").strip()
+        if not consulta:
+            return
+        try:
+            self.aula_chat_entrada.delete("1.0", "end")
+        except Exception:
+            pass
+        print(f"AULA WORKSPACE v3.1.2: consulta escrita='{consulta}'")
+        self.consultar_proyecto_estudio_async(consulta, desde_voz=False)
+
+    def _aula_cargar_borrador(self):
+        if self.aula_trabajo is None:
+            return
+        try:
+            self.aula_trabajo.delete("1.0", "end")
+        except Exception:
+            return
+        proyecto = self.proyecto_estudio_actual
+        if not proyecto:
+            return
+        ruta = self._proyecto_borrador_ruta(proyecto["ruta"])
+        if ruta.exists():
+            try:
+                self.aula_trabajo.insert("1.0", ruta.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+
+    def aula_guardar_borrador(self, silencioso=False):
+        proyecto = self.proyecto_estudio_actual
+        if not proyecto or self.aula_trabajo is None:
+            return False
+        try:
+            contenido = self.aula_trabajo.get("1.0", "end").rstrip()
+            ruta = self._proyecto_borrador_ruta(proyecto["ruta"])
+            ruta.write_text(contenido, encoding="utf-8")
+            if not silencioso:
+                print(f"AULA WORKSPACE v3.1.2: borrador guardado en {ruta}.")
+            return True
+        except Exception as error:
+            print("AULA WORKSPACE: no pude guardar borrador:", error)
+            return False
+
+    def aula_agregar_ultima_respuesta_al_trabajo(self):
+        respuesta = (self.proyecto_ultima_respuesta or "").strip()
+        if not respuesta:
+            if self._aula_esta_abierta():
+                messagebox.showinfo("Beta Aula", "Todavía no hay una respuesta de proyecto para agregar.", parent=self.ventana_modo_estudio)
+            return
+        if self.aula_trabajo is None:
+            return
+        try:
+            actual = self.aula_trabajo.get("1.0", "end").strip()
+            if actual:
+                self.aula_trabajo.insert("end", "\n\n")
+            self.aula_trabajo.insert("end", respuesta)
+            self.aula_trabajo.see("end")
+            self.aula_guardar_borrador(silencioso=True)
+            if self.aula_notebook is not None and self.aula_tab_trabajo is not None:
+                self.aula_notebook.select(self.aula_tab_trabajo)
+                self.aula_modo_principal = "proyecto"
+        except Exception:
+            pass
+
+    # ======================================================
+    # TUTORA AVANZADA DE PYTHON v2.9.1
+    # ======================================================
+
+    def cambiar_modo_tutor_python(self):
+        try:
+            activo = bool(self.var_tutor_python.get())
+        except Exception:
+            activo = True
+        self.modo_tutor_python = activo
+        self.memoria.cambiar_estado("modo_tutor_python", "1" if activo else "0")
+        if not activo:
+            self.cancelar_ejercicio_python(anunciar=False)
+        self.responder(
+            "tutora de Python activada. Puedo continuar una sesión, proponer ejercicios y revisar código sin ejecutarlo."
+            if activo else
+            "tutora de Python desactivada. Conservaré el progreso registrado para cuando quiera retomarlo.",
+            "feliz" if activo else "normal",
+        )
+
+    def _tema_python_por_id(self, tema_id):
+        buscado = normalizar(tema_id or "")
+        for item in TUTOR_PYTHON_CURRICULO:
+            if normalizar(item.get("id", "")) == buscado:
+                return item
+        return None
+
+    def inferir_tema_python(self, texto=""):
+        t = normalizar(texto or "")
+        if t:
+            mejor = None
+            mejor_score = 0.0
+            for item in TUTOR_PYTHON_CURRICULO:
+                candidatos = [item.get("id", ""), item.get("nombre", "")]
+                candidatos.extend(item.get("aliases") or [])
+                for candidato in candidatos:
+                    c = normalizar(candidato)
+                    if not c:
+                        continue
+                    if c in t or (len(t.split()) <= 5 and t in c):
+                        score = 1.0
+                    else:
+                        score = difflib.SequenceMatcher(None, c, t).ratio()
+                    if score > mejor_score:
+                        mejor_score = score
+                        mejor = item
+            if mejor is not None and mejor_score >= 0.62:
+                return mejor
+
+        for guardado in [self.tutor_python_tema_actual, self.tutor_python_ultimo_tema]:
+            item = self._tema_python_por_id(guardado)
+            if item:
+                return item
+        return None
+
+    def siguiente_tema_python_recomendado(self):
+        actual = self._tema_python_por_id(self.tutor_python_tema_actual)
+        progreso = self.memoria.progreso_ramo("Python", limite=200)
+        por_tema = {
+            normalizar(fila[1]): fila
+            for fila in progreso
+            if len(fila) >= 4 and fila[1]
+        }
+
+        if actual:
+            fila = por_tema.get(normalizar(actual["nombre"]))
+            if not fila:
+                return actual
+            dominio = float(fila[2] or 0)
+            evidencias = int(fila[3] or 0)
+            if evidencias <= 0 or dominio < 75:
+                return actual
+
+            ids = [x["id"] for x in TUTOR_PYTHON_CURRICULO]
+            try:
+                pos = ids.index(actual["id"])
+            except ValueError:
+                pos = -1
+            for item in TUTOR_PYTHON_CURRICULO[pos + 1:]:
+                fila2 = por_tema.get(normalizar(item["nombre"]))
+                if not fila2 or int(fila2[3] or 0) <= 0 or float(fila2[2] or 0) < 75:
+                    return item
+
+        for item in TUTOR_PYTHON_CURRICULO:
+            fila = por_tema.get(normalizar(item["nombre"]))
+            if not fila or int(fila[3] or 0) <= 0 or float(fila[2] or 0) < 75:
+                return item
+
+        return TUTOR_PYTHON_CURRICULO[-1]
+
+    def _activar_tema_python(self, item):
+        if not item:
+            return
+        self.tutor_python_tema_actual = item["id"]
+        self.tutor_python_ultimo_tema = item["id"]
+        self.memoria.cambiar_estado("tutor_python_tema_actual", item["id"])
+        self.memoria.cambiar_estado("tutor_python_ultimo_tema", item["id"])
+
+    def _fuentes_tutor_python(self, item, limite=TUTOR_PYTHON_FUENTES):
+        if not item:
+            return []
+        consulta = f"Python {item['nombre']} {item.get('busqueda','')}".strip()
+        try:
+            resultados = self.buscar_tecnico_hibrido(
+                consulta,
+                limite=max(int(limite), TUTOR_PYTHON_FUENTES + 2),
+                coleccion="Python",
+            )
+        except Exception:
+            resultados = self.biblioteca.buscar(
+                consulta,
+                limite=max(int(limite), TUTOR_PYTHON_FUENTES + 2),
+                categoria_preferida="tecnica",
+                coleccion_preferida="Python",
+            )
+        utiles = [
+            r for r in resultados
+            if float(r.get("score", 0) or 0) >= max(0.20, TECNICA_UMBRAL_MIN - 0.05)
+        ]
+        return utiles[:int(limite)]
+
+    def iniciar_o_continuar_tutor_python(self):
+        if not self.modo_tutor_python:
+            self.responder("la tutora de Python está desactivada. Puede activarla desde el menú.", "normal")
+            return
+        item = self.inferir_tema_python("") or self.siguiente_tema_python_recomendado()
+        self.iniciar_sesion_python(item)
+
+    def elegir_tema_tutor_python(self):
+        nombres = "\n".join(
+            f"{i + 1}. {item['nombre']}"
+            for i, item in enumerate(TUTOR_PYTHON_CURRICULO)
+        )
+        elegido = simpledialog.askstring(
+            "Tutora Python",
+            "¿Qué tema desea estudiar?\n\n" + nombres,
+            parent=self.root,
+        )
+        if not elegido:
+            return
+        item = self.inferir_tema_python(elegido)
+        if not item:
+            try:
+                pos = int(elegido.strip()) - 1
+                if 0 <= pos < len(TUTOR_PYTHON_CURRICULO):
+                    item = TUTOR_PYTHON_CURRICULO[pos]
+            except Exception:
+                pass
+        if not item:
+            messagebox.showwarning(
+                "Tutora Python",
+                "No pude identificar ese tema del currículo.",
+                parent=self.root,
+            )
+            return
+        self.iniciar_sesion_python(item)
+
+    def iniciar_sesion_python(self, item=None):
+        if not self.modo_tutor_python:
+            self.responder("la tutora de Python está desactivada.", "normal")
+            return
+        if isinstance(item, str):
+            item = self.inferir_tema_python(item)
+        item = item or self.siguiente_tema_python_recomendado()
+        if not item:
+            self.responder("no pude determinar qué tema de Python estudiar.", "confundida")
+            return
+
+        self._activar_tema_python(item)
+        self.registrar_exposicion_academica(
+            "Python", item["nombre"], "Sesión guiada de la tutora Python"
+        )
+        print(
+            f"TUTORA PYTHON: sesión activa | tema='{item['nombre']}' "
+            f"id='{item['id']}'"
+        )
+        if self.modo_estudio_activo:
+            self._aula_actualizar_encabezado()
+
+        consulta = (
+            f"Estoy estudiando Python. Enséñame {item['nombre']} desde un enfoque práctico. "
+            f"Para recuperar el material correcto, prioriza estos conceptos del currículo: {item.get('busqueda','Python')}. "
+            "Explícame primero lo esencial, muestra un ejemplo corto si aporta valor y señala "
+            "un error común SOLO si está respaldado por los fragmentos locales. No inventes "
+            "mensajes de error ni afirmes que una sintaxis es inválida si no lo es. Si las "
+            "fuentes no respaldan un detalle, omítelo. Si el material contiene afirmaciones dependientes de versión, "
+            "sistema operativo o época, preséntalas como información del libro y no como una verdad universal actual. "
+            "No me evalúes todavía."
+        )
+        # Aprovecha el RAG técnico ya estable: mantiene streaming, Daniela y
+        # seguimiento natural sin duplicar el pipeline de voz.
+        self.consultar_biblioteca_tecnica_async(
+            consulta,
+            forzar=True,
+            profunda_forzada=True,
+            tokens_forzados=TUTOR_PYTHON_TOKENS_LECCION,
+        )
+
+    def ejercicio_python_manual(self):
+        actual = self._tema_python_por_id(self.tutor_python_tema_actual)
+        defecto = actual["nombre"] if actual else ""
+        tema = simpledialog.askstring(
+            "Ejercicio de Python",
+            "¿Sobre qué tema quiere practicar?\n"
+            "Puede dejarlo vacío para continuar con el tema recomendado.",
+            initialvalue=defecto,
+            parent=self.root,
+        )
+        if tema is None:
+            return
+        item = self.inferir_tema_python(tema) if tema.strip() else None
+        self.generar_ejercicio_python_async(item=item)
+
+    def cancelar_ejercicio_python(self, anunciar=False):
+        self.tutor_python_pendiente = None
+        self.tutor_python_hasta = 0.0
+        self.tutor_python_respuesta_buffer = []
+        if self.tutor_python_respuesta_timer is not None:
+            try:
+                self.root.after_cancel(self.tutor_python_respuesta_timer)
+            except Exception:
+                pass
+            self.tutor_python_respuesta_timer = None
+        if anunciar:
+            self.responder("ejercicio de Python finalizado. Podemos retomarlo cuando quiera.", "normal")
+
+    def _ejercicio_python_es_repetido(self, enunciado, recientes, umbral=0.82):
+        base = normalizar(enunciado or "")
+        if not base:
+            return False
+        for anterior in recientes or []:
+            viejo = normalizar(anterior or "")
+            if not viejo:
+                continue
+            if difflib.SequenceMatcher(None, base, viejo).ratio() >= umbral:
+                return True
+        return False
+
+    def _ejercicio_python_respaldo_local(self, item, fuentes, nivel="inicial", recientes=None):
+        """Construye un ejercicio sencillo sin depender de JSON generado por Qwen.
+
+        El respaldo sigue estando anclado a la biblioteca local: la respuesta modelo
+        se toma de los fragmentos recuperados y el enunciado pide comprensión del
+        tema activo. No pretende sustituir al generador rico; evita dejar al Señor
+        sin práctica cuando Ollama devuelve JSON truncado o temporalmente falla.
+        """
+        fuentes = fuentes or []
+        textos = [str(r.get("texto") or "").strip() for r in fuentes]
+        textos = [t for t in textos if t]
+        if not textos:
+            return {}
+
+        corpus = " ".join(textos)
+        corpus_norm = normalizar(corpus)
+        tema = (item or {}).get("nombre") or "Python"
+        tema_id = (item or {}).get("id") or "python"
+        recientes = recientes or []
+
+        # Priorizamos una pregunta concreta solo cuando el término aparece en los
+        # fragmentos locales recuperados. Así el fallback no inventa el contenido.
+        candidatos = []
+        if tema_id == "fundamentos":
+            if "repl" in corpus_norm:
+                candidatos.append({
+                    "enunciado": "Explique con sus palabras qué es el REPL de Python y para qué sirve al comenzar a programar.",
+                    "pista": "Piense en un entorno interactivo donde puede escribir instrucciones y ver el resultado inmediatamente.",
+                    "criterios": [
+                        "Explicar que REPL es un entorno o ciclo interactivo conectado con el intérprete de Python",
+                        "Indicar que permite escribir instrucciones y ver sus resultados inmediatamente",
+                        "Explicar para qué sirve al practicar o probar código",
+                    ],
+                    "palabras_clave_fuente": ["repl"],
+                    "terminos_obligatorios": [],
+                    "modo_evaluacion": "conceptual",
+                })
+                candidatos.append({
+                    "enunciado": "Imagine que quiere comprobar rápidamente una expresión como 2 + 3 sin crear un archivo. Explique cómo le ayuda el REPL de Python y qué ocurre después de escribir la expresión.",
+                    "pista": "Piense en escribir una instrucción directamente y observar su resultado en el momento.",
+                    "criterios": [
+                        "Relacionar REPL con un entorno interactivo o terminal",
+                        "Explicar que la expresión se evalúa y el resultado aparece inmediatamente",
+                        "Explicar que permite probar código rápidamente sin preparar un programa completo",
+                    ],
+                    "palabras_clave_fuente": ["repl"],
+                    "terminos_obligatorios": [],
+                    "modo_evaluacion": "conceptual",
+                })
+                candidatos.append({
+                    "enunciado": "Explique una ventaja práctica de usar el REPL de Python cuando está aprendiendo o probando una instrucción sencilla.",
+                    "pista": "Compárelo con tener que crear y ejecutar un programa completo para cada pequeña prueba.",
+                    "criterios": [
+                        "Explicar una utilidad práctica del REPL",
+                        "Relacionarlo con probar instrucciones de forma interactiva",
+                        "Mencionar la respuesta o resultado inmediato cuando corresponda",
+                    ],
+                    "palabras_clave_fuente": ["repl"],
+                    "terminos_obligatorios": [],
+                    "modo_evaluacion": "conceptual",
+                })
+            if "python3" in corpus_norm:
+                candidatos.append({
+                    "enunciado": "Según sus apuntes locales, ¿qué comando se usa para iniciar Python 3 desde una terminal cuando el material indica explícitamente Python 3?",
+                    "pista": "El comando contiene el nombre del lenguaje seguido del número de versión.",
+                    "criterios": ["Indicar explícitamente el comando python3"],
+                    "palabras_clave_fuente": ["python3"],
+                    "terminos_obligatorios": ["python3"],
+                    "modo_evaluacion": "exacta",
+                })
+            if "print" in corpus_norm:
+                candidatos.append({
+                    "enunciado": "Explique para qué sirve print en un programa Python y dé un ejemplo muy corto.",
+                    "pista": "Se utiliza para mostrar información durante la ejecución.",
+                    "criterios": [
+                        "Explicar que print muestra información o resultados en la salida",
+                        "Dar un ejemplo corto que use print(...)",
+                    ],
+                    "palabras_clave_fuente": ["print"],
+                    "terminos_obligatorios": [],
+                    "modo_evaluacion": "conceptual",
+                })
+                candidatos.append({
+                    "enunciado": 'Use como ejemplo print("Hola"). Explique qué función cumple print y qué espera observar al ejecutarlo.',
+                    "pista": "Piense en la información que aparece como salida del programa.",
+                    "criterios": [
+                        "Explicar que print muestra información o resultados en la salida",
+                        "Indicar que el ejemplo mostraría Hola",
+                    ],
+                    "palabras_clave_fuente": ["print"],
+                    "terminos_obligatorios": [],
+                    "modo_evaluacion": "conceptual",
+                })
+        elif tema_id == "funciones" and "return" in corpus_norm:
+            candidatos.append({
+                "enunciado": "Explique qué hace return dentro de una función de Python y qué ocurre con el valor devuelto.",
+                "pista": "Piense en cómo una función entrega un resultado a quien la llamó.",
+                "criterios": [
+                    "Explicar que return finaliza la función y entrega un valor al código que la llamó cuando corresponde",
+                    "Describir qué ocurre con el valor devuelto",
+                ],
+                "palabras_clave_fuente": ["return"],
+                "terminos_obligatorios": [],
+                "modo_evaluacion": "conceptual",
+            })
+        elif tema_id == "condicionales" and "elif" in corpus_norm:
+            candidatos.append({
+                "enunciado": "Explique cuándo usaría elif dentro de una estructura condicional de Python.",
+                "pista": "Sirve para evaluar una condición adicional después de un if.",
+                "criterios": ["Explicar que elif evalúa una condición adicional después de if cuando corresponde"],
+                "palabras_clave_fuente": ["elif"],
+                "terminos_obligatorios": [],
+                "modo_evaluacion": "conceptual",
+            })
+        elif tema_id == "excepciones" and "except" in corpus_norm:
+            candidatos.append({
+                "enunciado": "Explique la función de except en el manejo de excepciones de Python.",
+                "pista": "Piense en qué bloque recibe el control cuando ocurre un error contemplado.",
+                "criterios": ["Explicar que except maneja una excepción capturada tras un bloque try"],
+                "palabras_clave_fuente": ["except"],
+                "terminos_obligatorios": [],
+                "modo_evaluacion": "conceptual",
+            })
+        elif tema_id == "modulos" and "import" in corpus_norm:
+            candidatos.append({
+                "enunciado": "Explique para qué se utiliza import en Python y qué permite hacer con un módulo.",
+                "pista": "Permite usar código definido fuera del archivo actual.",
+                "criterios": ["Explicar que import permite acceder y utilizar módulos o elementos definidos fuera del archivo actual"],
+                "palabras_clave_fuente": ["import"],
+                "terminos_obligatorios": [],
+                "modo_evaluacion": "conceptual",
+            })
+
+        # Evitamos repetir un candidato reciente si hay otra alternativa.
+        for cand in candidatos:
+            if not self._ejercicio_python_es_repetido(cand["enunciado"], recientes, umbral=0.80):
+                elegido = cand
+                break
+        else:
+            elegido = candidatos[0] if candidatos else None
+
+        # Fallback universal, siempre basado en los fragmentos recuperados.
+        if elegido is None:
+            elegido = {
+                "enunciado": (
+                    f"Explique con sus palabras una idea central de {tema} que aparezca en sus "
+                    "apuntes locales y describa para qué sirve en Python."
+                ),
+                "pista": "Use la explicación que acabamos de estudiar y concéntrese en la utilidad práctica del concepto.",
+                "terminos_obligatorios": [],
+                "modo_evaluacion": "conceptual",
+            }
+
+        # La respuesta modelo procede del material local, no de conocimiento inventado.
+        # v2.9.6: además de términos obligatorios, cada candidato puede indicar
+        # palabras_clave_fuente. Esto evita usar como "respuesta modelo" un fragmento
+        # sobre REPL para corregir, por ejemplo, un ejercicio que solo pidió print.
+        clave = textos[0]
+        obligatorios = elegido.get("terminos_obligatorios", []) or []
+        palabras_fuente = elegido.get("palabras_clave_fuente", []) or []
+        anclas = obligatorios or palabras_fuente
+        if anclas:
+            mejor = None
+            mejor_hits = -1
+            for texto_fuente in textos:
+                texto_norm = self._normalizar_respuesta_tutor_python(texto_fuente)
+                hits = sum(
+                    1 for termino in anclas
+                    if self._termino_obligatorio_presente(texto_norm, termino)
+                )
+                if hits > mejor_hits:
+                    mejor = texto_fuente
+                    mejor_hits = hits
+                if hits >= len(anclas):
+                    break
+            if mejor:
+                clave = mejor
+        if len(clave) > 700:
+            clave = clave[:700].rsplit(" ", 1)[0] + "..."
+        criterios_elegidos = elegido.get("criterios") or [
+            "Responder directamente lo que pregunta el enunciado",
+            "Mantener coherencia con los fragmentos locales de Python",
+        ]
+        return {
+            "enunciado": elegido["enunciado"],
+            "pista": elegido["pista"],
+            "respuesta_clave": clave,
+            "criterios": criterios_elegidos,
+            "terminos_obligatorios": elegido.get("terminos_obligatorios", []),
+            "modo_evaluacion": elegido.get("modo_evaluacion", "conceptual"),
+            "nivel": nivel or "inicial",
+            "origen_respaldo": "biblioteca_local",
+        }
+
+    def generar_ejercicio_python_async(self, item=None):
+        if not self.modo_tutor_python:
+            self.responder("la tutora de Python está desactivada.", "normal")
+            return
+        if self.tutor_python_generando_ejercicio:
+            # Una segunda detección de la misma orden puede llegar mientras Whisper
+            # termina de vaciar audio. No iniciamos otro proceso ni hablamos encima
+            # del ejercicio que ya está en preparación.
+            print("TUTORA PYTHON: solicitud duplicada ignorada; ejercicio ya en preparación.")
+            return
+        if self.tutor_python_pendiente:
+            self.responder(
+                "ya hay un ejercicio de Python pendiente. Puede responderlo, pedir una pista o terminar el ejercicio.",
+                "normal",
+            )
+            return
+        if self.evaluacion_academica_pendiente:
+            self.responder(
+                "hay una evaluación académica pendiente. Respóndala o termínela antes de iniciar un ejercicio de Python.",
+                "normal",
+            )
+            return
+        if isinstance(item, str):
+            item = self.inferir_tema_python(item)
+        item = item or self.inferir_tema_python("") or self.siguiente_tema_python_recomendado()
+        if not item:
+            self.responder("no pude escoger un tema de Python para practicar.", "confundida")
+            return
+
+        self._activar_tema_python(item)
+        self.tutor_python_generando_ejercicio = True
+        token = self.iniciar_proceso("tutor_python_ejercicio")
+        if token is None:
+            self.tutor_python_generando_ejercicio = False
+            self.responder("todavía estoy terminando otra consulta.", "pensando")
+            return
+        self.expresion_pensando()
+
+        def trabajo():
+            datos = {}
+            fuentes = []
+            try:
+                fuentes = self._fuentes_tutor_python(item, TUTOR_PYTHON_FUENTES)
+                if not fuentes:
+                    raise RuntimeError("sin fuentes locales de Python suficientes")
+                contexto = self.formatear_fuentes_tecnicas(fuentes, TUTOR_PYTHON_FUENTES)
+                progreso = self.memoria.obtener_progreso_tema("Python", item["nombre"])
+                dominio = float(progreso[2] or 0) if progreso else 0.0
+                evidencias = int(progreso[3] or 0) if progreso else 0
+                nivel = (
+                    "inicial" if evidencias <= 0 or dominio < 45
+                    else "intermedio" if dominio < 75
+                    else "desafiante"
+                )
+
+                recientes = []
+                try:
+                    for fila in self.memoria.ultimos_ejercicios_python(10):
+                        if normalizar(fila[1] or "") == normalizar(item["nombre"]):
+                            recientes.append(str(fila[3] or "").strip())
+                        if len(recientes) >= 4:
+                            break
+                except Exception:
+                    recientes = []
+                recientes_txt = "\n".join(f"- {x}" for x in recientes if x)
+                formato = random.choice([
+                    "identificar o corregir un error corto",
+                    "predecir el resultado de un fragmento breve",
+                    "responder una pregunta conceptual concreta",
+                    "completar una instrucción o pequeño fragmento",
+                    "explicar qué comando o construcción usar y por qué",
+                ])
+
+                def pedir_ejercicio(extra=""):
+                    mensajes = [
+                        {
+                            "role": "system",
+                            "content": (
+                                "Eres Beta, tutora práctica de Python. Crea UN solo ejercicio "
+                                "basado exclusivamente en los libros locales proporcionados. "
+                                "Debe practicar el tema solicitado y ser razonable para el nivel. "
+                                "No reveles la solución en el enunciado. NO repitas ni reformules "
+                                "de cerca los ejercicios recientes. Devuelve SOLO JSON válido con "
+                                "estas claves: enunciado, pista, respuesta_clave, criterios, "
+                                "terminos_obligatorios, modo_evaluacion, nivel. "
+                                "criterios debe ser una lista de requisitos que realmente pide el "
+                                "enunciado; no agregues requisitos extra. terminos_obligatorios debe "
+                                "ser una lista SOLO de tokens técnicos exactos imprescindibles para "
+                                "una respuesta correcta (por ejemplo python3, return, def); si los "
+                                "sinónimos son aceptables, déjala vacía. modo_evaluacion debe ser "
+                                "exacta, conceptual o codigo. respuesta_clave contiene una solución "
+                                "modelo breve y suficiente para evaluar posteriormente."
+                            ),
+                        },
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Tema: {item['nombre']}\nNivel sugerido: {nivel}\n"
+                                f"Formato preferido para variar: {formato}\n"
+                                + (
+                                    f"\nEJERCICIOS RECIENTES QUE NO DEBES REPETIR:\n{recientes_txt}\n"
+                                    if recientes_txt else ""
+                                )
+                                + (f"\n{extra}\n" if extra else "")
+                                + f"\nLIBROS LOCALES:\n{contexto}"
+                            ),
+                        },
+                    ]
+                    bruto = self.enviar_ollama(
+                        mensajes,
+                        temperatura=0.20,
+                        num_predict=TUTOR_PYTHON_TOKENS_EJERCICIO,
+                        num_ctx=1800,
+                        formato_json=True,
+                        timeout=TUTOR_PYTHON_TIMEOUT_EJERCICIO,
+                    )
+                    datos_json = self.extraer_json_de_texto(bruto or "") or {}
+                    if not datos_json:
+                        vista = (bruto or "").replace("\n", " ")[:500]
+                        print(f"TUTORA PYTHON: JSON de ejercicio inválido o vacío. Respuesta Ollama='{vista}'")
+                    return datos_json
+
+                # REPL/print/python3 tienen preguntas locales con criterios
+                # auditables. Usarlas primero en nivel inicial evita gastar
+                # 14 segundos en un timeout Ollama para ejercicios conocidos.
+                ejercicio_local_elegido = False
+                if (TUTOR_PYTHON_PREFERIR_LOCAL_FUNDAMENTOS
+                        and item["id"] == "fundamentos"
+                        and nivel in {"inicial", "intermedio"}):
+                    local = self._ejercicio_python_respaldo_local(
+                        item, fuentes, nivel=nivel, recientes=recientes
+                    )
+                    if local:
+                        ejercicio_local_elegido = True
+                        repetido_local = self._ejercicio_python_es_repetido(
+                            str(local.get("enunciado", "")), recientes, umbral=0.80
+                        )
+                        datos = local
+                        if repetido_local:
+                            print(
+                                "TUTORA PYTHON v2.9.12: repertorio local reciente agotado; "
+                                "repito una práctica útil antes que esperar un timeout de Ollama."
+                            )
+                        else:
+                            print("TUTORA PYTHON v2.9.12: ejercicio de fundamentos respaldado por biblioteca local, sin esperar Ollama.")
+                if not datos:
+                    datos = pedir_ejercicio()
+                enunciado_prueba = str(datos.get("enunciado", "")).strip()
+                if enunciado_prueba and self._ejercicio_python_es_repetido(
+                    enunciado_prueba, recientes
+                ):
+                    if ejercicio_local_elegido:
+                        print(
+                            "TUTORA PYTHON v2.9.13: ejercicio local repetido aceptado; "
+                            "no consultaré Ollama solo para reformularlo."
+                        )
+                    else:
+                        print("TUTORA PYTHON: ejercicio demasiado parecido a uno reciente; regenerando una vez.")
+                        datos = pedir_ejercicio(
+                            "El primer intento se parecía demasiado a un ejercicio reciente. "
+                            "Cambia claramente la habilidad concreta o el formato de la pregunta."
+                        )
+
+                # Si Qwen no logró devolver un JSON utilizable, Beta no abandona la
+                # sesión: construye un ejercicio de comprensión anclado a los mismos
+                # fragmentos locales que ya recuperó del libro de Python.
+                if not str(datos.get("enunciado", "")).strip() or not str(datos.get("respuesta_clave", "")).strip():
+                    print("TUTORA PYTHON: activando respaldo local de generación de ejercicio.")
+                    datos = self._ejercicio_python_respaldo_local(
+                        item, fuentes, nivel=nivel, recientes=recientes
+                    )
+            except Exception as error:
+                self.tutor_python_ultimo_error_ejercicio = f"{type(error).__name__}: {error}"
+                print("TUTORA PYTHON: error generando ejercicio:", error)
+                # Último intento sin modelo: si ya alcanzamos a recuperar fuentes,
+                # todavía podemos construir un ejercicio local sencillo.
+                try:
+                    if fuentes:
+                        datos = self._ejercicio_python_respaldo_local(
+                            item, fuentes, nivel=locals().get("nivel", "inicial"),
+                            recientes=locals().get("recientes", []),
+                        )
+                except Exception as error_respaldo:
+                    print("TUTORA PYTHON: también falló el respaldo local:", error_respaldo)
+            finally:
+                self.tutor_python_generando_ejercicio = False
+                self.terminar_proceso(token)
+
+            if token != self.proceso_id:
+                return
+
+            enunciado = str(datos.get("enunciado", "")).strip()
+            pista = str(datos.get("pista", "")).strip()
+            clave = str(datos.get("respuesta_clave", "")).strip()
+            nivel = str(datos.get("nivel", "basico")).strip() or "basico"
+            criterios = datos.get("criterios", [])
+            if not isinstance(criterios, list):
+                criterios = [str(criterios)] if str(criterios).strip() else []
+            criterios = [str(x).strip() for x in criterios if str(x).strip()][:8]
+            terminos = datos.get("terminos_obligatorios", [])
+            if not isinstance(terminos, list):
+                terminos = [str(terminos)] if str(terminos).strip() else []
+            terminos = [str(x).strip() for x in terminos if str(x).strip()][:8]
+            modo_eval = normalizar(str(datos.get("modo_evaluacion", "conceptual")))
+            if modo_eval not in {"exacta", "conceptual", "codigo"}:
+                modo_eval = "conceptual"
+            # Respaldo local: si Qwen marcó una respuesta como exacta pero olvidó
+            # declarar los tokens imprescindibles, recuperamos algunos términos
+            # técnicos inequívocos desde la solución modelo.
+            if modo_eval == "exacta" and not terminos:
+                candidatos_exactos = [
+                    "python3", "pip", "return", "def", "elif",
+                    "lambda", "kwargs", "xargs", "import", "try", "except",
+                ]
+                for candidato in candidatos_exactos:
+                    if self._termino_obligatorio_presente(clave, candidato):
+                        terminos.append(candidato)
+                # "python" es también el nombre del lenguaje y puede aparecer en
+                # cualquier explicación. Solo lo hacemos obligatorio de respaldo si
+                # el ejercicio habla de Windows y la solución lo usa como comando.
+                combinado = self._normalizar_respuesta_tutor_python(
+                    (enunciado or "") + " " + (clave or "")
+                )
+                if "windows" in combinado and re.search(
+                    r"windows.{0,120}(?<![a-z0-9_])python(?![a-z0-9_])|"
+                    r"(?<![a-z0-9_])python(?![a-z0-9_]).{0,120}windows",
+                    combinado,
+                ):
+                    terminos.append("python")
+                terminos = list(dict.fromkeys(terminos))[:8]
+
+            if not enunciado or not clave:
+                if not self.tutor_python_ultimo_error_ejercicio:
+                    self.tutor_python_ultimo_error_ejercicio = "generación sin enunciado o respuesta_clave utilizable"
+                self.root.after(
+                    0,
+                    lambda: self.responder(
+                        "tuve un problema temporal preparando el ejercicio. Sus libros siguen disponibles; "
+                        "el fallo fue del generador, no de la biblioteca. Puede pedirme otro ejercicio.",
+                        "confundida",
+                    ),
+                )
+                return
+
+            self.tutor_python_ultimo_error_ejercicio = ""
+
+            ejercicio_id = self.memoria.guardar_ejercicio_python(
+                item["nombre"], enunciado, pista, clave, nivel,
+                criterios=criterios,
+                terminos_obligatorios=terminos,
+                modo_evaluacion=modo_eval,
+            )
+            self.tutor_python_ultimo_ejercicio_id = ejercicio_id
+            self.tutor_python_pendiente = {
+                "id": ejercicio_id,
+                "tema_id": item["id"],
+                "tema": item["nombre"],
+                "nivel": nivel,
+                "enunciado": enunciado,
+                "pista": pista,
+                "respuesta_clave": clave,
+                "criterios": criterios,
+                "terminos_obligatorios": terminos,
+                "modo_evaluacion": modo_eval,
+                "fuentes": fuentes,
+            }
+            self.tutor_python_hasta = 0.0
+            print(
+                f"TUTORA PYTHON: ejercicio #{ejercicio_id} pendiente | "
+                f"tema='{item['nombre']}' nivel='{nivel}' modo='{modo_eval}' "
+                f"terminos={terminos} origen='{datos.get('origen_respaldo','qwen_json')}'"
+            )
+            self._aula_refrescar_ejercicio_async()
+            self.root.after(
+                0,
+                lambda e=enunciado: self.responder(
+                    "Señor, ejercicio de Python. " + e,
+                    "escuchando",
+                    tipo_contexto="tutor_python",
+                ),
+            )
+
+        threading.Thread(target=trabajo, daemon=True).start()
+
+    def dar_pista_tutor_python(self):
+        pendiente = self.tutor_python_pendiente
+        if not pendiente:
+            self.responder("no hay un ejercicio de Python pendiente.", "normal")
+            return
+        pista = (pendiente.get("pista") or "").strip()
+        if not pista:
+            pista = "revise el concepto principal del tema y divida el problema en pasos pequeños."
+        self.tutor_python_hasta = time.time() + TUTOR_PYTHON_RESPUESTA_SEGUNDOS
+        self.responder(
+            "Pista: " + pista,
+            "normal",
+            tipo_contexto="tutor_python",
+        )
+
+    def mostrar_solucion_tutor_python(self):
+        pendiente = self.tutor_python_pendiente
+        if not pendiente:
+            self.responder("no hay un ejercicio de Python pendiente.", "normal")
+            return
+        clave = (pendiente.get("respuesta_clave") or "").strip()
+        tema = pendiente.get("tema") or "Python"
+        ejercicio_id = pendiente.get("id")
+        self.tutor_python_pendiente = None
+        self.tutor_python_hasta = 0.0
+        try:
+            self.memoria.completar_ejercicio_python(
+                ejercicio_id, "", None, "Solución solicitada; no se registró como evidencia.", False
+            )
+            self.memoria.registrar_evento_aprendizaje(
+                "Python", tema, "exposicion", None, "El Señor solicitó la solución de un ejercicio"
+            )
+        except Exception:
+            pass
+        self.responder(
+            "La solución orientativa es: " + clave +
+            " No la contaré como una evaluación de dominio porque usted pidió ver la solución.",
+            "normal",
+            tipo_contexto="tecnico",
+        )
+
+    def _parece_codigo_python(self, respuesta):
+        t = respuesta or ""
+        marcas = ["def ", "print(", "return ", "for ", "while ", "if ", "=", "[", "{", "import "]
+        return "\n" in t or any(m in t for m in marcas)
+
+    def _diagnostico_sintaxis_python(self, codigo):
+        import ast
+        try:
+            ast.parse(codigo or "")
+            return "Sintaxis Python válida según ast.parse."
+        except SyntaxError as error:
+            linea = getattr(error, "lineno", None)
+            detalle = getattr(error, "msg", "error de sintaxis")
+            return f"Error de sintaxis en línea {linea or '?'}: {detalle}."
+        except Exception as error:
+            return f"No pude comprobar la sintaxis: {error}"
+
+    def _normalizar_respuesta_tutor_python(self, texto):
+        t = normalizar(texto or "")
+        # Variantes frecuentes de dictado técnico. La normalización se usa SOLO
+        # para evaluar una respuesta de la tutora; no altera lo que se guarda como
+        # transcripción original.
+        t = re.sub(r"\bpython\s+(?:3|tres)\b", "python3", t)
+        t = re.sub(
+            r"\b(?:spyton|spython|pyton|paiton|peiton|peyton|patton|piton)\b",
+            "python",
+            t,
+        )
+        # Windows Python Launcher: "py -3" suele llegar como "py guion tres",
+        # "pai guion alto tres" o incluso una sola palabra como "pygonalto3".
+        t = re.sub(
+            r"\b(?:pygonalto3|pygonalt3|pyguionalto3|paiguionalto3|pyguion3|paiguion3)\b",
+            "py 3",
+            t,
+        )
+        t = re.sub(
+            r"\b(?:py|pai)\s+(?:guion\s+(?:alto\s+)?)?(?:3|tres)\b",
+            "py 3",
+            t,
+        )
+        # REPL suele llegar por voz como RELP/RPL, "repel", "repele" o
+        # deletreado como R-E-P-L. En una respuesta de la tutora son variantes
+        # fonéticas del mismo término.
+        t = re.sub(
+            r"\b(?:repl|relp|rpl|rep|repel|repele|r\s+e\s+p\s+l|repe\s*l)\b",
+            "repl",
+            t,
+        )
+        # print se pierde a menudo la consonante final en dictado ("prin").
+        t = re.sub(r"\b(?:prin|prinn|print)\b", "print", t)
+        t = re.sub(r"\s+", " ", t).strip()
+        return t
+
+    def _comando_python3_explicito(self, respuesta):
+        """Distingue el comando de una mera referencia a la versión Python 3.
+
+        Esta verificación se usa exclusivamente si un ejercicio EXACTO pide
+        escribir el comando en la terminal. No se basa en menciones en fuentes
+        o en la respuesta modelo y es conservadora ante dictados ambiguos.
+        """
+        t = self._normalizar_respuesta_tutor_python(respuesta)
+        if not re.search(r"(?<![a-z0-9_])python3(?![a-z0-9_])", t):
+            return False
+        # Una respuesta corta formada solo por el comando es inequívoca.
+        if t == "python3":
+            return True
+        # Si el estudiante niega el comando, mencionarlo NO lo hace correcto.
+        if re.search(r"\b(?:no|nunca|jam[aá]s|evita|evitar)\s+(?:se\s+)?(?:debe\s+)?(?:usar|escribir|ejecutar|ingresar)?\s*python3\b", t):
+            return False
+        # Aceptamos el comando únicamente si se presenta como una acción o
+        # respuesta explícita; 'el material especifica Python 3' no alcanza.
+        patrones = (
+            r"\b(?:el|un)\s+comando\s+(?:es|seria|correcto\s+es|para\s+eso\s+es)\s+python3\b",
+            r"\bcomando\s+python3\b",
+            r"\b(?:escribo|escribe|escribir|ingreso|ingresa|ingresar|ejecuto|ejecuta|ejecutar|tecleo|teclea|teclear|utilizo|utiliza|utilizar)\s+(?:el\s+comando\s+)?python3\b",
+            r"\b(?:debo|debes|hay\s+que|se\s+debe|puedes|puede)\s+(?:escribir|ingresar|ejecutar|usar|teclear)\s+python3\b",
+            r"\b(?:la\s+respuesta|mi\s+respuesta)\s+es\s+(?:el\s+comando\s+)?python3\b",
+            r"\b(?:el\s+comando\s+que\s+uso\s+es|se\s+usa|se\s+utiliza)\s+python3\b",
+        )
+        return any(re.search(patron, t) for patron in patrones)
+
+    def _ejercicio_requiere_comando_python3(self, pendiente):
+        if (pendiente or {}).get("modo_evaluacion") != "exacta":
+            return False
+        terminos = (pendiente or {}).get("terminos_obligatorios") or []
+        enunciado = normalizar((pendiente or {}).get("enunciado", ""))
+        return ("python3" in [normalizar(x) for x in terminos]
+                and "comando" in enunciado
+                and ("terminal" in enunciado or "ejecut" in enunciado))
+
+    def _termino_obligatorio_presente(self, respuesta, termino):
+        texto = self._normalizar_respuesta_tutor_python(respuesta)
+        esperado = self._normalizar_respuesta_tutor_python(termino)
+        if not esperado:
+            return True
+        if esperado == "python":
+            return re.search(r"(?<![a-z0-9_])python(?![a-z0-9_])", texto) is not None
+        if esperado == "python3":
+            return re.search(r"(?<![a-z0-9_])python3(?![a-z0-9_])", texto) is not None
+        if re.fullmatch(r"[a-z0-9_+.-]+", esperado):
+            return re.search(
+                rf"(?<![a-z0-9_]){re.escape(esperado)}(?![a-z0-9_])", texto
+            ) is not None
+        return esperado in texto
+
+    def _cobertura_terminos_tutor_python(self, respuesta, terminos):
+        terminos = [str(x).strip() for x in (terminos or []) if str(x).strip()]
+        if not terminos:
+            return [], [], 1.0
+        presentes, faltantes = [], []
+        for termino in terminos:
+            (presentes if self._termino_obligatorio_presente(respuesta, termino) else faltantes).append(termino)
+        return presentes, faltantes, len(presentes) / max(1, len(terminos))
+
+    def _ejercicio_conceptual_print_con_ejemplo(self, pendiente=None):
+        """Evita corregir pronunciaciones ambiguas fuera del ejercicio de print."""
+        p = pendiente if pendiente is not None else self.tutor_python_pendiente
+        p = p or {}
+        enunciado = normalizar(p.get("enunciado") or "")
+        return (
+            (p.get("modo_evaluacion") or "conceptual") == "conceptual"
+            and re.search(r"\bprint\b", enunciado) is not None
+            and "ejemplo" in enunciado
+        )
+
+    def _evaluar_print_con_evidencia_local(self, respuesta, pendiente=None):
+        """Dos criterios visibles: utilidad de print y ejemplo concreto.
+
+        Interpreta 'prim/prin' como print SOLO mientras esta pregunta esté activa.
+        Nunca modifica la transcripción original almacenada en el ejercicio.
+        Es un control acotado, no un evaluador semántico universal.
+        """
+        original = (respuesta or "").strip()
+        if not self._ejercicio_conceptual_print_con_ejemplo(pendiente):
+            return None
+        n = normalizar(original)
+        alias = bool(re.search(r"\b(?:prim|prin|prinn)\b", n))
+        n = re.sub(r"\b(?:prim|prin|prinn)\b", "print", n)
+        n = re.sub(r"\s+", " ", n).strip()
+        menciona_print = bool(re.search(r"\bprint\b", n))
+        accion = bool(re.search(
+            r"\b(?:muestra|mostrar|mostramos|presenta|presentar|imprime|imprimir|"
+            r"visualiza|visualizar|despliega|desplegar|escribe|escribir|"
+            r"ver|vemos|saca|sacar)\b", n
+        ))
+        salida = bool(re.search(
+            r"\b(?:pantalla|consola|terminal|salida|resultados?|respuestas?|"
+            r"textos?|mensajes?|informacion|valores?|datos?)\b", n
+        ))
+        explicacion = bool(menciona_print and accion and salida)
+        # Ejemplos escritos y dictados se distinguen de la mera mención print.
+        raw = re.sub(r"\b(?:prim|prin|prinn)\b", "print", original, flags=re.I)
+        codigo = bool(re.search(r"\bprint\s*\(\s*[^)]{1,}\)", raw, flags=re.I))
+        ejemplos_hablados = bool(
+            re.search(
+                r"\b(?:por ejemplo|un ejemplo|mi ejemplo|si escribo|escribiria)\b"
+                r".{0,110}\bprint\b.{0,80}\b(?:hola|mundo|nombre|mensaje|"
+                r"edad|resultado|numero|texto|variable|\d+)\b", n
+            ) or re.search(
+                r"\bprint\s+(?:abre\s+parentesis|parentesis)\b"
+                r".{0,80}\b(?:hola|mundo|nombre|mensaje|edad|numero|"
+                r"texto|variable|\d+)\b", n
+            )
+        )
+        return {
+            "explicacion": explicacion,
+            "ejemplo": bool(codigo or ejemplos_hablados),
+            "alias_asr": alias,
+            "respuesta_normalizada": n,
+        }
+
+    def _ejercicio_conceptual_repl(self, pendiente=None):
+        p = pendiente if pendiente is not None else self.tutor_python_pendiente
+        p = p or {}
+        enunciado = normalizar(p.get("enunciado") or "")
+        return (
+            (p.get("modo_evaluacion") or "conceptual") == "conceptual"
+            and "repl" in enunciado
+            and any(x in enunciado for x in ("que es", "para que sirve", "explique"))
+        )
+
+    def _evaluar_repl_con_evidencia_local(self, respuesta, pendiente=None):
+        if not self._ejercicio_conceptual_repl(pendiente):
+            return None
+        n = self._normalizar_respuesta_tutor_python(respuesta)
+        # Variantes que Whisper produce cuando el Señor intenta pronunciar las
+        # palabras inglesas Read/Eval/Print dentro de la explicación.
+        n = re.sub(r"\b(?:react|red|read)\b", "read", n)
+        n = re.sub(r"\b(?:eval|e val|evaluar|evalua|evaluacion)\b", "eval", n)
+        n = re.sub(r"\b(?:prim|prin|print)\b", "print", n)
+        interactivo = bool(re.search(r"\b(?:interactivo|interactiva|terminal|consola|interprete|cursor)\b", n))
+        inmediato = bool(re.search(r"\b(?:inmediatamente|instantaneamente|al instante|resultado|responde|muestra)\b", n))
+        ciclo = bool(
+            ("read" in n and "eval" in n and "print" in n)
+            or re.search(r"\b(?:lee|leer)\b.{0,100}\b(?:evalua|ejecuta|eval)\b.{0,100}\b(?:muestra|imprime|print)\b", n)
+            or "ciclo" in n
+        )
+        utilidad = bool(
+            re.search(
+                r"\b(?:probar|practicar|aprender|sin\s+(?:crear|guardar|escribir).*archivo|"
+                r"linea\s+por\s+linea|codigo)\b", n
+            )
+            or re.search(
+                r"\b(?:permite|sirve|herramienta)\b.{0,90}"
+                r"\b(?:escribir|ejecutar|probar)\b.{0,60}"
+                r"\b(?:instrucciones?|codigo|comandos?)\b", n
+            )
+        )
+        criterios = [interactivo, inmediato, bool(ciclo or utilidad)]
+        cobertura = sum(1 for x in criterios if x) / 3.0
+        return {
+            "interactivo": interactivo,
+            "inmediato": inmediato,
+            "ciclo_o_utilidad": bool(ciclo or utilidad),
+            "cobertura": cobertura,
+            "normalizada": n,
+        }
+
+    def _validar_criterios_conceptuales_qwen(self, respuesta, criterios, revision):
+        """Valida localmente la evidencia que Qwen dice haber visto en la respuesta.
+
+        Qwen puede decidir si una cita apoya un criterio, pero Beta exige que la
+        evidencia indicada exista literalmente en la respuesta del estudiante.
+        Así evitamos subir una nota por conceptos inventados por el evaluador.
+        """
+        criterios = [str(x).strip() for x in (criterios or []) if str(x).strip()]
+        if not criterios or not isinstance(revision, list):
+            return [], 0.0
+
+        respuesta_n = self._normalizar_respuesta_tutor_python(respuesta)
+        cumplidos = set()
+        for item in revision:
+            if not isinstance(item, dict) or not bool(item.get("cumplido")):
+                continue
+            try:
+                indice = int(item.get("indice", 0))
+            except Exception:
+                continue
+            if indice < 1 or indice > len(criterios):
+                continue
+            evidencia = self._normalizar_respuesta_tutor_python(
+                str(item.get("evidencia", "") or "")
+            )
+            if not evidencia or len(evidencia.split()) < 2:
+                continue
+            if evidencia in respuesta_n:
+                cumplidos.add(indice)
+
+        ordenados = sorted(cumplidos)
+        return ordenados, len(ordenados) / max(1, len(criterios))
+
+    def _cobertura_criterios_conceptuales_local(self, respuesta, criterios):
+        """Respaldo léxico conservador si Qwen no devuelve revisión auditable."""
+        stop = {
+            "que", "como", "para", "por", "con", "una", "uno", "unos", "unas",
+            "del", "las", "los", "este", "esta", "esto", "son", "ser", "se",
+            "el", "la", "de", "en", "y", "o", "a", "un", "al", "su", "sus",
+            "cuando", "donde", "si", "lo", "le", "indicar", "explicar", "describir",
+        }
+        respuesta_tokens = {
+            p for p in self._normalizar_respuesta_tutor_python(respuesta).split()
+            if len(p) >= 3 and p not in stop
+        }
+        if not respuesta_tokens:
+            return 0.0
+        valores = []
+        for criterio in criterios or []:
+            tokens = [
+                p for p in self._normalizar_respuesta_tutor_python(str(criterio)).split()
+                if len(p) >= 3 and p not in stop
+            ]
+            if not tokens:
+                continue
+            ratio = len(respuesta_tokens.intersection(tokens)) / max(1, len(set(tokens)))
+            if ratio >= 0.60:
+                valores.append(1.0)
+            elif ratio >= 0.30:
+                valores.append(0.5)
+            else:
+                valores.append(0.0)
+        return sum(valores) / len(valores) if valores else 0.0
+
+    def _fragmento_tutor_parece_incompleto(self, texto):
+        original = (texto or "").strip()
+        # Whisper suele terminar en coma al cortar una intervención que
+        # continuará en el siguiente segmento.
+        if original.endswith((",", ":", ";", "-", "…", "...")):
+            return True
+        t = normalizar(original).strip()
+        if not t:
+            return False
+        finales = {
+            "en", "de", "con", "para", "por", "y", "o", "pero", "porque",
+            "mientras", "cuando", "como", "que", "si", "entonces", "ademas",
+            "por ejemplo", "es decir",
+        }
+        return any(t == x or t.endswith(" " + x) for x in finales)
+
+    def explicar_ultimo_ejercicio_python(self):
+        fila = None
+        try:
+            if self.tutor_python_ultimo_ejercicio_id:
+                fila = self.memoria.obtener_ejercicio_python(
+                    self.tutor_python_ultimo_ejercicio_id
+                )
+            if not fila:
+                fila = self.memoria.ultimo_ejercicio_python_completo()
+        except Exception:
+            fila = None
+        if not fila:
+            self.responder("todavía no tengo un ejercicio anterior de Python para explicar.", "normal")
+            return
+        ejercicio_id, tema, nivel, enunciado, pista, clave = fila[:6]
+        self.tutor_python_ultimo_ejercicio_id = int(ejercicio_id)
+        texto = (
+            f"Señor, en el último ejercicio de {tema}, la pregunta era: {enunciado} "
+            f"La respuesta orientativa correcta es: {clave}"
+        )
+        self.responder(texto, "normal", tipo_contexto="tutor_python_resultado")
+
+    def _respuesta_tutor_asr_dudosa(self, texto):
+        """Detecta fragmentos dañados por ASR antes de calificarlos.
+
+        Solo bloquea señales fuertes de truncamiento o cambio espurio de idioma.
+        Una respuesta realmente incorrecta sigue pudiendo obtener una nota baja;
+        lo que evitamos es calificar ruido evidente del micrófono.
+        """
+        original = (texto or "").strip()
+        if not original:
+            return False
+
+        if getattr(self, "tutor_python_asr_calidad_ultima", "normal") == "dudosa":
+            detalle = getattr(self, "tutor_python_asr_detalle_ultimo", {}) or {}
+            print(
+                "TUTORA PYTHON: calidad ASR v2.9.8 marcada como dudosa; "
+                f"similitud={detalle.get('similitud', 'n/d')}."
+            )
+            # Consumimos la marca para que una repetición limpia no herede el estado.
+            self.tutor_python_asr_calidad_ultima = "normal"
+            self.tutor_python_asr_detalle_ultimo = {}
+            return True
+
+        modo = (
+            (self.tutor_python_pendiente or {}).get("modo_evaluacion")
+            if self.tutor_python_pendiente
+            else ""
+        ) or "conceptual"
+        if modo != "conceptual":
+            return False
+
+        bajo = original.lower()
+        norm = normalizar(original)
+
+        # Whisper deja puntos suspensivos cuando corta una frase a mitad.
+        if original.endswith("..."):
+            return True
+
+        # Cambio súbito a inglés no esperado. No bloqueamos la expresión válida
+        # "Read Eval Print Loop", que sí puede aparecer al explicar REPL.
+        marcadores = [
+            " it will ", " will print ", " subscribe ", " suscribe ",
+            " thank you ", " thanks for ", " print low ",
+        ]
+        acolchado = f" {bajo} "
+        if any(m in acolchado for m in marcadores):
+            return True
+
+        if any(x in norm for x in [
+            "suscribete", "subtitulos por la comunidad", "gracias por ver el video",
+        ]):
+            return True
+
+        return False
+
+    def acumular_respuesta_tutor_python(self, respuesta):
+        """Acumula una respuesta hablada completa antes de evaluarla.
+
+        v2.9.2 usa una pausa dinámica: si el último fragmento termina en una
+        preposición/conector ("por ejemplo, en"), Beta espera más tiempo en vez de
+        cerrar una idea a mitad. El usuario también puede decir "listo" para finalizar.
+        """
+        if not self.tutor_python_pendiente:
+            return
+        fragmento = (respuesta or "").strip()
+        if not fragmento:
+            return
+
+        if self._respuesta_tutor_asr_dudosa(fragmento):
+            # v3.0.1: si ya había un fragmento válido esperando corrección, su
+            # temporizador NO puede dispararse mientras el Señor repite el audio
+            # dudoso. Conservamos el buffer anterior, cancelamos la corrección y
+            # la rearmaremos únicamente cuando llegue una nueva frase válida.
+            if self.tutor_python_respuesta_timer is not None:
+                try:
+                    self.root.after_cancel(self.tutor_python_respuesta_timer)
+                except Exception:
+                    pass
+                self.tutor_python_respuesta_timer = None
+                print(
+                    "TUTORA PYTHON v3.0.1: corrección pausada hasta recibir "
+                    "la repetición solicitada."
+                )
+            print(
+                "TUTORA PYTHON: fragmento ASR dudoso; no se calificará. "
+                f"Texto='{fragmento}'"
+            )
+            self.tutor_python_hasta = time.time() + TUTOR_PYTHON_RESPUESTA_SEGUNDOS
+            self.responder(
+                "Señor, no pude entender con suficiente claridad ese fragmento. "
+                "Repítalo con calma; mantendré el ejercicio abierto y no lo calificaré todavía.",
+                "escuchando",
+                tipo_contexto="tutor_python",
+            )
+            return
+
+        self.tutor_python_asr_calidad_ultima = "normal"
+        self.tutor_python_asr_detalle_ultimo = {}
+        self.tutor_python_respuesta_buffer.append(fragmento)
+        self._aula_mostrar_respuesta_usuario_async(fragmento)
+        self.tutor_python_hasta = time.time() + TUTOR_PYTHON_RESPUESTA_SEGUNDOS
+        print(
+            f"TUTORA PYTHON: fragmento de respuesta recibido "
+            f"({len(self.tutor_python_respuesta_buffer)} fragmento(s))."
+        )
+
+        if self.tutor_python_respuesta_timer is not None:
+            try:
+                self.root.after_cancel(self.tutor_python_respuesta_timer)
+            except Exception:
+                pass
+
+        espera = (
+            TUTOR_PYTHON_PAUSA_INCOMPLETA_MS
+            if self._fragmento_tutor_parece_incompleto(fragmento)
+            else TUTOR_PYTHON_PAUSA_RESPUESTA_MS
+        )
+        if espera != TUTOR_PYTHON_PAUSA_RESPUESTA_MS:
+            print(
+                "TUTORA PYTHON: el fragmento parece continuar; "
+                f"esperaré {espera/1000:.0f} s antes de corregir."
+            )
+        self.tutor_python_respuesta_timer = self.root.after(
+            espera,
+            self.finalizar_respuesta_tutor_python_buffer,
+        )
+
+    def finalizar_respuesta_tutor_python_buffer(self, forzar=False):
+        self.tutor_python_respuesta_timer = None
+        if not self.tutor_python_pendiente:
+            self.tutor_python_respuesta_buffer = []
+            return
+        partes = [p.strip() for p in self.tutor_python_respuesta_buffer if p.strip()]
+        if not partes:
+            self.tutor_python_respuesta_buffer = []
+            return
+        respuesta = " ".join(partes)
+        if not forzar and self.transcribiendo_whisper:
+            # Ya hay otra frase validada que Whisper está dictando: no cerrar
+            # el ejercicio mientras su transcripción sigue en curso.
+            self.tutor_python_respuesta_timer = self.root.after(
+                1400, self.finalizar_respuesta_tutor_python_buffer
+            )
+            print("TUTORA PYTHON: esperando fin de transcripción adicional antes de evaluar.")
+            return
+        if (not forzar) and self._fragmento_tutor_parece_incompleto(respuesta):
+            # No convertir una frase claramente truncada en una calificación.
+            # Dejamos el buffer intacto y esperamos a que el Señor continúe; no
+            # repetimos un temporizador infinito si guarda silencio.
+            print("TUTORA PYTHON: respuesta aún incompleta; mantengo el ejercicio abierto.")
+            self.tutor_python_hasta = time.time() + TUTOR_PYTHON_RESPUESTA_SEGUNDOS
+            self.responder(
+                "Señor, parece que su respuesta quedó a medias. Puede continuar cuando quiera; "
+                "cuando termine, también puede decir listo.",
+                "escuchando",
+                tipo_contexto="tutor_python",
+            )
+            return
+        pendiente = self.tutor_python_pendiente or {}
+        evidencia_print = self._evaluar_print_con_evidencia_local(respuesta, pendiente)
+        if (not forzar and evidencia_print
+                and evidencia_print["explicacion"] and not evidencia_print["ejemplo"]
+                and not pendiente.get("_print_ya_pidio_ejemplo", False)):
+            # La explicación es válida: pedimos solo el ejemplo faltante ANTES
+            # de poner nota o alterar el progreso. Conservamos la frase hablada.
+            pendiente["_print_ya_pidio_ejemplo"] = True
+            self.tutor_python_hasta = time.time() + TUTOR_PYTHON_RESPUESTA_SEGUNDOS
+            if evidencia_print["alias_asr"]:
+                print("TUTORA PYTHON v2.9.11: alias 'prim/prin' = print en este ejercicio.")
+            print("TUTORA PYTHON v2.9.11: explicación de print correcta; esperando ejemplo.")
+            self.responder(
+                "Señor, explicó correctamente para qué sirve print. "
+                "Solo le falta un ejemplo corto. Puede dictarlo como: "
+                "print abre paréntesis, comillas, hola, comillas, cierra paréntesis, "
+                "o escribirlo en la ventana del ejercicio. Si prefiere terminar "
+                "sin ejemplo, diga listo.",
+                "escuchando", tipo_contexto="tutor_python",
+            )
+            return
+        if (not forzar and self._ejercicio_requiere_comando_python3(pendiente)
+                and self._termino_obligatorio_presente(respuesta, "python3")
+                and not self._comando_python3_explicito(respuesta)):
+            # La versión Python 3 se mencionó, pero el comando nunca se
+            # expresó como tal. Evitamos poner 100 o 0 con audio ambiguo.
+            print("TUTORA PYTHON: Python 3 mencionado sin comando inequívoco; solicitando precisión.")
+            self.tutor_python_respuesta_buffer = []
+            self.tutor_python_hasta = time.time() + TUTOR_PYTHON_RESPUESTA_SEGUNDOS
+            self.responder(
+                "Señor, entendí que habla de Python 3, pero todavía no escuché "
+                "el comando que escribiría en la terminal. Dígame únicamente "
+                "ese comando, por ejemplo empezando con 'el comando es'.",
+                "escuchando", tipo_contexto="tutor_python",
+            )
+            return
+        self.tutor_python_respuesta_buffer = []
+        print(f"TUTORA PYTHON: respuesta consolidada='{respuesta}'")
+        self.procesar_respuesta_tutor_python(respuesta)
+
+    def procesar_respuesta_tutor_python(self, respuesta):
+        pendiente = self.tutor_python_pendiente
+        if not pendiente:
+            return
+        self.tutor_python_pendiente = None
+        self.tutor_python_hasta = 0.0
+        self.tutor_python_respuesta_buffer = []
+        if self.tutor_python_respuesta_timer is not None:
+            try:
+                self.root.after_cancel(self.tutor_python_respuesta_timer)
+            except Exception:
+                pass
+            self.tutor_python_respuesta_timer = None
+        respuesta = (respuesta or "").strip()
+        if not respuesta:
+            return
+
+        token = self.iniciar_proceso("tutor_python_correccion")
+        if token is None:
+            self.tutor_python_pendiente = pendiente
+            self.tutor_python_hasta = time.time() + TUTOR_PYTHON_RESPUESTA_SEGUNDOS
+            return
+        self.expresion_pensando()
+
+        def trabajo():
+            puntuacion = None
+            feedback = ""
+            revision_criterios = []
+            criterios = pendiente.get("criterios") or []
+            terminos = pendiente.get("terminos_obligatorios") or []
+            modo_eval = pendiente.get("modo_evaluacion") or "conceptual"
+            presentes, faltantes, cobertura = self._cobertura_terminos_tutor_python(
+                respuesta, terminos
+            )
+            if self._ejercicio_requiere_comando_python3(pendiente):
+                if not self._comando_python3_explicito(respuesta):
+                    presentes = [x for x in presentes if normalizar(x) != "python3"]
+                    faltantes = list(dict.fromkeys(faltantes + ["python3"]))
+                    cobertura = len(presentes) / max(1, len(terminos))
+                    print("TUTORA PYTHON: la mención de versión Python 3 no demuestra el comando.")
+            respuesta_normalizada = self._normalizar_respuesta_tutor_python(respuesta)
+            evidencia_print = (
+                self._evaluar_print_con_evidencia_local(respuesta, pendiente)
+                if hasattr(self, "_evaluar_print_con_evidencia_local") else None
+            )
+            evidencia_repl = (
+                self._evaluar_repl_con_evidencia_local(respuesta, pendiente)
+                if hasattr(self, "_evaluar_repl_con_evidencia_local") else None
+            )
+            if evidencia_print:
+                respuesta_normalizada = evidencia_print["respuesta_normalizada"]
+                if evidencia_print["alias_asr"]:
+                    print("TUTORA PYTHON v2.9.11: normalización contextual prim/prin -> print para evaluación.")
+            try:
+                fuentes = pendiente.get("fuentes") or []
+                contexto = self.formatear_fuentes_tecnicas(
+                    fuentes, TUTOR_PYTHON_FUENTES
+                )
+                sintaxis = (
+                    self._diagnostico_sintaxis_python(respuesta)
+                    if self._parece_codigo_python(respuesta)
+                    else "La respuesta parece conceptual; no requiere análisis sintáctico."
+                )
+                mensajes = [
+                    {
+                        "role": "system",
+                        "content": (
+                            "Eres Beta, tutora de Python. Evalúa únicamente lo que el estudiante "
+                            "REALMENTE escribió o dijo. Nunca atribuyas al estudiante una palabra, "
+                            "comando o concepto solo porque aparezca en la respuesta clave, criterios "
+                            "o libros. No completes mentalmente una respuesta incompleta. Acepta "
+                            "sinónimos cuando los criterios lo permitan. Evalúa SOLO los requisitos "
+                            "que el enunciado pide explícitamente; no exijas explicaciones adicionales "
+                            "para subir la nota si no fueron solicitadas. En modo exacta, los términos "
+                            "obligatorios son tokens que sí deben estar presentes (aceptando las variantes "
+                            "fonéticas normalizadas por Beta). Si el criterio exacto solicitado YA está presente, "
+                            "no penalices palabras adicionales que parezcan ruido o deformaciones de ASR, salvo que "
+                            "contradigan de forma clara la respuesta requerida por el enunciado. En modo conceptual, "
+                            "una explicación correcta puede ser válida aunque no repita literalmente el nombre del "
+                            "concepto. Si el ejercicio activo es print y el dictado contiene prim/prin, "
+                            "considéralos variantes ASR de print: nunca califiques una deformación de voz "
+                            "como error conceptual. Distingue por separado explicación y ejemplo solicitado. "
+                            "Devuelve SOLO JSON válido con puntuacion de 0 a 100 y feedback de máximo "
+                            "45 palabras. Además devuelve criterios_revision: una lista con un objeto por criterio, "
+                            "usando indice (1..N), cumplido (true/false) y evidencia. Si cumplido es true, evidencia "
+                            "debe ser una cita breve y LITERAL de la respuesta REAL del Señor; si no hay evidencia, "
+                            "usa cadena vacía. En feedback, indica lo acertado y una única mejora principal. No ejecutes código."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Tema: {pendiente.get('tema','Python')}\n"
+                            f"Modo de evaluación: {modo_eval}\n"
+                            f"Ejercicio: {pendiente.get('enunciado','')}\n"
+                            f"Respuesta REAL del Señor:\n---\n{respuesta}\n---\n"
+                            f"Respuesta normalizada por Beta para tolerar ASR técnico:\n---\n{respuesta_normalizada}\n---\n\n"
+                            f"Criterios solicitados por el ejercicio: {json.dumps(criterios, ensure_ascii=False)}\n"
+                            f"Respuesta modelo:\n{pendiente.get('respuesta_clave','')}\n"
+                            f"Términos obligatorios: {json.dumps(terminos, ensure_ascii=False)}\n"
+                            f"Comprobación literal realizada por Beta: presentes={presentes}; faltantes={faltantes}.\n"
+                            f"IMPORTANTE: no digas que el Señor mencionó ninguno de los elementos de faltantes.\n"
+                            f"Diagnóstico local: {sintaxis}\n\n"
+                            f"LIBROS LOCALES:\n{contexto}"
+                        ),
+                    },
+                ]
+                bruto = self.enviar_ollama(
+                    mensajes,
+                    temperatura=0.0,
+                    num_predict=TUTOR_PYTHON_TOKENS_CORRECCION,
+                    num_ctx=1800,
+                    formato_json=True,
+                )
+                datos = self.extraer_json_de_texto(bruto or "") or {}
+                puntuacion = max(0.0, min(100.0, float(datos.get("puntuacion"))))
+                feedback = str(datos.get("feedback", "")).strip()
+                revision_criterios = datos.get("criterios_revision", [])
+                if not isinstance(revision_criterios, list):
+                    revision_criterios = []
+            except Exception as error:
+                print("TUTORA PYTHON: corrección de respaldo:", error)
+                puntuacion = self._puntuar_respuesta_evaluacion_respaldo(
+                    respuesta, pendiente.get("respuesta_clave", "")
+                )
+                feedback = "Comparé su respuesta con los conceptos principales esperados para el ejercicio."
+            finally:
+                self.terminar_proceso(token)
+
+            # Guardia determinista anti-alucinación. La exigencia literal solo
+            # aplica a ejercicios de respuesta EXACTA (comandos, keywords, etc.).
+            # En preguntas conceptuales interesa que la idea sea correcta; repetir
+            # literalmente el término nombrado en el enunciado no debe bajar la nota.
+            if terminos and modo_eval == "exacta":
+                if cobertura <= 0.0:
+                    puntuacion = min(float(puntuacion), 45.0)
+                    # La corrección del modelo puede contener elogios inventados.
+                    # La explicación final debe concordar con la evidencia literal.
+                    feedback = (
+                        "No identifiqué de forma verificable el término exacto "
+                        "que exigía este ejercicio."
+                    )
+                elif cobertura < 1.0:
+                    puntuacion = min(float(puntuacion), 72.0)
+                    feedback = (
+                        "La respuesta cumple parte de los términos exactos "
+                        "solicitados, pero todavía le falta completar el requisito."
+                    )
+                else:
+                    # Si todos los tokens exactos exigidos están realmente presentes,
+                    # una palabra adicional deformada por Whisper no puede convertir una
+                    # respuesta correcta en un 60/70. Qwen sigue pudiendo distinguir una
+                    # contradicción real, pero el ruido ASR incidental no hunde la nota.
+                    if float(puntuacion) < 85.0:
+                        puntuacion = 85.0
+                        feedback = (
+                            "Cumplió el criterio exacto principal: incluyó correctamente "
+                            + ", ".join(terminos)
+                            + ". Como mejora, conviene responder de forma breve y directa para reducir ambigüedades de dictado."
+                        )
+                if faltantes and not any(normalizar(x) in normalizar(feedback) for x in faltantes):
+                    feedback = (
+                        feedback.rstrip(" .")
+                        + ". Faltó mencionar de forma explícita: "
+                        + ", ".join(faltantes)
+                        + "."
+                    )
+                print(
+                    f"TUTORA PYTHON: verificación literal obligatoria "
+                    f"presentes={presentes} faltantes={faltantes} cobertura={cobertura:.2f}"
+                )
+            elif terminos:
+                print(
+                    f"TUTORA PYTHON: términos conceptuales orientativos "
+                    f"presentes={presentes} faltantes={faltantes} cobertura={cobertura:.2f}; "
+                    "sin penalización literal."
+                )
+
+            # v2.9.9: en preguntas conceptuales, Qwen ya no puede hundir una
+            # respuesta que sí contiene evidencia real de varios criterios. Primero
+            # validamos localmente las citas que Qwen afirma haber encontrado.
+            if criterios and modo_eval == "conceptual":
+                cumplidos, cobertura_criterios = self._validar_criterios_conceptuales_qwen(
+                    respuesta, criterios, revision_criterios
+                )
+                origen_cobertura = "evidencia_qwen"
+                if not cumplidos:
+                    cobertura_criterios = self._cobertura_criterios_conceptuales_local(
+                        respuesta, criterios
+                    )
+                    origen_cobertura = "lexico_local"
+
+                if cobertura_criterios > 0.0:
+                    piso = min(95.0, 20.0 + 80.0 * cobertura_criterios)
+                    if float(puntuacion) < piso:
+                        print(
+                            "TUTORA PYTHON v2.9.9: ajustando piso conceptual "
+                            f"{float(puntuacion):.1f} -> {piso:.1f} "
+                            f"cobertura={cobertura_criterios:.2f} origen={origen_cobertura}"
+                        )
+                        puntuacion = piso
+                        if cumplidos:
+                            feedback = (
+                                feedback.rstrip(" .")
+                                + f". La respuesta contiene evidencia verificable para "
+                                f"{len(cumplidos)} de {len(criterios)} criterios."
+                            )
+
+            # v2.9.12: el ejercicio de REPL se evalúa por significado. El
+            # enunciado no obliga a expandir el acrónimo Read-Eval-Print Loop,
+            # así que Qwen no puede bajar la nota por no recitarlo literalmente.
+            if evidencia_repl is not None:
+                cov = float(evidencia_repl["cobertura"])
+                if cov >= 0.99:
+                    puntuacion = max(90.0, float(puntuacion))
+                    feedback = (
+                        "Explicó que REPL es interactivo, que responde de forma inmediata "
+                        "y describió su ciclo o utilidad para probar código."
+                    )
+                elif cov >= 0.66:
+                    puntuacion = max(78.0, float(puntuacion))
+                    feedback = (
+                        "La idea principal de REPL está bien comprendida. Para completar la "
+                        "respuesta, puede mencionar una parte adicional de su ciclo o utilidad."
+                    )
+                elif cov >= 0.33:
+                    puntuacion = min(72.0, max(55.0, float(puntuacion)))
+                    feedback = (
+                        "Reconocí parte del concepto de REPL, pero faltó explicar otra idea "
+                        "central, como la interacción inmediata o para qué sirve al probar código."
+                    )
+                print(
+                    "TUTORA PYTHON v2.9.13: evaluación local REPL "
+                    f"interactivo={evidencia_repl['interactivo']} "
+                    f"inmediato={evidencia_repl['inmediato']} "
+                    f"ciclo_o_utilidad={evidencia_repl['ciclo_o_utilidad']} "
+                    f"cobertura={cov:.2f} nota={puntuacion:.0f}"
+                )
+
+            # v2.9.11: para el ejercicio concreto de print, dos requisitos
+            # comprobables evitan tanto una nota 30 por 'prim' como un 100
+            # sin ejemplo. No elevamos automáticamente otros temas de Python.
+            if evidencia_print is not None:
+                correcta = evidencia_print["explicacion"]
+                ejemplo = evidencia_print["ejemplo"]
+                if correcta and ejemplo:
+                    puntuacion = max(85.0, float(puntuacion))
+                    feedback = (
+                        "Explicó para qué sirve print y proporcionó un ejemplo breve."
+                    )
+                elif correcta:
+                    puntuacion = min(70.0, max(60.0, float(puntuacion)))
+                    feedback = (
+                        "Explicó correctamente que print permite mostrar resultados "
+                        "en pantalla. Faltó dar el ejemplo corto solicitado."
+                    )
+                elif ejemplo:
+                    puntuacion = min(70.0, max(50.0, float(puntuacion)))
+                    feedback = (
+                        "Aportó un ejemplo de print, pero faltó explicar con sus palabras "
+                        "para qué sirve la instrucción."
+                    )
+                else:
+                    puntuacion = min(45.0, float(puntuacion))
+                    feedback = (
+                        "No pude comprobar una explicación de print ni un ejemplo "
+                        "concreto. Puede repetir su respuesta si hubo un error de dictado."
+                    )
+                print(
+                    "TUTORA PYTHON v2.9.11: evaluación verificable de print "
+                    f"explicacion={correcta} ejemplo={ejemplo} "
+                    f"alias_asr={evidencia_print['alias_asr']} nota={puntuacion:.0f}"
+                )
+
+            tema = pendiente.get("tema") or "Python"
+            ejercicio_id = pendiente.get("id")
+            try:
+                self.memoria.completar_ejercicio_python(
+                    ejercicio_id, respuesta, puntuacion, feedback, True
+                )
+                self.memoria.registrar_evento_aprendizaje(
+                    "Python",
+                    tema,
+                    "evaluacion",
+                    puntuacion,
+                    f"Ejercicio tutora Python #{ejercicio_id}. {feedback}",
+                )
+            except Exception as error:
+                print("TUTORA PYTHON: no pude guardar el resultado:", error)
+
+            prog = self.memoria.obtener_progreso_tema("Python", tema)
+            nivel = self.nivel_texto_aprendizaje(
+                prog[2] if prog else puntuacion,
+                prog[3] if prog else 1,
+            )
+            mensaje = (
+                f"Señor, obtuvo aproximadamente {puntuacion:.0f} de 100. "
+                f"{feedback} Su estado estimado en {tema} queda como {nivel}."
+            )
+            self.tutor_python_ultimo_resultado_ts = time.time()
+            self.tutor_python_ultimo_ejercicio_id = int(ejercicio_id or 0)
+            self._aula_refrescar_ejercicio_async()
+            self.root.after(
+                0,
+                lambda m=mensaje, p=puntuacion: self.responder(
+                    m,
+                    "feliz" if p >= 70 else "normal",
+                    tipo_contexto="tutor_python_resultado",
+                ),
+            )
+
+        threading.Thread(target=trabajo, daemon=True).start()
+
+    def ventana_responder_ejercicio_python(self):
+        pendiente = self.tutor_python_pendiente
+        if not pendiente:
+            messagebox.showinfo(
+                "Tutora Python",
+                "No hay un ejercicio pendiente. Genere uno primero.",
+                parent=self.root,
+            )
+            return
+
+        ventana = tk.Toplevel(self.root)
+        ventana.title("Responder ejercicio de Python")
+        ventana.geometry("820x620")
+        ventana.minsize(680, 500)
+        ventana.attributes("-topmost", True)
+
+        marco = ttk.Frame(ventana, padding=12)
+        marco.pack(fill="both", expand=True)
+        ttk.Label(
+            marco,
+            text=f"Tema: {pendiente.get('tema','Python')} | Nivel: {pendiente.get('nivel','')}",
+            font=("Segoe UI", 11, "bold"),
+        ).pack(anchor="w")
+        ttk.Label(
+            marco,
+            text=pendiente.get("enunciado", ""),
+            wraplength=770,
+            justify="left",
+        ).pack(anchor="w", pady=(8, 10))
+
+        ttk.Label(
+            marco,
+            text="Escriba su respuesta o código:",
+        ).pack(anchor="w")
+        entrada = tk.Text(marco, wrap="none", height=18, font=("Consolas", 10))
+        entrada.pack(fill="both", expand=True, pady=(5, 10))
+        entrada.focus_set()
+
+        botones = ttk.Frame(marco)
+        botones.pack(fill="x")
+
+        def enviar():
+            respuesta = entrada.get("1.0", "end").strip()
+            if not respuesta:
+                return
+            ventana.destroy()
+            self.procesar_respuesta_tutor_python(respuesta)
+
+        ttk.Button(botones, text="Enviar para evaluar", command=enviar).pack(side="left")
+        ttk.Button(
+            botones, text="Pista", command=self.dar_pista_tutor_python
+        ).pack(side="left", padx=6)
+        ttk.Button(botones, text="Cerrar", command=ventana.destroy).pack(side="right")
+
+    def registrar_autoevaluacion_python(self, tipo):
+        item = self._tema_python_por_id(self.tutor_python_tema_actual)
+        if not item:
+            self.responder("todavía no tengo un tema activo de Python para asociar esa autoevaluación.", "normal")
+            return
+        self.memoria.registrar_evento_aprendizaje(
+            "Python",
+            item["nombre"],
+            tipo,
+            None,
+            "Autoevaluación explícita durante sesión de la tutora Python",
+        )
+        if tipo == "comprendido":
+            self.responder(
+                "perfecto. Lo registraré como una señal de comprensión en Python, pero no como dominio definitivo. Un ejercicio puede confirmarlo.",
+                "feliz",
+                tipo_contexto="tecnico",
+            )
+        else:
+            self.responder(
+                "lo registraré como un tema a reforzar. Podemos repasarlo con otra explicación o un ejercicio más sencillo.",
+                "normal",
+                tipo_contexto="tecnico",
+            )
+
+    def responder_progreso_python(self):
+        progreso = self.memoria.progreso_ramo("Python", limite=100)
+        if not progreso:
+            self.responder(
+                "todavía no tengo evidencia suficiente de su progreso en Python. Podemos comenzar una sesión y luego hacer un ejercicio.",
+                "normal",
+            )
+            return
+        partes = []
+        for fila in progreso[:5]:
+            _ramo, tema, dominio, evidencias, exposiciones, aciertos, errores, ultima, detalle = fila
+            nivel = self.nivel_texto_aprendizaje(dominio, evidencias)
+            if int(evidencias or 0) <= 0:
+                partes.append(f"{tema}: estudiado, todavía sin evaluación")
+            else:
+                partes.append(f"{tema}: {nivel}, aproximadamente {float(dominio or 0):.0f} por ciento")
+        self.responder(
+            "Señor, en Python tengo este panorama: " + "; ".join(partes) +
+            ". Son estimaciones de aprendizaje, no una calificación oficial.",
+            "normal",
+        )
+
+    def ventana_progreso_python(self):
+        ventana = tk.Toplevel(self.root)
+        ventana.title("Progreso de Python - Beta")
+        ventana.geometry("980x560")
+        ventana.minsize(820, 450)
+        ventana.attributes("-topmost", True)
+        marco = ttk.Frame(ventana, padding=10)
+        marco.pack(fill="both", expand=True)
+
+        actual = self._tema_python_por_id(self.tutor_python_tema_actual)
+        recomendado = self.siguiente_tema_python_recomendado()
+        ttk.Label(
+            marco,
+            text=(
+                f"Tema actual: {actual['nombre'] if actual else 'ninguno'}   |   "
+                f"Recomendado: {recomendado['nombre'] if recomendado else '—'}"
+            ),
+            font=("Segoe UI", 11, "bold"),
+        ).pack(anchor="w", pady=(0, 8))
+
+        progreso = self.memoria.progreso_ramo("Python", limite=200)
+        por_tema = {normalizar(f[1]): f for f in progreso if f[1]}
+        columnas = ("tema", "estado", "dominio", "evidencias", "estudios", "ultima")
+        tabla = ttk.Treeview(marco, columns=columnas, show="headings", height=16)
+        titulos = {
+            "tema": "Tema", "estado": "Estado", "dominio": "Dominio",
+            "evidencias": "Evidencias", "estudios": "Estudios", "ultima": "Última actividad",
+        }
+        anchos = {
+            "tema": 260, "estado": 120, "dominio": 90,
+            "evidencias": 90, "estudios": 80, "ultima": 150,
+        }
+        for c in columnas:
+            tabla.heading(c, text=titulos[c])
+            tabla.column(c, width=anchos[c], anchor="w")
+        tabla.pack(fill="both", expand=True)
+
+        for item in TUTOR_PYTHON_CURRICULO:
+            fila = por_tema.get(normalizar(item["nombre"]))
+            if fila:
+                _, tema, dominio, evidencias, exposiciones, aciertos, errores, ultima, detalle = fila
+                estado = self.nivel_texto_aprendizaje(dominio, evidencias)
+                dominio_txt = "—" if int(evidencias or 0) <= 0 else f"{float(dominio or 0):.0f}%"
+                tabla.insert(
+                    "", "end",
+                    iid=item["id"],
+                    values=(tema, estado, dominio_txt, int(evidencias or 0), int(exposiciones or 0), ultima or "—"),
+                )
+            else:
+                tabla.insert(
+                    "", "end",
+                    iid=item["id"],
+                    values=(item["nombre"], "Sin evaluar", "—", 0, 0, "—"),
+                )
+
+        botones = ttk.Frame(marco)
+        botones.pack(fill="x", pady=(8, 0))
+
+        def estudiar_seleccion():
+            sel = tabla.selection()
+            item = self._tema_python_por_id(sel[0]) if sel else recomendado
+            ventana.destroy()
+            self.iniciar_sesion_python(item)
+
+        def ejercicio_seleccion():
+            sel = tabla.selection()
+            item = self._tema_python_por_id(sel[0]) if sel else recomendado
+            ventana.destroy()
+            self.generar_ejercicio_python_async(item)
+
+        ttk.Button(botones, text="Estudiar seleccionado", command=estudiar_seleccion).pack(side="left")
+        ttk.Button(botones, text="Ejercicio seleccionado", command=ejercicio_seleccion).pack(side="left", padx=6)
+        ttk.Button(botones, text="Cerrar", command=ventana.destroy).pack(side="right")
+
+    def ventana_revisar_codigo_python(self):
+        ventana = tk.Toplevel(self.root)
+        ventana.title("Revisar código Python con Beta")
+        ventana.geometry("980x720")
+        ventana.minsize(760, 560)
+        ventana.attributes("-topmost", True)
+        marco = ttk.Frame(ventana, padding=10)
+        marco.pack(fill="both", expand=True)
+
+        ttk.Label(
+            marco,
+            text="Pegue código Python. Beta lo analizará, pero no lo ejecutará.",
+            font=("Segoe UI", 11, "bold"),
+        ).pack(anchor="w")
+        entrada = tk.Text(marco, wrap="none", height=17, font=("Consolas", 10))
+        entrada.pack(fill="both", expand=True, pady=(6, 8))
+        ttk.Label(marco, text="Revisión:").pack(anchor="w")
+        salida = tk.Text(marco, wrap="word", height=12)
+        salida.pack(fill="both", expand=True, pady=(4, 8))
+        salida.configure(state="disabled")
+
+        def revisar():
+            codigo = entrada.get("1.0", "end").rstrip()
+            if not codigo.strip():
+                return
+            self.revisar_codigo_python_async(codigo, salida)
+
+        botones = ttk.Frame(marco)
+        botones.pack(fill="x")
+        ttk.Button(botones, text="Revisar código", command=revisar).pack(side="left")
+        ttk.Button(botones, text="Cerrar", command=ventana.destroy).pack(side="right")
+
+    def revisar_codigo_python_async(self, codigo, salida_widget=None):
+        if not self.modo_tutor_python:
+            self.responder("la tutora de Python está desactivada.", "normal")
+            return
+        if len(codigo) > 12000:
+            if salida_widget:
+                salida_widget.configure(state="normal")
+                salida_widget.delete("1.0", "end")
+                salida_widget.insert("1.0", "El código es demasiado largo. Revise un fragmento de hasta 12.000 caracteres.")
+                salida_widget.configure(state="disabled")
+            return
+
+        token = self.iniciar_proceso("tutor_python_revision_codigo")
+        if token is None:
+            return
+        self.expresion_pensando()
+
+        def trabajo():
+            revision = ""
+            try:
+                sintaxis = self._diagnostico_sintaxis_python(codigo)
+                consulta = "Python revisión de código errores buenas prácticas funciones variables excepciones"
+                fuentes = self.biblioteca.buscar(
+                    consulta,
+                    limite=TUTOR_PYTHON_FUENTES,
+                    categoria_preferida="tecnica",
+                    coleccion_preferida="Python",
+                )
+                contexto = self.formatear_fuentes_tecnicas(fuentes, TUTOR_PYTHON_FUENTES)
+                mensajes = [
+                    {
+                        "role": "system",
+                        "content": (
+                            "Eres Beta, revisora pedagógica de Python. NO ejecutes el código y no "
+                            "supongas resultados que requieran ejecutarlo. Usa el diagnóstico sintáctico "
+                            "y los libros locales. Explica: 1) qué intenta hacer, 2) errores o riesgos, "
+                            "3) mejoras concretas, 4) una versión corregida corta si hace falta. "
+                            "Sé clara con un estudiante. No atribuyas información a un libro por nombre."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Diagnóstico sintáctico local: {sintaxis}\n\n"
+                            f"CÓDIGO:\n{codigo}\n\nLIBROS LOCALES:\n{contexto}"
+                        ),
+                    },
+                ]
+                revision = self.enviar_ollama(
+                    mensajes,
+                    temperatura=0.08,
+                    num_predict=TUTOR_PYTHON_TOKENS_REVISION,
+                    num_ctx=2200,
+                ) or ""
+                revision = self.limpiar_respuesta_ollama(revision).strip()
+                item = self.inferir_tema_python(codigo) or self._tema_python_por_id(self.tutor_python_tema_actual)
+                if item:
+                    self._activar_tema_python(item)
+                    self.registrar_exposicion_academica(
+                        "Python", item["nombre"], "Revisión de código con la tutora Python"
+                    )
+            except Exception as error:
+                revision = f"No pude completar la revisión: {error}"
+            finally:
+                self.terminar_proceso(token)
+
+            def mostrar():
+                if salida_widget and salida_widget.winfo_exists():
+                    salida_widget.configure(state="normal")
+                    salida_widget.delete("1.0", "end")
+                    salida_widget.insert("1.0", revision)
+                    salida_widget.configure(state="disabled")
+                resumen = revision
+                if len(resumen) > 420:
+                    resumen = resumen[:420].rsplit(" ", 1)[0] + "."
+                if resumen:
+                    self.responder(
+                        "Señor, terminé la revisión. " + resumen,
+                        "normal",
+                        tipo_contexto="tecnico",
+                    )
+            self.root.after(0, mostrar)
+
+        threading.Thread(target=trabajo, daemon=True).start()
+
     def preferencias_aprendidas_para_prompt(self):
         try: recuerdos=self.memoria.recuerdos_por_fuente("curiosidad_usuario",limite=10)
         except Exception: return ""
@@ -5114,6 +9229,7 @@ Recuerdos relevantes:
         def trabajo():
             inicio = time.perf_counter()
             try:
+                # El índice persistente es ligero y debe quedar disponible de inmediato.
                 cantidad = self.biblioteca.cargar_indice_memoria()
                 docs_a, frags_a = self.biblioteca.estadisticas_categoria("academica")
                 docs_t, frags_t = self.biblioteca.estadisticas_categoria("tecnica")
@@ -5123,8 +9239,29 @@ Recuerdos relevantes:
                     f"académica={frags_a} | técnica={frags_t}"
                 )
 
-                # El índice ya está disponible. El modelo semántico se precalienta
-                # después, en el mismo hilo, sin impedir que Beta escuche.
+                # v2.9.9: SentenceTransformer puede ocupar bastante CPU/RAM durante
+                # su primera carga. Esperamos una ventana realmente ociosa para no
+                # competir con Whisper, Ollama o Piper durante las primeras órdenes.
+                print("MODELO SEMÁNTICO: esperando una ventana ociosa para precalentar...")
+                while True:
+                    ahora = time.time()
+                    ocupado = bool(
+                        self.hablando
+                        or self.procesando
+                        or self.transcribiendo_whisper
+                        or self.esperando_orden
+                        or self.tutor_python_pendiente
+                        or self.evaluacion_academica_pendiente
+                        or self.pregunta_curiosa_pendiente
+                    )
+                    inactividad = ahora - float(getattr(self, "ultima_interaccion_voz", ahora))
+                    desde_inicio = ahora - float(getattr(self, "beta_inicio_ts", ahora))
+                    if (not ocupado
+                            and desde_inicio >= SEMANTICO_PRECALENTAR_TRAS_INICIO_S
+                            and inactividad >= SEMANTICO_PRECALENTAR_INACTIVIDAD_S):
+                        break
+                    time.sleep(1.0)
+
                 inicio_modelo = time.perf_counter()
                 try:
                     self.biblioteca.cargar_modelo()
@@ -5706,6 +9843,16 @@ Recuerdos relevantes:
         convierte dictado general en código si no existe señal suficiente.
         """
         try:
+            if (
+                getattr(self, "tutor_python_tema_actual", "")
+                and (
+                    getattr(self, "tutor_python_pendiente", None)
+                    or getattr(self, "ultimo_tipo_respuesta_terminada", "") in {
+                        "tutor_python", "tutor_python_resultado", "tecnico"
+                    }
+                )
+            ):
+                return True
             contexto = self.ultimo_contexto_tecnico or {}
             if time.time() - float(self.ultimo_contexto_tecnico_ts or 0) > TECNICA_CONTEXTO_SEGUNDOS:
                 return False
@@ -5721,6 +9868,288 @@ Recuerdos relevantes:
             )
         except Exception:
             return False
+
+    def _repl_reciente_en_contexto_python(self):
+        """Indica si REPL fue un concepto reciente dentro de una sesión Python."""
+        try:
+            if not (self.tutor_python_tema_actual or self._contexto_python_activo()):
+                return False
+            piezas = [str(getattr(self, "ultima_respuesta_beta", "") or "")]
+            ctx = getattr(self, "ultimo_contexto_tecnico", None) or {}
+            piezas.extend([
+                str(ctx.get("tema_base") or ""),
+                str(ctx.get("consulta") or ""),
+                str(ctx.get("respuesta") or ""),
+            ])
+            return "repl" in normalizar(" ".join(piezas))
+        except Exception:
+            return False
+
+    def _consulta_repl_contextual(self, texto):
+        """Reconstruye REPL solo cuando la conversación lo hace muy probable.
+
+        Es deliberadamente conservador: no transforma palabras ambiguas si aparece
+        vocabulario real de redes, ni fuera de una sesión Python. También resuelve
+        seguimientos elípticos como "¿y para qué sirve?" cuando REPL fue el concepto
+        explicado inmediatamente antes.
+        """
+        original = (texto or "").strip()
+        if not original:
+            return original
+        if not (self.tutor_python_tema_actual or self._contexto_python_activo()):
+            return original
+
+        norm = normalizar(original)
+        if "repl" in norm:
+            return original
+        if not self._repl_reciente_en_contexto_python():
+            return original
+
+        # Si el usuario realmente está hablando de redes, jamás reinterpretamos
+        # "red" ni términos cercanos como REPL.
+        if any(x in norm for x in [
+            "internet", "redes", "red informatica", "lan", "wan", "router",
+            "switch", "ethernet", "wifi", "wi fi", "tcp", "ip ", "subred",
+        ]):
+            return original
+
+        pregunta_conceptual = any(x in norm for x in [
+            "explicame", "que es", "que significa", "para que sirve",
+            "define", "hablame de", "dime que es", "dime para que sirve",
+        ])
+        if not pregunta_conceptual:
+            return original
+
+        # Seguimiento elíptico: después de hablar de REPL, "¿y para qué sirve?"
+        # se entiende como continuación del mismo concepto, no como un tema nuevo.
+        palabras = norm.split()
+        if (
+            "para que sirve" in norm
+            and not any(x in norm for x in [
+                "python", "print", "funcion", "variable", "lista", "docker",
+                "red", "router", "codigo", "programa",
+            ])
+            and len(palabras) <= 8
+        ):
+            print(
+                "ANCLA TÉCNICA v2.9.8: seguimiento elíptico asociado a REPL "
+                f"('{original}' -> '¿Para qué sirve REPL?')."
+            )
+            return "¿Para qué sirve REPL?"
+
+        # Alias muy ambiguos se aceptan únicamente bajo esta ancla fuerte.
+        patrones = [
+            r"\brl\b", r"\breelp\b", r"\bre[\s-]*elp\b",
+            r"\brepu\b", r"\breple\b", r"\breal\b", r"\bdread\b",
+            r"\brealp\b", r"\bre-?elp\b",
+        ]
+        corregido = original
+        for patron in patrones:
+            nuevo, cantidad = re.subn(patron, "REPL", corregido, count=1, flags=re.IGNORECASE)
+            if cantidad:
+                print(
+                    "ANCLA TÉCNICA v2.9.8: variante contextual asociada a REPL "
+                    f"('{original}' -> '{nuevo}')."
+                )
+                return nuevo
+        return original
+
+    def _registrar_calidad_asr_tutor(self, vosk, whisper, fusionado):
+        """Marca audio dudoso para no convertir errores del ASR en notas bajas."""
+        self.tutor_python_asr_calidad_ultima = "normal"
+        self.tutor_python_asr_detalle_ultimo = {}
+        pendiente = self.tutor_python_pendiente or {}
+        if (pendiente.get("modo_evaluacion") or "conceptual") != "conceptual":
+            return
+
+        v = (vosk or "").strip()
+        w = (whisper or "").strip()
+        f = (fusionado or "").strip()
+        if not f:
+            return
+
+        vn = normalizar(self.corregir_terminos_tecnicos_asr(v, forzar_python=True))
+        wn = normalizar(self.corregir_terminos_tecnicos_asr(w, forzar_python=True))
+        fn = normalizar(f)
+        similitud = difflib.SequenceMatcher(None, vn, wn).ratio() if vn and wn else 1.0
+
+        alias_ruidosos = [
+            "realp", "reelp", "repu", "reple", "dread", "print low",
+            "it will", "will print", "gon alto", "pygon",
+        ]
+        ruido_alias = any(x in normalizar(w + " " + f) for x in alias_ruidosos)
+        cambio_idioma = any(x in f" {w.lower()} " for x in [
+            " it will ", " will print ", " subscribe ", " thank you ",
+        ])
+        truncado = f.endswith("...") or self._fragmento_tutor_parece_incompleto(f)
+
+        # Una discrepancia grande entre los dos motores es una señal de riesgo,
+        # pero por sí sola no invalida audio largo y coherente. La combinamos con
+        # alias extraños, cambio de idioma o truncamiento.
+        dudosa = bool(
+            cambio_idioma
+            or ruido_alias
+            or truncado
+            or (similitud < 0.46 and len(fn.split()) < 24)
+        )
+        self.tutor_python_asr_calidad_ultima = "dudosa" if dudosa else "normal"
+        self.tutor_python_asr_detalle_ultimo = {
+            "similitud": round(similitud, 3),
+            "vosk": v,
+            "whisper": w,
+            "fusion": f,
+        }
+        if dudosa:
+            print(
+                "ASR TUTORA v2.9.8: calidad dudosa; no se calificará este fragmento "
+                f"(similitud={similitud:.2f} | Vosk='{v}' | Whisper='{w}')."
+            )
+
+    def _aplicar_aliases_asr_personales(self, texto, contexto="python"):
+        original = (texto or "").strip()
+        if not original:
+            return original
+        try:
+            aliases = self.memoria.listar_aliases_asr_personales(contexto)
+        except Exception:
+            return original
+        corregido = original
+        for _id, alias, canonico, ctx, usos, fecha in aliases:
+            an = normalizar(alias)
+            if not an or not canonico:
+                continue
+            # Los alias personales se aplican por palabra/frase completa, nunca
+            # como subcadena dentro de otra palabra.
+            patron = r"(?<!\w)" + r"\s+".join(re.escape(x) for x in an.split()) + r"(?!\w)"
+            nuevo, cantidad = re.subn(patron, str(canonico), corregido, flags=re.IGNORECASE)
+            if cantidad:
+                print(f"ASR PERSONAL v2.9.12: '{alias}' -> '{canonico}' ({cantidad} vez/veces).")
+                corregido = nuevo
+                try:
+                    self.memoria.registrar_uso_alias_asr(an, contexto)
+                except Exception:
+                    pass
+        return re.sub(r"\s+", " ", corregido).strip()
+
+    def _inferir_alias_desde_ultima_frase(self, canonico):
+        canon = normalizar(canonico or "")
+        previo = normalizar(self.penultimo_texto_asr_aceptado or "")
+        if not canon or not previo or " " in canon:
+            return ""
+        stop = {"beta","que","es","el","la","los","las","un","una","de","del","en","para","por","con","y","o","me","mi","quiero","quise","decir","cuando","digo"}
+        mejor = (0.0, "")
+        for token in previo.split():
+            if token in stop or token == canon or len(token) < 2:
+                continue
+            ratio = difflib.SequenceMatcher(None, token, canon).ratio()
+            if ratio > mejor[0]:
+                mejor = (ratio, token)
+        return mejor[1] if mejor[0] >= 0.48 else ""
+
+    def _procesar_ensenanza_alias_asr(self, texto_original):
+        n = normalizar(texto_original or "")
+        n = re.sub(r"^(?:beta|veta|petra)\s+", "", n).strip()
+        m = re.match(r"cuando\s+digo\s+(.+?)\s+quiero\s+decir\s+(.+)$", n)
+        if m:
+            alias = m.group(1).strip()
+            canonico = m.group(2).strip()
+        else:
+            m = re.match(r"quise\s+decir\s+([a-z0-9_+.-]+)$", n)
+            if not m:
+                return False
+            canonico = m.group(1).strip()
+            alias = self._inferir_alias_desde_ultima_frase(canonico)
+            if not alias:
+                self.responder(
+                    f"entendí que quiso decir {canonico}, pero no pude identificar qué palabra debo corregir. "
+                    "Puede enseñármelo diciendo: Beta, cuando digo X quiero decir Y.",
+                    "normal",
+                )
+                return True
+        # Por seguridad, esta primera versión aprende términos técnicos breves.
+        if len(alias.split()) > 3 or len(canonico.split()) > 3:
+            self.responder("esa corrección es demasiado larga para el diccionario fonético. Enséñeme un término breve.", "normal")
+            return True
+        if self.memoria.guardar_alias_asr_personal(alias, canonico, "python"):
+            self.responder(
+                f"entendido. En contexto de Python, cuando reconozca {alias}, lo interpretaré como {canonico}.",
+                "feliz",
+            )
+        else:
+            self.responder("esa equivalencia no necesita guardarse o ya coincide con el término correcto.", "normal")
+        return True
+
+    def _fusionar_asr_modo_estudio(self, texto_vosk, texto_whisper):
+        """Recupera órdenes del Aula cuando Whisper deforma 'modo estudio'."""
+        v = normalizar(texto_vosk or "")
+        w = (texto_whisper or texto_vosk or "").strip()
+        if self._wake_en_inicio(v, incluir_ambiguos=False) is None:
+            return w
+        if not any(x in v for x in ("modo estudio", "modo estudios", "el estudio")):
+            return w
+        if any(x in v for x in ("termina", "terminar", "cierra", "cerrar", "salir")):
+            canon = "Beta termina modo estudio"
+            if normalizar(w) != normalizar(canon):
+                print(f"ASR AULA v3.1.2: recuperando comando de cierre desde Vosk='{texto_vosk}'.")
+            return canon
+        if any(x in v for x in ("activa", "activar", "abre", "abrir", "abrimos", "abren", "abramos", "abremos")):
+            canon = "Beta activa modo estudio"
+            if normalizar(w) != normalizar(canon):
+                print(f"ASR AULA v3.1.2: recuperando comando de apertura desde Vosk='{texto_vosk}'.")
+            return canon
+        return w
+
+    def _fusionar_asr_tecnico_python(self, texto_vosk, texto_whisper):
+        """Fusiona Vosk y Whisper y conserva el concepto técnico activo."""
+        v = (texto_vosk or "").strip()
+        w = (texto_whisper or "").strip()
+        if not v:
+            fusion = self._consulta_repl_contextual(w)
+            self._registrar_calidad_asr_tutor(v, w, fusion)
+            return fusion
+        if not w:
+            fusion = self._consulta_repl_contextual(v)
+            self._registrar_calidad_asr_tutor(v, w, fusion)
+            return fusion
+
+        contexto_python = bool(
+            self.tutor_python_tema_actual
+            or self._contexto_python_activo()
+            or "python" in normalizar(v)
+            or "python" in normalizar(w)
+        )
+        if not contexto_python:
+            self._registrar_calidad_asr_tutor(v, w, w)
+            return w
+
+        vc = self.corregir_terminos_tecnicos_asr(v, forzar_python=True)
+        wc = self.corregir_terminos_tecnicos_asr(w, forzar_python=True)
+        vc = self._consulta_repl_contextual(vc)
+        wc = self._consulta_repl_contextual(wc)
+        vn = normalizar(vc)
+        wn = normalizar(wc)
+
+        v_repl = "repl" in vn
+        w_repl = "repl" in wn
+
+        if v_repl and not w_repl:
+            fusion = vc
+            print(
+                "ASR TÉCNICO v2.9.8: REPL recuperado desde Vosk "
+                f"(Vosk='{v}' | Whisper='{w}')."
+            )
+        elif w_repl and not v_repl:
+            fusion = wc
+            if normalizar(wc) != normalizar(w):
+                print(
+                    "ASR TÉCNICO v2.9.8: REPL normalizado desde Whisper "
+                    f"('{w}' -> '{wc}')."
+                )
+        else:
+            fusion = wc
+
+        self._registrar_calidad_asr_tutor(v, w, fusion)
+        return fusion
 
     def corregir_terminos_tecnicos_asr(self, texto, forzar_python=False):
         """Normaliza términos técnicos que Whisper suele escribir fonéticamente.
@@ -5748,6 +10177,12 @@ Recuerdos relevantes:
         cambios = []
         corregido = original
 
+        if contexto_python:
+            personalizado = self._aplicar_aliases_asr_personales(corregido, "python")
+            if normalizar(personalizado) != normalizar(corregido):
+                cambios.append("alias_personal")
+                corregido = personalizado
+
         # Variantes bastante específicas que pueden corregirse cuando el contexto es Python.
         if contexto_python:
             reglas = [
@@ -5757,7 +10192,11 @@ Recuerdos relevantes:
                 (r"\b(?:el if|elifff|eliff)\b", "elif"),
                 (r"\b(?:deff|defe)\b", "def"),
                 (r"\b(?:lamda|lamb da)\b", "lambda"),
-                (r"\b(?:pai ton|paiton|peiton|pyton)\b", "Python"),
+                # REPL suele llegar con letras intercambiadas o separadas por guiones.
+                # Aceptamos también la última letra deformada por Whisper (R-E-P-U/E),
+                # pero únicamente dentro de contexto Python.
+                (r"\b(?:r[\s\-.]*e[\s\-.]*p[\s\-.]*(?:l|u|e)|relp|rpl|repu|repe|repel|repele|reple|reelp|realp|repe l)\b", "REPL"),
+                (r"\b(?:pai ton|paiton|peiton|pyton|spyton|spython|peyton|patton|piton)\b", "Python"),
                 (r"\b(?:pi lint|pylin)\b", "Pylint"),
                 (r"\b(?:pep ocho|pep 8)\b", "PEP8"),
             ]
@@ -5765,6 +10204,29 @@ Recuerdos relevantes:
                 nuevo, cantidad = re.subn(patron, destino, corregido, flags=re.IGNORECASE)
                 if cantidad:
                     cambios.append(f"{patron}->{destino}")
+                    corregido = nuevo
+
+            # Caso especialmente ambiguo: REPL puede llegar como "red".
+            # Solo se rescata si REPL fue mencionado recientemente en una sesión
+            # Python y la frase tiene forma explícita de pregunta sobre un concepto.
+            norm_corr = normalizar(corregido)
+            pregunta_concepto = any(x in norm_corr for x in [
+                "explicame que es red", "que es red", "que significa red",
+                "para que sirve red", "que es la red y para que sirve",
+            ])
+            contexto_red_real = any(x in norm_corr for x in [
+                "internet", "redes", "lan", "wan", "router", "switch", "ethernet",
+            ])
+            if (
+                pregunta_concepto
+                and not contexto_red_real
+                and self._repl_reciente_en_contexto_python()
+            ):
+                nuevo, cantidad = re.subn(
+                    r"\bred\b", "REPL", corregido, count=1, flags=re.IGNORECASE
+                )
+                if cantidad:
+                    cambios.append("red->REPL(contexto reciente)")
                     corregido = nuevo
 
         # Términos no ambiguos de otras colecciones técnicas.
@@ -6520,13 +10982,19 @@ Recuerdos relevantes:
         return False
 
     def _terminos_codigo_clave(self, consulta):
-        texto = normalizar(consulta)
+        texto = normalizar(self.corregir_terminos_tecnicos_asr(consulta))
         tokens = set(texto.split())
         candidatos = {
             "return", "kwargs", "xargs", "elif", "def", "lambda", "yield",
             "import", "pip", "pylint", "pep8", "try", "except", "finally",
+            "repl", "python3", "print", "valueerror",
         }
-        return [t for t in candidatos if t in tokens]
+        encontrados = [t for t in candidatos if t in tokens]
+        if re.search(r"\bpython\s+3\b", texto) and "python3" not in encontrados:
+            encontrados.append("python3")
+        if "value error" in texto and "valueerror" not in encontrados:
+            encontrados.append("valueerror")
+        return encontrados
 
     def _expandir_consulta_codigo(self, consulta):
         """Añade sinónimos pedagógicos solo para recuperar mejor el fragmento correcto."""
@@ -6547,10 +11015,122 @@ Recuerdos relevantes:
             "try": "try excepciones manejo de errores",
             "except": "except excepciones manejo de errores",
             "finally": "finally excepciones bloque final",
+            "repl": "REPL Read Eval Print Loop interprete interactivo Python terminal consola",
+            "python3": "python3 terminal Python 3 REPL MacOS Linux",
+            "print": "print mostrar imprimir salida pantalla consola Python",
+            "valueerror": "ValueError conversion int cadena texto no numerico Python",
         }
         for clave in claves:
             extras.append(mapa.get(clave, clave))
         return (consulta + " " + " ".join(extras)).strip() if extras else consulta
+
+    def _buscar_tecnico_lexico_local(
+        self, claves, coleccion="", colecciones=None, limite=20
+    ):
+        """Recupera fragmentos técnicos que contienen literalmente keywords.
+
+        Complementa al embedding cuando una sigla o token corto (REPL, python3,
+        print, return...) no queda bien posicionado semánticamente. La consulta se
+        hace solo sobre la SQLite local de Beta y respeta la colección técnica.
+        """
+        claves = [normalizar(x) for x in (claves or []) if normalizar(x)]
+        if not claves:
+            return []
+
+        # LIKE se usa solo con tokens técnicos controlados internamente.
+        where_tokens = " OR ".join("LOWER(f.texto) LIKE ?" for _ in claves)
+        params = [f"%{x}%" for x in claves]
+        sql = f"""
+            SELECT
+                f.id, f.pagina, f.orden, f.texto,
+                d.id, d.nombre, d.ruta, d.ramo, d.modulo,
+                COALESCE(d.categoria,'academica'),
+                COALESCE(d.coleccion,'')
+            FROM biblioteca_fragmentos f
+            JOIN biblioteca_documentos d ON d.id=f.documento_id
+            WHERE d.activo=1
+              AND LOWER(TRIM(COALESCE(d.categoria,'academica')))='tecnica'
+              AND ({where_tokens})
+            ORDER BY f.id
+            LIMIT ?
+        """
+        try:
+            with self.biblioteca.conectar() as con:
+                # Traemos más candidatos y luego ordenamos por relevancia REAL.
+                filas = con.execute(sql, tuple(params + [max(240, int(limite) * 48)])).fetchall()
+        except Exception as error:
+            print("BÚSQUEDA TÉCNICA LÉXICA: no disponible:", error)
+            return []
+
+        coleccion_n = normalizar(coleccion or "")
+        colecciones_n = [
+            normalizar(x) for x in (colecciones or []) if normalizar(x)
+        ]
+
+        resultados = []
+        for fila in filas:
+            col = normalizar(fila[10] or "")
+            if colecciones_n and not any(
+                col == pref or col in pref or pref in col for pref in colecciones_n
+            ):
+                continue
+            if coleccion_n and not colecciones_n:
+                if not (col == coleccion_n or col in coleccion_n or coleccion_n in col):
+                    continue
+
+            contenido_n = normalizar(fila[3] or "")
+            tokens = set(contenido_n.split())
+            coincidencias = 0
+            menciones = 0
+            for clave in claves:
+                ocurrencias = len(re.findall(r"\b" + re.escape(clave) + r"\b", contenido_n))
+                if ocurrencias:
+                    coincidencias += 1
+                    menciones += ocurrencias
+            if coincidencias <= 0:
+                continue
+            definicion_repl = bool(
+                "repl" in claves and
+                ("read eval print loop" in contenido_n or
+                 "interprete interactivo" in contenido_n or
+                 "interactivo" in contenido_n and menciones >= 2)
+            )
+            score_lexico = min(0.98, 0.58 + 0.14 * coincidencias
+                               + min(0.10, 0.025 * max(0, menciones - 1))
+                               + (0.06 if definicion_repl else 0.0))
+
+            resultados.append({
+                "fragmento_id": int(fila[0]),
+                "pagina": int(fila[1]),
+                "orden": int(fila[2]),
+                "texto": fila[3] or "",
+                "documento_id": int(fila[4]),
+                "documento": fila[5] or "",
+                "ruta": str(self.biblioteca.resolver_ruta_documento(
+                    fila[6] or "", fila[7] or fila[10] or ""
+                )),
+                "ramo": fila[7] or "",
+                "modulo": fila[8] or "",
+                "categoria": (fila[9] or "tecnica").strip().lower(),
+                "coleccion": fila[10] or "",
+                "score": score_lexico,
+                "score_semantico": 0.0,
+                "coincidencia_lexica": coincidencias,
+                "menciones_lexicas": menciones,
+                "contiene_definicion_repl": definicion_repl,
+                "origen_busqueda": "lexico_sqlite",
+            })
+
+        resultados.sort(
+            key=lambda r: (
+                int(r.get("coincidencia_lexica", 0)),
+                bool(r.get("contiene_definicion_repl", False)),
+                int(r.get("menciones_lexicas", 0)),
+                float(r.get("score", 0)),
+            ),
+            reverse=True,
+        )
+        return resultados[:max(1, int(limite))]
 
     def buscar_tecnico_hibrido(
         self, consulta, limite=TECNICA_RESULTADOS, coleccion="", colecciones=None
@@ -6561,8 +11141,33 @@ Recuerdos relevantes:
         solo se usa para recuperar mejores fragmentos del libro. Cuando una palabra
         clave exacta aparece en un fragmento, recibe un pequeño bonus de ranking.
         """
-        consulta_busqueda = self._expandir_consulta_codigo(consulta)
-        claves = self._terminos_codigo_clave(consulta)
+        consulta_corregida = self.corregir_terminos_tecnicos_asr(consulta)
+        consulta_busqueda = self._expandir_consulta_codigo(consulta_corregida)
+        claves = self._terminos_codigo_clave(consulta_corregida)
+
+        # v2.9.9: si el modelo semántico aún está frío y la consulta contiene
+        # un token técnico inequívoco (REPL, return, python3, etc.), intentamos
+        # primero SQLite. Esto permite responder desde libros locales sin forzar
+        # una carga de SentenceTransformer de decenas de segundos en plena charla.
+        if claves and self.biblioteca.modelo_embeddings is None:
+            lexicos_tempranos = self._buscar_tecnico_lexico_local(
+                claves,
+                coleccion=coleccion,
+                colecciones=colecciones,
+                limite=max(int(limite), 5),
+            )
+            fuertes = [
+                r for r in lexicos_tempranos
+                if int(r.get("coincidencia_lexica", 0) or 0) >= 1
+                and float(r.get("score", 0) or 0) >= 0.70
+            ]
+            if fuertes:
+                print(
+                    "BÚSQUEDA TÉCNICA HÍBRIDA v2.9.9: ruta léxica temprana "
+                    f"claves={claves} resultados={len(fuertes)}"
+                )
+                return fuertes[:max(1, int(limite))]
+
         limite_amplio = max(int(limite) * 4, 16) if claves else int(limite)
         resultados = self.biblioteca.buscar(
             consulta_busqueda,
@@ -6574,10 +11179,45 @@ Recuerdos relevantes:
         if not claves:
             return resultados[:limite]
 
-        reordenados = []
-        for r in resultados:
+        # v2.9.6: siglas/tokens cortos pueden perderse en el ranking semántico.
+        # Complementamos con coincidencias literales de la SQLite local y fusionamos
+        # por fragmento_id. Así "REPL" recupera las páginas que realmente dicen REPL.
+        lexicos = self._buscar_tecnico_lexico_local(
+            claves,
+            coleccion=coleccion,
+            colecciones=colecciones,
+            limite=max(int(limite) * 3, 12),
+        )
+
+        combinados = {}
+        for r in list(resultados) + list(lexicos):
             item = dict(r)
-            sem = float(item.get("score", 0) or 0)
+            fid = int(item.get("fragmento_id", 0) or 0)
+            if not fid:
+                continue
+            previo = combinados.get(fid)
+            if previo is None:
+                combinados[fid] = item
+            else:
+                # Conservamos el score semántico si existía y el texto/metadatos
+                # del resultado léxico si son más completos.
+                sem_prev = float(previo.get("score_semantico", previo.get("score", 0)) or 0)
+                sem_new = float(item.get("score_semantico", item.get("score", 0)) or 0)
+                if sem_new > sem_prev:
+                    base = item
+                    otro = previo
+                else:
+                    base = previo
+                    otro = item
+                for k, v in otro.items():
+                    if k not in base or base.get(k) in (None, ""):
+                        base[k] = v
+                combinados[fid] = base
+
+        reordenados = []
+        for item0 in combinados.values():
+            item = dict(item0)
+            sem = float(item.get("score_semantico", item.get("score", 0)) or 0)
             contenido = normalizar(
                 " ".join([
                     str(item.get("texto") or ""),
@@ -6586,25 +11226,36 @@ Recuerdos relevantes:
                 ])
             )
             tokens_contenido = set(contenido.split())
-            coincidencias = sum(1 for clave in claves if clave in tokens_contenido)
-            bonus = min(0.22, 0.14 * coincidencias)
+            coincidencias = sum(
+                1 for clave in claves
+                if clave in tokens_contenido or clave in contenido
+            )
+            # Una coincidencia literal controlada pesa mucho para siglas como REPL,
+            # pero el score semántico sigue desempatatando entre varios fragmentos.
+            bonus = min(0.34, 0.18 * coincidencias)
             item["score_semantico"] = sem
-            item["score"] = min(1.0, sem + bonus)
-            item["coincidencia_lexica"] = coincidencias
+            item["score"] = min(1.0, max(float(item.get("score", 0) or 0), sem + bonus))
+            item["coincidencia_lexica"] = max(
+                int(item.get("coincidencia_lexica", 0) or 0),
+                coincidencias,
+            )
             reordenados.append(item)
 
         reordenados.sort(
             key=lambda r: (
                 int(r.get("coincidencia_lexica", 0) or 0),
                 float(r.get("score", 0) or 0),
+                float(r.get("score_semantico", 0) or 0),
             ),
             reverse=True,
         )
         if reordenados and claves:
+            origen = reordenados[0].get("origen_busqueda", "semantico")
             print(
-                "BÚSQUEDA TÉCNICA HÍBRIDA: "
+                "BÚSQUEDA TÉCNICA HÍBRIDA v2.9.6: "
                 f"claves={claves} consulta='{consulta_busqueda}' "
-                f"mejor_score={float(reordenados[0].get('score',0)):.3f}"
+                f"mejor_score={float(reordenados[0].get('score',0)):.3f} "
+                f"origen={origen}"
             )
         return reordenados[:limite]
 
@@ -6656,15 +11307,25 @@ Recuerdos relevantes:
                 return True
         return False
 
-    def consultar_biblioteca_tecnica_async(self, pregunta, forzar=False):
+    def consultar_biblioteca_tecnica_async(
+        self, pregunta, forzar=False, profunda_forzada=None, tokens_forzados=None
+    ):
         consulta = self.limpiar_consulta_tecnica(pregunta)
         if not consulta:
             self.responder("necesito saber qué tema técnico desea revisar.", "confundida")
             return
 
-        profunda = self.es_pedido_academico_profundo(pregunta)
+        profunda = (
+            bool(profunda_forzada)
+            if profunda_forzada is not None
+            else self.es_pedido_academico_profundo(pregunta)
+        )
         fuentes_max = TECNICA_FUENTES_PROFUNDO if profunda else TECNICA_FUENTES_BREVE
-        tokens_max = TECNICA_TOKENS_PROFUNDO if profunda else TECNICA_TOKENS_BREVE
+        tokens_max = (
+            int(tokens_forzados)
+            if tokens_forzados is not None
+            else (TECNICA_TOKENS_PROFUNDO if profunda else TECNICA_TOKENS_BREVE)
+        )
         num_ctx = TECNICA_NUM_CTX_PROFUNDO if profunda else TECNICA_NUM_CTX_BREVE
         colecciones = self.inferir_colecciones_tecnicas(consulta)
         coleccion = colecciones[0] if colecciones else ""
@@ -6717,7 +11378,13 @@ Recuerdos relevantes:
                         "contenido ausente. Puedes reorganizar y explicar con tus propias "
                         "palabras. NO menciones el nombre del PDF, libro, autor, número de "
                         "página ni la palabra fuente, salvo que el Señor lo pregunte. "
-                        "No uses Internet. Si la pregunta pide cómo hacer algo, explica "
+                        "No uses Internet. Si el libro contiene una afirmación ligada a una versión, año o sistema operativo, "
+                        "preséntala como lo que indica el material, sin convertirla en una afirmación universal actual. "
+                        "Dato histórico para evitar errores: el soporte de Python 2 terminó en 2020; "
+                        "Python 3 NO terminó en 2020. No asumas que macOS/Linux traen Python 2 "
+                        "de forma predeterminada actualmente: depende del equipo y la configuración. "
+                        "No inventes atajos de teclado ni comandos que no aparezcan en los fragmentos recuperados. "
+                        "Si la pregunta pide cómo hacer algo, explica "
                         "el procedimiento directamente. Si el tema es programación, cuando sea "
                         "útil incluye un ejemplo de código corto y correcto seguido de una explicación. "
                         "No fuerces ejemplos Python en temas de redes, seguridad u otras colecciones. "
@@ -7763,7 +12430,10 @@ Recuerdos relevantes:
             command=abrir,
         ).pack(pady=(0, 12))
 
-    def enviar_ollama(self, mensajes, temperatura=0.18, num_predict=240, num_ctx=None):
+    def enviar_ollama(
+        self, mensajes, temperatura=0.18, num_predict=240, num_ctx=None, formato_json=False,
+        timeout=None,
+    ):
         datos = {
             "model": OLLAMA_MODEL,
             "messages": mensajes,
@@ -7777,6 +12447,10 @@ Recuerdos relevantes:
             },
             "keep_alive": OLLAMA_KEEP_ALIVE,
         }
+        if formato_json:
+            # Ollama fuerza una salida JSON válida sin cambiar el comportamiento de
+            # las demás consultas de Beta, porque esta opción se usa solo cuando se pide.
+            datos["format"] = "json"
 
         def hacer_peticion(payload):
             cuerpo = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -7787,7 +12461,9 @@ Recuerdos relevantes:
                 method="POST",
             )
 
-            with urllib.request.urlopen(solicitud, timeout=OLLAMA_TIMEOUT) as respuesta_http:
+            with urllib.request.urlopen(
+                solicitud, timeout=float(timeout or OLLAMA_TIMEOUT)
+            ) as respuesta_http:
                 contenido = respuesta_http.read().decode("utf-8")
 
             resultado = json.loads(contenido)
@@ -8159,8 +12835,53 @@ Recuerdos relevantes:
         threading.Thread(target=reproductor, daemon=True).start()
         return sesion
 
+    def _sanear_afirmaciones_python_oral(self, fragmento, tipo_contexto=""):
+        """Barrera mínima frente a dos errores históricos observados en Qwen.
+
+        Solo interviene en fragmentos técnicos sobre Python; la intervención
+        queda registrada en consola. No reescribe respuestas académicas de otras
+        disciplinas ni convierte contenidos antiguos en hechos actuales.
+        """
+        frase = (fragmento or "").strip()
+        if (tipo_contexto or "") != "tecnico":
+            return frase
+        n = normalizar(frase)
+        python3 = bool(re.search(r"\b(?:python3|python 3|version 3)\b", n))
+        if (python3 and "2020" in n
+                and re.search(r"\b(?:mantenida|mantenido|termino|finalizo|soporte|"
+                              r"dejo|abandonada|descontinuada)\b", n)
+                and not re.search(r"\b(?:python2|python 2|version 2)\b", n)):
+            print("CONTROL HISTÓRICO v2.9.13: corregida referencia errónea Python 3/2020.")
+            return (
+                "Python 3 continúa vigente. La fecha de 2020 corresponde al "
+                "fin del soporte oficial de Python 2."
+            )
+        if (re.search(r"\b(?:macos|linux)\b", n)
+                and re.search(r"\b(?:python2|python 2|version 2)\b", n)
+                and re.search(r"\b(?:por defecto|predeterminada|preinstalada|"
+                              r"viene instalada|esta instalada)\b", n)):
+            print("CONTROL HISTÓRICO v2.9.13: eliminada generalización macOS/Linux Python 2.")
+            return (
+                "La versión de Python disponible depende del sistema y de cómo "
+                "esté configurado. Conviene comprobar el intérprete instalado "
+                "antes de ejecutar los ejemplos."
+            )
+        if (
+            re.search(r"\b(?:siempre|obligatoriamente)\b.{0,45}\b(?:usar|usa|debes usar|utilizar)\b", n)
+            and (python3 or "python" in n or len(n.split()) <= 10)
+        ):
+            print("CONTROL HISTÓRICO v2.9.13: eliminada recomendación absoluta de comando Python.")
+            return (
+                "Use el comando que corresponda al intérprete de Python 3 instalado "
+                "en su sistema, por ejemplo python o python3 según la configuración."
+            )
+        return frase
+
     def encolar_fragmento_streaming(self, sesion, fragmento):
         fragmento = self.limpiar_respuesta_ollama((fragmento or "").strip())
+        fragmento = self._sanear_afirmaciones_python_oral(
+            fragmento, sesion.get("tipo", "")
+        )
         if not fragmento:
             return
 
@@ -8182,6 +12903,9 @@ Recuerdos relevantes:
                 )
 
         sesion["partes"].append(fragmento)
+        self._aula_mostrar_texto_async(
+            fragmento, sesion.get("tipo", "general"), desde_streaming=True
+        )
         sesion["cola_texto"].put(fragmento)
 
     def cerrar_pipeline_respuesta_streaming(self, sesion, cancelar=False):
@@ -8207,10 +12931,16 @@ Recuerdos relevantes:
             return
 
         print("RESPUESTA FINAL DE BETA [STREAMING]:", texto)
-        self.memoria.guardar_conversacion("Beta", texto)
-        self.ultima_respuesta_beta = texto
-        self.actualizar_contexto_turno("Beta", texto)
-        self.programar_memoria_inteligente(self.ultimo_mensaje_usuario, texto)
+        # v3.1.2: recuperar el contexto ANTES de finalizar_respuesta(), que lo elimina
+        # del mapa. v3.1.2 referenciaba una variable inexistente y podía lanzar NameError.
+        tipo_contexto = self.respuesta_tipo_por_id.get(respuesta_id, "general")
+        # El chat de proyectos se persiste en su propio manifiesto.
+        # No se mezcla con memoria inteligente ni resúmenes globales de Beta.
+        if tipo_contexto != "proyecto":
+            self.memoria.guardar_conversacion("Beta", texto)
+            self.ultima_respuesta_beta = texto
+            self.actualizar_contexto_turno("Beta", texto)
+            self.programar_memoria_inteligente(self.ultimo_mensaje_usuario, texto)
 
         if "?" in texto and self.modo_escucha == "conversacion":
             self.renovar_modo_conversacion()
@@ -8910,6 +13640,35 @@ Recuerdos relevantes:
             return palabras[-1]
         return None
 
+    def _wake_ambiguo_comando_seguro(self, texto_normal):
+        """Recupera Meta/metas como Beta solo ante una orden directa y breve.
+
+        La capa de audio ya filtró la frase y validó la voz autorizada cuando
+        existen perfiles. No promovemos "meta" en conversación libre: exigimos
+        que aparezca al inicio y que el cuerpo coincida con una orden típica.
+        """
+        t = normalizar(texto_normal or "")
+        wake = self._wake_en_inicio(t, incluir_ambiguos=True)
+        if wake not in {"meta", "metas"}:
+            return None
+        palabras = t.split()
+        try:
+            indice = palabras.index(wake)
+        except ValueError:
+            return None
+        cuerpo = " ".join(palabras[indice + 1:]).strip()
+        if not cuerpo or len(cuerpo.split()) > 18:
+            return None
+        arranques = (
+            "ponme ", "pon un ", "pon una ", "dame ", "quiero ",
+            "explicame ", "que es ", "cuando digo ", "quise decir ",
+            "siguiente ejercicio", "otro ejercicio", "continua ",
+            "continuemos ", "sigamos ", "abre ", "busca ", "reproduce ",
+        )
+        if cuerpo in {"gracias", "despierta"} or cuerpo.startswith(arranques):
+            return wake
+        return None
+
     def _orden_despertar_silencio(self, texto_normal):
         t = texto_normal or ""
         wake = self._wake_en_inicio(t, incluir_ambiguos=False)
@@ -9043,6 +13802,13 @@ Recuerdos relevantes:
             return True
 
         if self.evaluacion_academica_pendiente and ahora <= self.evaluacion_academica_hasta:
+            return True
+
+        if self.tutor_python_pendiente and (
+            self.tutor_python_hasta <= 0.0 or ahora <= self.tutor_python_hasta
+        ):
+            # Una pregunta explícita de la tutora Python habilita una única
+            # respuesta natural, manteniendo la biometría obligatoria.
             return True
 
         if self.esperando_orden and ahora <= self.tiempo_limite_orden:
@@ -9703,7 +14469,7 @@ Recuerdos relevantes:
             print("Modelo:", WHISPER_MODEL)
             print("Idioma forzado: español")
             print("Modo: Vosk detecta wake word + voz autorizada; Whisper entiende el dictado")
-            print("Curiosidad/evaluación: una pregunta explícita de Beta habilita una sola respuesta natural con voz autorizada")
+            print("Curiosidad/evaluación/tutora Python: una pregunta explícita de Beta habilita una sola respuesta natural con voz autorizada")
             print("==============================")
             print()
 
@@ -9736,6 +14502,11 @@ Recuerdos relevantes:
         if self.evaluacion_academica_pendiente and ahora <= self.evaluacion_academica_hasta:
             return True
 
+        if self.tutor_python_pendiente and (
+            self.tutor_python_hasta <= 0.0 or ahora <= self.tutor_python_hasta
+        ):
+            return True
+
         if self.esperando_orden and ahora <= self.tiempo_limite_orden:
             return True
 
@@ -9751,6 +14522,7 @@ Recuerdos relevantes:
             return ""
 
         ruta_temporal = None
+        self.transcribiendo_whisper = True
 
         try:
             with tempfile.NamedTemporaryFile(
@@ -9823,6 +14595,7 @@ Recuerdos relevantes:
             return ""
 
         finally:
+            self.transcribiendo_whisper = False
             if ruta_temporal:
                 try:
                     os.remove(ruta_temporal)
@@ -9917,10 +14690,27 @@ Recuerdos relevantes:
 
             def callback(indata, frames, time_info, status):
                 if status:
-                    print("Audio:", status)
+                    # La impresión dentro del callback de PortAudio puede
+                    # producir más retrasos. Acumular el diagnóstico y emitirlo
+                    # desde el consumidor, sin esconder las pérdidas reales.
+                    self.audio_estado_eventos += 1
+                    self.audio_estado_ultimo = str(status)
 
-                if self.escuchando and not self.hablando:
-                    self.audio_queue.put(bytes(indata))
+                if self.escuchando and not self.hablando and not self.transcribiendo_whisper:
+                    bloque = bytes(indata)
+                    try:
+                        self.audio_queue.put_nowait(bloque)
+                    except queue.Full:
+                        # Nunca bloqueamos el callback de PortAudio. Si el consumidor
+                        # se atrasó, descartamos primero el bloque más antiguo.
+                        try:
+                            self.audio_queue.get_nowait()
+                        except queue.Empty:
+                            pass
+                        try:
+                            self.audio_queue.put_nowait(bloque)
+                        except queue.Full:
+                            pass
 
             with sd.RawInputStream(
                 samplerate=frecuencia,
@@ -9930,6 +14720,15 @@ Recuerdos relevantes:
                 callback=callback,
             ):
                 while self.escuchando:
+                    ahora_audio = time.time()
+                    if (self.audio_estado_eventos
+                            and ahora_audio - self.audio_estado_ultimo_informe_ts >= 30):
+                        print(
+                            f"AUDIO: {self.audio_estado_eventos} advertencia(s) de PortAudio; "
+                            f"última={self.audio_estado_ultimo}"
+                        )
+                        self.audio_estado_ultimo_informe_ts = ahora_audio
+                        self.audio_estado_eventos = 0
                     try:
                         datos = self.audio_queue.get(timeout=0.5)
                     except queue.Empty:
@@ -9996,6 +14795,25 @@ Recuerdos relevantes:
                         # Vosk decide si la frase es candidata. Solo entonces usamos
                         # Whisper, evitando consumir CPU con conversaciones ambientales.
                         if USAR_WHISPER and self.debe_mejorar_con_whisper(texto_vosk) and not rapido_vosk:
+                            if self.whisper_cargando and not self.whisper_listo:
+                                print(
+                                    f"WHISPER: cargando; esperaré hasta {WHISPER_ESPERA_ARRANQUE_SEGUNDOS} s "
+                                    "para no responder con una transcripción Vosk dudosa."
+                                )
+                                limite_whisper = time.time() + WHISPER_ESPERA_ARRANQUE_SEGUNDOS
+                                self.transcribiendo_whisper = True
+                                try:
+                                    while (
+                                        self.whisper_cargando
+                                        and not self.whisper_listo
+                                        and time.time() < limite_whisper
+                                    ):
+                                        time.sleep(0.10)
+                                finally:
+                                    self.transcribiendo_whisper = False
+                                if self.whisper_listo:
+                                    print("WHISPER: listo tras espera de arranque; reanalizando la misma frase.")
+
                             if self.whisper_listo:
                                 self.root.after(0, self.expresion_pensando)
                                 texto_whisper = self.transcribir_con_whisper(
@@ -10006,15 +14824,35 @@ Recuerdos relevantes:
                                 if texto_whisper:
                                     print("WHISPER ENTENDIÓ:", texto_whisper)
                                     if self.transcripcion_asr_sospechosa(texto_vosk, texto_whisper):
-                                        print(
-                                            "ASR FILTRO: transcripción sospechosa/boilerplate ignorada "
-                                            f"(Vosk='{texto_vosk}' | Whisper='{texto_whisper}')."
+                                        vosk_norm_tutor = normalizar(texto_vosk)
+                                        cierre_tutor = bool(
+                                            self.tutor_python_pendiente
+                                            and any(frase in vosk_norm_tutor for frase in [
+                                                "listo", "completo", "respuesta completa",
+                                                "he terminado", "termine", "eso es todo",
+                                            ])
                                         )
-                                        # Conservamos una ventana abierta tras 'Beta' sola;
-                                        # el usuario puede repetir la orden sin reactivar el wake.
-                                        self.vaciar_cola_audio_pendiente()
-                                        continue
-                                    texto_final = texto_whisper
+                                        if cierre_tutor:
+                                            # La voz ya fue autenticada y Vosk oyó un comando corto
+                                            # inequívoco de cierre. Si Whisper alucina "suscríbete" u
+                                            # otro boilerplate, conservar Vosk es más seguro que perder
+                                            # la intención y dejar la respuesta abierta.
+                                            texto_final = texto_vosk
+                                            print(
+                                                "ASR TUTORA: cierre recuperado desde Vosk; "
+                                                f"Whisper sospechoso='{texto_whisper}'."
+                                            )
+                                        else:
+                                            print(
+                                                "ASR FILTRO: transcripción sospechosa/boilerplate ignorada "
+                                                f"(Vosk='{texto_vosk}' | Whisper='{texto_whisper}')."
+                                            )
+                                            # Conservamos una ventana abierta tras 'Beta' sola;
+                                            # el usuario puede repetir la orden sin reactivar el wake.
+                                            self.vaciar_cola_audio_pendiente()
+                                            continue
+                                    else:
+                                        texto_final = texto_whisper
 
                                     # Si Vosk oyó claramente la palabra de
                                     # activación pero Whisper omitió solo ese
@@ -10040,8 +14878,17 @@ Recuerdos relevantes:
                                         and not self.esperando_orden
                                     ):
                                         texto_final = "Beta " + texto_final
+
+                                    # v2.9.7: conserva conceptos técnicos cortos
+                                    # que Whisper puede omitir por completo.
+                                    texto_final = self._fusionar_asr_tecnico_python(
+                                        texto_vosk, texto_final
+                                    )
+                                    texto_final = self._fusionar_asr_modo_estudio(
+                                        texto_vosk, texto_final
+                                    )
                             elif self.whisper_cargando:
-                                print("WHISPER: todavía se está cargando; usando Vosk temporalmente.")
+                                print("WHISPER: sigue cargando tras la espera; usando Vosk temporalmente.")
                             elif self.whisper_error:
                                 print("WHISPER NO DISPONIBLE:", self.whisper_error)
 
@@ -10052,10 +14899,7 @@ Recuerdos relevantes:
                             self.vaciar_cola_audio_pendiente()
 
                         print("BETA ENTENDIÓ FINALMENTE:", texto_final)
-                        self.root.after(
-                            0,
-                            lambda t=texto_final: self.procesar_voz(t),
-                        )
+                        self._encolar_texto_reconocido(texto_final)
 
         except Exception as error:
             print("ERROR MICRÓFONO:", error)
@@ -10136,6 +14980,33 @@ Recuerdos relevantes:
             return False
         if self.es_dato_sensible_para_no_guardar(original):
             return False
+
+        # v3.1.2: abrir/cerrar el Aula o cambiar de proyecto son acciones operativas, no preferencias.
+        if any(x in t for x in ("modo estudio", "el estudio")) and any(x in t for x in ("activa", "activar", "abre", "abrir", "abrimos", "abremos", "termina", "cerrar", "cierra")):
+            return False
+        if any(x in t for x in ("nuevo proyecto", "abre proyecto", "abrir proyecto", "carga archivo", "agrega archivo", "agregar archivo")):
+            return False
+
+        # v2.9.1: las órdenes de la tutora (y sus deformaciones de ASR) no son
+        # preferencias personales. Evita recuerdos como "El Señor mencionó unme...".
+        if getattr(self, "tutor_python_tema_actual", ""):
+            palabras_tutor = set(t.split())
+            if (
+                "ejercicio" in palabras_tutor
+                or "ejercicios" in palabras_tutor
+                or "pista" in palabras_tutor
+                or "solucion" in palabras_tutor
+                or "solución" in original.lower()
+                or "codigo" in palabras_tutor and "python" in palabras_tutor
+                or "como voy en python" in t
+                or "continuemos donde quedamos" in t
+                or "continua donde quedamos" in t
+                or ("python" in palabras_tutor and any(x in t for x in [
+                    "quiero estudiar", "quiero aprende estudiar",
+                    "quiero aprender", "quiero practicar", "vamos a estudiar"
+                ]))
+            ):
+                return False
 
         # Preguntas puras normalmente consultan información; no son un hecho nuevo.
         interrogativos = (
@@ -10369,12 +15240,16 @@ Recuerdos relevantes:
         )
 
     def crear_resumen_conversacion_inteligente(self):
-        historial = self.memoria.historial_reciente(16)
+        # v2.9.13: resumimos SOLO la sesión viva. Usar historial_reciente() aquí
+        # podía mezclar una conversación antigua con Python y guardar un resumen
+        # contaminado que luego reaparecía en el prompt de continuidad.
+        historial = list(self.contexto_turnos[-8:])
         if len(historial) < 6:
+            print("RESUMEN DE CONVERSACIÓN: sesión actual demasiado corta; se omite.")
             return
 
         lineas = []
-        for autor, mensaje, _fecha in historial:
+        for autor, mensaje in historial:
             # Limitar cada línea mantiene rápido el contexto para Qwen.
             lineas.append(f"{autor}: {mensaje[:500]}")
         transcripcion = "\n".join(lineas)
@@ -10717,12 +15592,56 @@ Recuerdos relevantes:
         self.responder("sus objetivos guardados son: " + "; ".join(textos) + ".", "feliz")
 
     # ======================================================
+    # ENTREGA ORDENADA ASR -> CEREBRO v2.9.12
+    # ======================================================
+
+    def _encolar_texto_reconocido(self, texto):
+        texto = (texto or "").strip()
+        if not texto:
+            return
+        self.asr_secuencia_texto += 1
+        item = (self.asr_secuencia_texto, texto, time.time())
+        try:
+            self.cola_textos_reconocidos.put_nowait(item)
+        except queue.Full:
+            try:
+                viejo = self.cola_textos_reconocidos.get_nowait()
+                print(f"ASR->CEREBRO: cola llena; descartando entrada antigua #{viejo[0]}.")
+            except queue.Empty:
+                pass
+            try:
+                self.cola_textos_reconocidos.put_nowait(item)
+            except queue.Full:
+                print("ASR->CEREBRO: no pude encolar una transcripción por saturación.")
+
+    def _drenar_cola_textos_reconocidos(self):
+        procesados = 0
+        try:
+            while procesados < 8:
+                secuencia, texto, ts = self.cola_textos_reconocidos.get_nowait()
+                print(f"ASR->CEREBRO: procesando #{secuencia}: {texto}")
+                self.procesar_voz(texto)
+                procesados += 1
+        except queue.Empty:
+            pass
+        except Exception as error:
+            print("ASR->CEREBRO: error procesando cola:", error)
+        try:
+            self.root.after(40, self._drenar_cola_textos_reconocidos)
+        except tk.TclError:
+            pass
+
+    # ======================================================
     # PROCESAR VOZ / CEREBRO
     # ======================================================
 
     def procesar_voz(self, texto):
         texto_original = (texto or "").strip()
         texto_normal = normalizar(texto_original)
+        if texto_original:
+            self.penultimo_texto_asr_aceptado = self.ultimo_texto_asr_aceptado
+            self.ultimo_texto_asr_aceptado = texto_original
+            self.ultimo_texto_asr_ts = time.time()
         self.registrar_actividad()
         self._actualizar_expiracion_modo_conversacion()
         ahora = time.time()
@@ -10736,6 +15655,60 @@ Recuerdos relevantes:
             else:
                 print("MODO SILENCIO: orden no autorizada para despertar; ignorada.")
             return
+
+        # v2.9.12: una corrección explícita del reconocimiento tiene prioridad
+        # sobre cualquier ejercicio pendiente y nunca se evalúa como respuesta.
+        wake_inicial_fuerte = self._wake_en_inicio(texto_normal, incluir_ambiguos=False)
+        wake_inicial_adaptativo = self._wake_ambiguo_comando_seguro(texto_normal)
+        if wake_inicial_fuerte is not None or wake_inicial_adaptativo is not None:
+            if wake_inicial_adaptativo is not None and wake_inicial_fuerte is None:
+                print(
+                    f"WAKE ADAPTATIVO v2.9.13: '{wake_inicial_adaptativo}' aceptado "
+                    "por coincidir con una orden breve conocida."
+                )
+            if self._procesar_ensenanza_alias_asr(texto_original):
+                return
+
+        # RESPUESTA A UN EJERCICIO DE LA TUTORA PYTHON. Como en las
+        # evaluaciones académicas, se permite una sola respuesta natural sin
+        # repetir Beta, pero siempre después de validar la voz autorizada.
+        if self.tutor_python_pendiente:
+            if self.tutor_python_hasta > 0.0 and ahora > self.tutor_python_hasta:
+                self.cancelar_ejercicio_python(anunciar=False)
+            else:
+                wake_tutor = self._wake_en_inicio(texto_normal, incluir_ambiguos=False)
+                if wake_tutor is None:
+                    # Durante un ejercicio también aceptamos controles naturales sin
+                    # wake word; no deben evaluarse como si fueran una respuesta.
+                    if any(frase in texto_normal for frase in [
+                        "dame una pista", "quiero una pista", "una pista",
+                        "ayudame con una pista",
+                    ]):
+                        self.dar_pista_tutor_python()
+                        return
+                    if any(frase in texto_normal for frase in [
+                        "muestrame la solucion", "dime la solucion",
+                        "quiero ver la solucion", "cual es la solucion",
+                        "dame la solucion",
+                    ]):
+                        self.mostrar_solucion_tutor_python()
+                        return
+                    if any(frase in texto_normal for frase in [
+                        "termina ejercicio", "cancela ejercicio",
+                        "termina el ejercicio", "cancela el ejercicio",
+                    ]):
+                        self.cancelar_ejercicio_python(anunciar=True)
+                        return
+                    if any(frase in texto_normal for frase in [
+                        "listo", "completo", "respuesta completa", "he terminado",
+                        "esa es mi respuesta", "esa seria mi respuesta",
+                        "esa sería mi respuesta", "termine mi respuesta",
+                        "terminé mi respuesta", "eso es todo",
+                    ]):
+                        self.finalizar_respuesta_tutor_python_buffer(forzar=True)
+                        return
+                    self.acumular_respuesta_tutor_python(texto_original)
+                    return
 
         # RESPUESTA A UNA EVALUACIÓN ACADÉMICA. Se acepta una sola respuesta
         # natural sin wake word, siempre después de la validación biométrica.
@@ -10793,6 +15766,13 @@ Recuerdos relevantes:
         # no los confirma como Beta/veta/petra, aquí se descartan.
         wake = self._wake_en_inicio(texto_normal, incluir_ambiguos=False)
         if wake is None:
+            wake = self._wake_ambiguo_comando_seguro(texto_normal)
+            if wake is not None:
+                print(
+                    f"WAKE ADAPTATIVO v2.9.13: '{wake}' recuperado como activación "
+                    "ante una orden breve conocida."
+                )
+        if wake is None:
             print("MODO ESTRICTO: transcripción final sin wake word fuerte; ignorada.")
             return
 
@@ -10847,7 +15827,22 @@ Recuerdos relevantes:
 
     def ejecutar_comando(self, comando):
         original = comando.strip()
-        texto = normalizar(comando)
+        contexto_python_previo = bool(
+            self.tutor_python_tema_actual or self._contexto_python_activo()
+        )
+        original_corregido = self.corregir_terminos_tecnicos_asr(
+            original,
+            forzar_python=contexto_python_previo,
+        )
+        if contexto_python_previo:
+            original_corregido = self._consulta_repl_contextual(original_corregido)
+        if normalizar(original_corregido) != normalizar(original):
+            print(
+                f"RUTA TÉCNICA v2.9.8: comando normalizado "
+                f"'{original}' -> '{original_corregido}'"
+            )
+        original = original_corregido
+        texto = normalizar(original)
         print(f"RUTA DE RESPUESTA iniciada: {texto}")
 
         # 0) Curiosidad y aprendizaje activo. Son rutas locales de control;
@@ -10898,6 +15893,372 @@ Recuerdos relevantes:
             "que has aprendido de mi", "que aprendiste de mi", "que sabes de mi por tus preguntas",
         ]):
             self.responder_aprendizajes_curiosos()
+            return
+
+        # Beta v3.1.0: Aula Workspace / Modo Estudio. Se enruta antes de la tutora
+        # para que "activa modo estudio" nunca caiga al chat general.
+        if any(frase in texto for frase in [
+            "activa modo estudio", "activar modo estudio", "abre modo estudio",
+            "abrir modo estudio", "activa el modo estudio", "abre el aula",
+            "abrir el aula", "abre el estudio", "abrir el estudio", "abremos el estudio",
+            "abrimos el estudio", "abramos el estudio", "muestrame la pizarra", "mostrar pizarra",
+        ]):
+            self.activar_modo_estudio(anunciar=False)
+            if "python" in texto and any(x in texto for x in [
+                "estudiar", "aprender", "practicar", "python"
+            ]):
+                self.iniciar_sesion_python(self.inferir_tema_python(texto))
+            else:
+                self.responder(
+                    "modo estudio activado. Abrí el aula de Beta. Dígame qué quiere estudiar y mantendré la explicación, los ejemplos y los ejercicios visibles en la pizarra.",
+                    "feliz",
+                )
+            return
+
+        if any(frase in texto for frase in [
+            "termina modo estudio", "terminar modo estudio", "cierra modo estudio",
+            "cerrar modo estudio", "salir de modo estudio", "cierra el aula",
+            "cerrar el aula",
+        ]):
+            self.cerrar_modo_estudio(anunciar=True)
+            return
+
+        if self.modo_estudio_activo and any(frase in texto for frase in [
+            "limpia la pizarra", "limpiar pizarra", "borra la pizarra",
+        ]):
+            self.aula_limpiar_pizarra()
+            self.responder("pizarra limpia. Podemos continuar desde aquí.", "normal")
+            return
+
+        # Beta v3.1.0: proyectos académicos dentro del Aula.
+        if self.modo_estudio_activo and any(frase in texto for frase in [
+            "agrega archivos", "agregar archivos", "carga archivos", "cargar archivos",
+            "agrega documentos", "carga documentos", "anade archivos", "añade archivos",
+        ]):
+            try:
+                self.root.after(0, self.aula_agregar_archivos_proyecto)
+            except Exception:
+                pass
+            self.responder("abrí el selector para agregar documentos al proyecto.", "normal", tipo_contexto="proyecto")
+            return
+
+        if self.modo_estudio_activo and any(frase in texto for frase in [
+            "nuevo proyecto", "crea proyecto", "crear proyecto",
+        ]):
+            nombre = texto
+            for pref in ["nuevo proyecto", "crea proyecto", "crear proyecto", "academico", "académico"]:
+                nombre = nombre.replace(pref, " ")
+            nombre = re.sub(r"\s+", " ", nombre).strip(" ,.-")
+            if nombre:
+                self.crear_proyecto_estudio(nombre, anunciar=True)
+            else:
+                try:
+                    self.root.after(0, self.aula_nuevo_proyecto)
+                except Exception:
+                    pass
+            return
+
+        if self.modo_estudio_activo and any(frase in texto for frase in [
+            "quiero trabajar con", "trabajemos con", "abre proyecto", "abrir proyecto",
+            "continua proyecto", "continuemos proyecto", "continuemos el trabajo de",
+        ]):
+            objetivo = texto
+            for pref in [
+                "quiero trabajar con", "trabajemos con", "abre proyecto", "abrir proyecto",
+                "continua proyecto", "continuemos proyecto", "continuemos el trabajo de",
+            ]:
+                objetivo = objetivo.replace(pref, " ")
+            objetivo = re.sub(r"\s+", " ", objetivo).strip(" ,.-")
+            existente = self._proyecto_buscar_nombre_similar(objetivo) if objetivo else ""
+            if existente and self._proyecto_abrir_nombre(existente, silencioso=False):
+                self._aula_seleccionar_pestana_proyecto()
+                self.responder(
+                    f"abrí el proyecto {existente}. Puede preguntarme por sus archivos desde el chat del Aula.",
+                    "feliz", tipo_contexto="proyecto",
+                )
+            elif objetivo:
+                self.crear_proyecto_estudio(objetivo, anunciar=True)
+            else:
+                try:
+                    self.root.after(0, self.aula_abrir_proyecto)
+                except Exception:
+                    pass
+            return
+
+        # Tutora avanzada de Python v2.9.4.
+        if any(frase in texto for frase in [
+            "activa tutora python", "activar tutora python",
+            "activa tutor python", "activar tutor python",
+        ]):
+            self.modo_tutor_python = True
+            self.memoria.cambiar_estado("modo_tutor_python", "1")
+            try:
+                self.var_tutor_python.set(True)
+            except Exception:
+                pass
+            self.responder(
+                "tutora de Python activada. Puedo enseñarle por temas, proponer ejercicios y revisar código sin ejecutarlo.",
+                "feliz",
+            )
+            return
+
+        if any(frase in texto for frase in [
+            "desactiva tutora python", "desactivar tutora python",
+            "desactiva tutor python", "desactivar tutor python",
+        ]):
+            self.modo_tutor_python = False
+            self.memoria.cambiar_estado("modo_tutor_python", "0")
+            self.cancelar_ejercicio_python(anunciar=False)
+            try:
+                self.var_tutor_python.set(False)
+            except Exception:
+                pass
+            self.responder(
+                "tutora de Python desactivada. Conservaré el progreso para retomarlo después.",
+                "normal",
+            )
+            return
+
+        frases_inicio_python = [
+            "quiero estudiar python", "estudiemos python", "ensename python",
+            "quiero aprender python", "inicia sesion de python", "inicia sesion python",
+            "abre tutor de python", "abre tutora de python",
+        ]
+        inicio_python_generico = (
+            "python" in texto
+            and any(frase in texto for frase in [
+                "quiero estudiar", "estudiemos", "ensename", "quiero aprender",
+                "quiero practicar", "vamos a estudiar",
+            ])
+        )
+        if any(frase in texto for frase in frases_inicio_python) or inicio_python_generico:
+            objetivo = texto
+            for prefijo in frases_inicio_python + [
+                "quiero estudiar", "estudiemos", "ensename",
+                "quiero aprender", "quiero practicar", "vamos a estudiar",
+                "python", "de python", "en python",
+            ]:
+                objetivo = objetivo.replace(prefijo, " ")
+            item = self.inferir_tema_python(objetivo.strip()) if objetivo.strip() else None
+            self.iniciar_sesion_python(item)
+            return
+
+        continuacion_python_explicita = any(frase in texto for frase in [
+            "retomemos python", "continua con python",
+            "continuemos con python", "sigamos con python",
+        ])
+        continuacion_generica = any(frase in texto for frase in [
+            "continua donde quedamos", "continuemos donde quedamos",
+            "sigamos donde quedamos",
+        ])
+        if continuacion_python_explicita or (
+            continuacion_generica
+            and self.tutor_python_tema_actual
+            and (
+                self._contexto_python_activo()
+                or self.ultimo_tipo_respuesta_terminada in {
+                    "tutor_python", "tutor_python_resultado", "tecnico"
+                }
+            )
+        ):
+            self.iniciar_o_continuar_tutor_python()
+            return
+
+        contexto_tutor_python = bool(
+            self.tutor_python_tema_actual or self._contexto_python_activo()
+        )
+
+        # v2.9.3: si el Señor pregunta por qué falló la creación de un ejercicio,
+        # respondemos sobre el estado real del generador. No enviamos la pregunta al
+        # RAG técnico, porque eso podía inducir a Qwen a afirmar erróneamente que los
+        # libros "no contienen ejercicios". Beta puede CREAR ejercicios a partir de
+        # conceptos locales aunque el PDF no traiga una sección de ejercicios.
+        if contexto_tutor_python and "ejercicio" in texto and "por que" in texto and any(
+            x in texto for x in ["no puedes", "no puede", "no me puedes", "no pudiste", "fallo", "falla"]
+        ):
+            detalle = self.tutor_python_ultimo_error_ejercicio
+            if detalle:
+                print(f"TUTORA PYTHON: diagnóstico último fallo='{detalle}'")
+            self.responder(
+                "el problema fue temporal al generar la estructura del ejercicio, no porque sus libros "
+                "carezcan de ejercicios. Puedo crear preguntas nuevas a partir de los conceptos de su "
+                "biblioteca local y, si el generador falla, usaré un ejercicio de respaldo basado en esos mismos apuntes.",
+                "normal",
+                tipo_contexto="tutor_python",
+            )
+            return
+        solicitud_ejercicio_python = any(frase in texto for frase in [
+            "ponme un ejercicio", "pon un ejercicio", "dame un ejercicio",
+            "hazme un ejercicio", "propone un ejercicio", "propon un ejercicio",
+            "quiero practicar python", "ejercicio de python", "ejercicio sobre python",
+            "quiero varios ejercicios", "dame varios ejercicios", "ponme varios ejercicios",
+            "ejercicios de python", "ejercicios de fundamentos", "varios ejercicios de fundamentos",
+            "siguiente ejercicio", "otro ejercicio",
+        ])
+        # Whisper a veces conserva "ejercicio" pero deforma el verbo ("unme un",
+        # "poneme", etc.). Si ya estamos en una sesión Python, un comando corto que
+        # contenga "ejercicio" se interpreta como práctica, salvo cancelar/terminar.
+        ejercicio_corto_contextual = (
+            contexto_tutor_python
+            and ("ejercicio" in texto or "ejercicios" in texto)
+            and len(texto.split()) <= 14
+            and not any(x in texto for x in [
+                "termina", "cancel", "solucion", "solución", "respuesta",
+            ])
+        )
+        if (solicitud_ejercicio_python or ejercicio_corto_contextual) and (
+            "python" in texto or contexto_tutor_python
+        ):
+            item = self.inferir_tema_python(texto)
+            self.generar_ejercicio_python_async(item=item)
+            return
+
+        if self.tutor_python_pendiente and any(frase in texto for frase in [
+            "dame una pista", "quiero una pista", "una pista", "ayudame con una pista",
+        ]):
+            self.dar_pista_tutor_python()
+            return
+
+        if (
+            not self.tutor_python_pendiente
+            and self.tutor_python_tema_actual
+            and any(frase in texto for frase in [
+                "dame una pista", "quiero una pista", "una pista", "ayudame con una pista",
+            ])
+        ):
+            self.responder(
+                "ese ejercicio ya fue evaluado. Si quiere practicar de nuevo, puedo proponerle otro ejercicio; "
+                "si prefiere, también puedo explicarle la respuesta anterior.",
+                "normal",
+            )
+            return
+
+        if self.tutor_python_pendiente and any(frase in texto for frase in [
+            "listo", "completo", "respuesta completa", "he terminado",
+            "termine", "esa es mi respuesta", "esa seria mi respuesta",
+            "termine mi respuesta", "eso es todo",
+        ]):
+            self.finalizar_respuesta_tutor_python_buffer(forzar=True)
+            return
+
+        if self.tutor_python_pendiente and any(frase in texto for frase in [
+            "muestrame la solucion", "dime la solucion", "quiero ver la solucion",
+            "cual es la solucion", "dame la solucion",
+        ]):
+            self.mostrar_solucion_tutor_python()
+            return
+
+        # Si el Señor dice "completo/listo" justo DESPUÉS de que el temporizador
+        # ya corrigió la respuesta, no enviamos ese cierre tardío al chat general.
+        # Simplemente confirmamos que el ejercicio ya quedó registrado.
+        if (
+            not self.tutor_python_pendiente
+            and self.tutor_python_tema_actual
+            and (time.time() - float(self.tutor_python_ultimo_resultado_ts or 0.0)) <= 45
+            and any(frase in texto for frase in [
+                "listo", "completo", "respuesta completa", "he terminado",
+                "termine", "termine mi respuesta", "esa es mi respuesta",
+                "eso es todo",
+            ])
+        ):
+            self.responder(
+                "esa respuesta ya quedó registrada, Señor. Cuando quiera podemos continuar con otro ejercicio.",
+                "normal",
+                tipo_contexto="tutor_python_resultado",
+            )
+            return
+
+        if (
+            not self.tutor_python_pendiente
+            and self.tutor_python_tema_actual
+            and any(frase in texto for frase in [
+                "dame la respuesta anterior", "dime la respuesta anterior",
+                "cual era la respuesta anterior", "cuál era la respuesta anterior",
+                "explicame la respuesta anterior", "respuesta del ejercicio anterior",
+                "solucion del ejercicio anterior", "solución del ejercicio anterior",
+            ])
+        ):
+            self.explicar_ultimo_ejercicio_python()
+            return
+
+        if any(frase in texto for frase in [
+            "termina ejercicio python", "termina el ejercicio python",
+            "cancela ejercicio python", "cancela el ejercicio python",
+            "termina ejercicio", "cancela ejercicio",
+        ]) and self.tutor_python_pendiente:
+            self.cancelar_ejercicio_python(anunciar=True)
+            return
+
+        if any(frase in texto for frase in [
+            "como voy en python", "mi progreso en python",
+            "muestrame mi progreso en python", "que nivel tengo en python",
+            "como esta mi progreso en python",
+        ]):
+            self.responder_progreso_python()
+            return
+
+        if any(frase in texto for frase in [
+            "revisa mi codigo python", "revisar codigo python",
+            "abre revisor de codigo python", "quiero revisar codigo python",
+        ]):
+            self.ventana_revisar_codigo_python()
+            self.responder(
+                "abrí el revisor de código Python. Pegue allí el fragmento que quiere analizar; no lo ejecutaré.",
+                "normal",
+            )
+            return
+
+        # Autoevaluaciones dentro de una sesión Python se registran en el tema
+        # actual antes de caer al seguimiento académico genérico.
+        if (
+            self.tutor_python_tema_actual
+            and (self._contexto_python_activo() or self.ultimo_tipo_respuesta_terminada in {
+                "tutor_python", "tutor_python_resultado", "tecnico"
+            })
+        ):
+            if any(frase in texto for frase in [
+                "ya entendi", "lo entendi", "esto lo entendi", "me quedo claro",
+                "ya lo comprendi", "lo comprendi", "ahora lo entiendo",
+            ]):
+                self.registrar_autoevaluacion_python("comprendido")
+                return
+            if any(frase in texto for frase in [
+                "no entendi", "no lo entendi", "esto me cuesta", "me cuesta este tema",
+                "no me queda claro", "todavia no lo entiendo", "me cuesta entenderlo",
+            ]):
+                self.registrar_autoevaluacion_python("dificultad")
+                return
+
+        # v2.9.7: una consulta explícita sobre REPL dentro de una sesión Python
+        # va directo al RAG técnico para evitar contaminación de un ramo académico
+        # anterior o de una transcripción previa mal entendida.
+        consulta_repl_explicita = (
+            contexto_tutor_python
+            and "repl" in texto
+            and any(frase in texto for frase in [
+                "que es repl", "que significa repl", "explicame repl",
+                "explicame que es repl", "para que sirve repl",
+                "hablame de repl", "define repl",
+            ])
+        )
+        if consulta_repl_explicita:
+            self.ultimo_contexto_academico_ts = 0.0
+            if "para que sirve" in texto and ("que es repl" in texto or "explicame que es repl" in texto):
+                consulta_repl = "Explícame qué es REPL y para qué sirve en Python."
+            elif "para que sirve" in texto:
+                consulta_repl = "Explícame para qué sirve REPL en Python."
+            else:
+                consulta_repl = "Explícame qué es REPL en Python."
+            print(
+                "RUTA REPL v2.9.8: consulta canónica -> "
+                f"'{consulta_repl}'"
+            )
+            self.consultar_biblioteca_tecnica_async(
+                consulta_repl,
+                forzar=True,
+                profunda_forzada=False,
+                tokens_forzados=180,
+            )
             return
 
         # Unidad de aprendizaje adaptativo.
@@ -11354,6 +16715,17 @@ Recuerdos relevantes:
             ]
         ):
             self.no_entendi(texto, "no sé realizar esa acción todavía.")
+            return
+
+        # Beta v3.1.0: en la pestaña Proyecto / Chat, las preguntas no
+        # capturadas por acciones explícitas se responden con los archivos del proyecto.
+        if (
+            self.modo_estudio_activo
+            and self.proyecto_estudio_actual
+            and self.aula_modo_principal == "proyecto"
+        ):
+            self.fallos_consecutivos = 0
+            self.consultar_proyecto_estudio_async(original, desde_voz=True)
             return
 
         # 8.7) Seguimiento de una respuesta que combinó varias bibliotecas.
@@ -14551,6 +19923,7 @@ $voz.Speak($texto)
             print(f"LATENCIA HASTA TEXTO FINAL: {time.perf_counter() - self.ultima_frase_inicio:.2f} s")
             self.ultima_frase_inicio = 0.0
         print("RESPUESTA FINAL DE BETA:", texto)
+        self._aula_mostrar_texto_async(texto, tipo_contexto or "general", desde_streaming=False)
 
         self.memoria.guardar_conversacion("Beta", texto)
         self.ultima_respuesta_beta = texto
@@ -14597,6 +19970,13 @@ $voz.Speak($texto)
             print(
                 f"CURIOSIDAD: esperando respuesta autorizada durante "
                 f"{CURIOSIDAD_RESPUESTA_SEGUNDOS} s después de la voz."
+            )
+
+        if tipo_contexto == "tutor_python" and self.tutor_python_pendiente:
+            self.tutor_python_hasta = time.time() + TUTOR_PYTHON_RESPUESTA_SEGUNDOS
+            print(
+                f"TUTORA PYTHON: esperando una respuesta autorizada durante "
+                f"{TUTOR_PYTHON_RESPUESTA_SEGUNDOS} s después de la voz."
             )
 
         if tipo_contexto == "inicio":
@@ -15287,6 +20667,11 @@ $voz.Speak($texto)
 
     def cerrar_beta(self):
         self.escuchando = False
+        if getattr(self, "modo_estudio_activo", False):
+            try:
+                self.cerrar_modo_estudio(anunciar=False)
+            except Exception:
+                pass
         try:
             self.memoria.cambiar_estado("tamano_beta", self.tamano_beta)
             self.guardar_posicion()
