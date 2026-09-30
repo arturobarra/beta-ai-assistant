@@ -36,10 +36,10 @@ import urllib.request
 from datetime import datetime
 
 
-BETA_VERSION = "3.1.2"
+BETA_VERSION = "3.2.1"
 
 # ==========================================================
-# BETA v3.1.2 - AULA WORKSPACE: CHAT DOCUMENTAL RESILIENTE + ANÁLISIS LOCAL
+# BETA v3.2.1 - AULA WORKSPACE: CONSTRUCTOR ESTRUCTURADO DE TRABAJOS
 # Mascota virtual + memoria + comandos aprendidos + clima
 # + Ollama/Qwen3 Instruct + memoria evolutiva + personalidad adaptativa
 # + voz híbrida: Vosk para activación y Faster-Whisper para dictado
@@ -95,7 +95,7 @@ BETA_VERSION = "3.1.2"
 # v3.0.0: aula interactiva propia activable por voz con "Beta, activa modo estudio"
 # v3.0.1: si un fragmento de respuesta tiene ASR dudoso, cancela la corrección pendiente
 # v3.1.0: Aula Workspace integra Clase/Pizarra + Proyecto/Chat + Trabajo/Borrador
-# v3.1.2: analiza localmente preguntas/instrucciones/estructura antes de depender de Ollama
+# v3.2.1: analiza localmente preguntas/instrucciones/estructura antes de depender de Ollama
 # + fallback documental verificable cuando Ollama falla o agota el tiempo
 # + separa consultas sobre Beta/Workspace de preguntas sobre los documentos
 # + fuentes visibles también en respuestas locales y fallbacks
@@ -3658,8 +3658,13 @@ class BetaApp:
         self.proyecto_estudio_actual = None
         self.proyecto_ultima_respuesta = ""
         self.proyecto_consulta_en_curso = False
-        # v3.1.2: conserva el foco conversacional del trabajo (p. ej. pregunta 1).
+        # v3.2.1: conserva el foco conversacional del trabajo (p. ej. pregunta 1).
         self.proyecto_pregunta_foco = ""
+        # v3.2.1: foco y estructura persistente del Constructor de trabajos.
+        self.proyecto_seccion_foco = ""
+        self.proyecto_trabajo_estructurado = None
+        self.aula_trabajo_estado_tree = None
+        self.aula_trabajo_progreso_var = None
         self.proyecto_ultimo_error = ""
         self.proyecto_estudio_nombre_guardado = (
             self.memoria.obtener_estado("proyecto_estudio_actual", "") or ""
@@ -5688,17 +5693,40 @@ class BetaApp:
             command=self.aula_agregar_ultima_respuesta_al_trabajo,
         ).pack(fill="x", pady=(5, 0))
 
-        # ---------------------- TRABAJO / BORRADOR ----------------------
-        trabajo_cab = ttk.Frame(self.aula_tab_trabajo)
+        # ---------------------- TRABAJO / CONSTRUCTOR ----------------------
+        trabajo_panel = ttk.Panedwindow(self.aula_tab_trabajo, orient="horizontal")
+        trabajo_panel.pack(fill="both", expand=True)
+        trabajo_izq = ttk.Frame(trabajo_panel, padding=(0, 0, 8, 0))
+        trabajo_der = ttk.Frame(trabajo_panel, padding=(8, 0, 0, 0))
+        trabajo_panel.add(trabajo_izq, weight=1)
+        trabajo_panel.add(trabajo_der, weight=3)
+
+        ttk.Label(trabajo_izq, text="Estado del trabajo", font=("Segoe UI", 11, "bold")).pack(anchor="w")
+        self.aula_trabajo_progreso_var = tk.StringVar(value="Sin estructura todavía")
+        ttk.Label(trabajo_izq, textvariable=self.aula_trabajo_progreso_var, wraplength=280).pack(anchor="w", pady=(4, 8))
+        self.aula_trabajo_estado_tree = ttk.Treeview(
+            trabajo_izq, columns=("estado",), show="tree headings", height=22
+        )
+        self.aula_trabajo_estado_tree.heading("#0", text="Sección")
+        self.aula_trabajo_estado_tree.heading("estado", text="Estado")
+        self.aula_trabajo_estado_tree.column("#0", width=215)
+        self.aula_trabajo_estado_tree.column("estado", width=85, anchor="center")
+        self.aula_trabajo_estado_tree.pack(fill="both", expand=True, pady=(0, 8))
+        self.aula_trabajo_estado_tree.bind("<Double-1>", self._aula_trabajo_seleccionar_foco)
+        ttk.Button(
+            trabajo_izq, text="Sincronizar estructura", command=self.aula_sincronizar_estructura_trabajo
+        ).pack(fill="x")
+
+        trabajo_cab = ttk.Frame(trabajo_der)
         trabajo_cab.pack(fill="x", pady=(0, 6))
-        ttk.Label(trabajo_cab, text="Borrador del trabajo", font=("Segoe UI", 11, "bold")).pack(side="left")
+        ttk.Label(trabajo_cab, text="Constructor / borrador", font=("Segoe UI", 11, "bold")).pack(side="left")
         ttk.Button(trabajo_cab, text="Guardar borrador", command=self.aula_guardar_borrador).pack(side="right")
         ttk.Button(
-            trabajo_cab, text="Agregar última respuesta de Beta",
+            trabajo_cab, text="Agregar respuesta al foco actual",
             command=self.aula_agregar_ultima_respuesta_al_trabajo,
         ).pack(side="right", padx=6)
         self.aula_trabajo = tk.Text(
-            self.aula_tab_trabajo, wrap="word", font=("Segoe UI", 11), padx=14, pady=12, undo=True
+            trabajo_der, wrap="word", font=("Segoe UI", 11), padx=14, pady=12, undo=True
         )
         self.aula_trabajo.pack(fill="both", expand=True)
 
@@ -5740,7 +5768,7 @@ class BetaApp:
         self._crear_ventana_modo_estudio()
         self._aula_actualizar_encabezado()
         self._aula_refrescar_ejercicio()
-        print("MODO ESTUDIO v3.1.2: Aula Workspace activa.")
+        print("MODO ESTUDIO v3.2.1: Aula Workspace activa.")
         if anunciar:
             self.responder(
                 "modo estudio activado. Abrí el aula de Beta. Las explicaciones, ejemplos y ejercicios quedarán visibles en la pizarra mientras seguimos conversando.",
@@ -5775,7 +5803,7 @@ class BetaApp:
         self.aula_chat_entrada = None
         self.aula_archivos_tree = None
         self.aula_trabajo = None
-        print("MODO ESTUDIO v3.1.2: Aula Workspace cerrada.")
+        print("MODO ESTUDIO v3.2.1: Aula Workspace cerrada.")
         if anunciar:
             self.responder(
                 "modo estudio finalizado. Conservaré el progreso y el tema de Python para retomarlos después.",
@@ -5898,7 +5926,7 @@ class BetaApp:
                 pass
             self.tutor_python_respuesta_timer = None
         self.tutor_python_respuesta_buffer = []
-        print(f"AULA WORKSPACE v3.1.2: respuesta de ejercicio escrita='{respuesta}'")
+        print(f"AULA WORKSPACE v3.2.1: respuesta de ejercicio escrita='{respuesta}'")
         self._aula_mostrar_respuesta_usuario("[Respuesta escrita] " + respuesta)
         try:
             self.memoria.guardar_conversacion("Señor", respuesta)
@@ -5970,6 +5998,9 @@ class BetaApp:
     def _proyecto_borrador_ruta(self, ruta_proyecto):
         return Path(ruta_proyecto) / "borrador.md"
 
+    def _proyecto_trabajo_ruta(self, ruta_proyecto):
+        return Path(ruta_proyecto) / "trabajo.json"
+
     def _proyecto_manifest_nuevo(self, nombre, ruta):
         ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         return {
@@ -5981,6 +6012,321 @@ class BetaApp:
             "archivos": [],
             "chat": [],
         }
+
+    def _proyecto_trabajo_base(self):
+        """Crea la estructura mínima del trabajo a partir de los documentos cargados."""
+        e = self._proyecto_elementos_trabajo_local()
+        preguntas = {}
+        for item in e.get("preguntas", []):
+            numero = str(item.get("numero", "")).strip()
+            if not numero:
+                continue
+            preguntas[numero] = {
+                "numero": numero,
+                "enunciado": re.sub(r"\s+", " ", item.get("texto", "")).strip(),
+                "respuesta": "",
+                "estado": "pendiente",
+                "fuentes": [item.get("fuente")] if item.get("fuente") else [],
+            }
+        return {
+            "version": 1,
+            "proyecto": (self.proyecto_estudio_actual or {}).get("nombre", ""),
+            "actualizado": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "modulo": e.get("modulo", ""),
+            "curso": e.get("curso", ""),
+            "resultado_aprendizaje": e.get("resultado_aprendizaje", ""),
+            "introduccion": {"texto": "", "estado": "pendiente", "fuentes": []},
+            "preguntas": preguntas,
+            "conclusion": {"texto": "", "estado": "pendiente", "fuentes": []},
+            "bibliografia": {"texto": "", "estado": "pendiente", "fuentes": []},
+            "borrador_legacy": "",
+        }
+
+    def _proyecto_cargar_trabajo_estructurado(self):
+        proyecto = self.proyecto_estudio_actual
+        if not proyecto:
+            self.proyecto_trabajo_estructurado = None
+            return None
+        ruta = self._proyecto_trabajo_ruta(proyecto["ruta"])
+        datos = None
+        if ruta.exists():
+            try:
+                datos = json.loads(ruta.read_text(encoding="utf-8"))
+            except Exception as error:
+                print("CONSTRUCTOR v3.2.1: trabajo.json inválido; reconstruyendo:", error)
+        if not isinstance(datos, dict):
+            datos = self._proyecto_trabajo_base()
+            legacy = self._proyecto_borrador_ruta(proyecto["ruta"])
+            if legacy.exists():
+                try:
+                    txt = legacy.read_text(encoding="utf-8").strip()
+                    if txt:
+                        datos["borrador_legacy"] = txt
+                except Exception:
+                    pass
+        self.proyecto_trabajo_estructurado = datos
+        self._proyecto_sincronizar_trabajo_estructura(guardar=True)
+        return self.proyecto_trabajo_estructurado
+
+    def _proyecto_sincronizar_trabajo_estructura(self, guardar=True):
+        proyecto = self.proyecto_estudio_actual
+        if not proyecto:
+            return None
+        actual = self.proyecto_trabajo_estructurado
+        if not isinstance(actual, dict):
+            actual = self._proyecto_trabajo_base()
+        base = self._proyecto_trabajo_base()
+        actual.setdefault("version", 1)
+        actual["proyecto"] = proyecto.get("nombre", "")
+        for clave in ("modulo", "curso", "resultado_aprendizaje"):
+            if base.get(clave):
+                actual[clave] = base.get(clave)
+            else:
+                actual.setdefault(clave, "")
+        for seccion in ("introduccion", "conclusion", "bibliografia"):
+            valor = actual.get(seccion)
+            if not isinstance(valor, dict):
+                valor = {"texto": "", "estado": "pendiente", "fuentes": []}
+            valor.setdefault("texto", "")
+            valor.setdefault("fuentes", [])
+            valor["estado"] = "completo" if valor.get("texto", "").strip() else "pendiente"
+            actual[seccion] = valor
+        preguntas = actual.get("preguntas")
+        if not isinstance(preguntas, dict):
+            preguntas = {}
+        for numero, item_base in base.get("preguntas", {}).items():
+            item = preguntas.get(numero)
+            if not isinstance(item, dict):
+                item = dict(item_base)
+            else:
+                item.setdefault("numero", numero)
+                if item_base.get("enunciado"):
+                    item["enunciado"] = item_base["enunciado"]
+                item.setdefault("respuesta", "")
+                item.setdefault("fuentes", item_base.get("fuentes", []))
+            item["estado"] = "completo" if item.get("respuesta", "").strip() else "pendiente"
+            preguntas[numero] = item
+        actual["preguntas"] = preguntas
+        actual.setdefault("borrador_legacy", "")
+        actual["actualizado"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.proyecto_trabajo_estructurado = actual
+        if guardar:
+            self._proyecto_guardar_trabajo_estructurado()
+        return actual
+
+    def _proyecto_guardar_trabajo_estructurado(self):
+        proyecto = self.proyecto_estudio_actual
+        datos = self.proyecto_trabajo_estructurado
+        if not proyecto or not isinstance(datos, dict):
+            return False
+        try:
+            datos["actualizado"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            ruta = self._proyecto_trabajo_ruta(proyecto["ruta"])
+            ruta.write_text(json.dumps(datos, ensure_ascii=False, indent=2), encoding="utf-8")
+            return True
+        except Exception as error:
+            print("CONSTRUCTOR v3.2.1: no pude guardar trabajo.json:", error)
+            return False
+
+    def _proyecto_ultima_respuesta_fuentes(self):
+        proyecto = self.proyecto_estudio_actual or {}
+        for entrada in reversed(proyecto.get("chat") or []):
+            if normalizar(entrada.get("autor", "")) == "beta":
+                return list(entrada.get("fuentes") or [])
+        return []
+
+    def _proyecto_agregar_respuesta_estructurada(self, respuesta=None, seccion=None):
+        respuesta = (respuesta if respuesta is not None else self.proyecto_ultima_respuesta or "").strip()
+        if not respuesta:
+            return False, "Todavía no hay una respuesta de Beta para agregar al trabajo."
+        if not self.proyecto_estudio_actual:
+            return False, "Primero debe abrir un proyecto académico."
+        if not isinstance(self.proyecto_trabajo_estructurado, dict):
+            self._proyecto_cargar_trabajo_estructurado()
+        datos = self.proyecto_trabajo_estructurado or {}
+        foco = (seccion or self.proyecto_seccion_foco or "").strip().lower()
+        numero = str(getattr(self, "proyecto_pregunta_foco", "") or "").strip()
+        if foco.startswith("pregunta:"):
+            numero = foco.split(":", 1)[1].strip()
+        if numero and (not foco or foco.startswith("pregunta") or foco == "desarrollo"):
+            preguntas = datos.setdefault("preguntas", {})
+            item = preguntas.get(numero)
+            if not isinstance(item, dict):
+                return False, f"No encontré la pregunta {numero} en la estructura del trabajo."
+            item["respuesta"] = respuesta
+            item["estado"] = "completo"
+            fuentes = self._proyecto_ultima_respuesta_fuentes()
+            if fuentes:
+                item["fuentes"] = list(dict.fromkeys((item.get("fuentes") or []) + fuentes))
+            self.proyecto_seccion_foco = f"pregunta:{numero}"
+            destino = f"Desarrollo → Pregunta {numero}"
+        else:
+            mapa = {
+                "introduccion": "introduccion", "introducción": "introduccion",
+                "conclusion": "conclusion", "conclusión": "conclusion",
+                "bibliografia": "bibliografia", "bibliografía": "bibliografia",
+            }
+            clave = mapa.get(foco)
+            if not clave:
+                return False, "Seleccione primero una pregunta o una sección del trabajo para saber dónde guardar la respuesta."
+            datos.setdefault(clave, {})["texto"] = respuesta
+            datos[clave]["estado"] = "completo"
+            datos[clave]["fuentes"] = self._proyecto_ultima_respuesta_fuentes()
+            self.proyecto_seccion_foco = clave
+            destino = clave.capitalize()
+        self._proyecto_guardar_trabajo_estructurado()
+        self._proyecto_renderizar_borrador(guardar_md=True)
+        self._proyecto_refrescar_estado_trabajo_ui()
+        print(f"CONSTRUCTOR v3.2.1: respuesta agregada a {destino}.")
+        return True, f"Agregué la respuesta a {destino}."
+
+    def _proyecto_renderizar_borrador(self, guardar_md=False):
+        datos = self.proyecto_trabajo_estructurado
+        if not isinstance(datos, dict):
+            return ""
+        lineas = []
+        titulo = datos.get("proyecto") or (self.proyecto_estudio_actual or {}).get("nombre", "Trabajo académico")
+        lineas.append(str(titulo).upper())
+        if datos.get("modulo"):
+            lineas.append(f"Módulo: {datos['modulo']}")
+        if datos.get("curso"):
+            lineas.append(f"Asignatura: {datos['curso']}")
+        lineas.append("")
+        lineas.append("INTRODUCCIÓN")
+        intro = (datos.get("introduccion") or {}).get("texto", "").strip()
+        lineas.append(intro or "[Pendiente]")
+        lineas += ["", "DESARROLLO"]
+        def clave_num(x):
+            try:
+                return (0, int(x))
+            except Exception:
+                return (1, str(x))
+        for numero in sorted((datos.get("preguntas") or {}).keys(), key=clave_num):
+            item = datos["preguntas"][numero]
+            lineas += ["", f"Pregunta {numero}"]
+            if item.get("enunciado"):
+                lineas.append(item["enunciado"].strip())
+            lineas.append("")
+            lineas.append("Respuesta")
+            lineas.append(item.get("respuesta", "").strip() or "[Pendiente]")
+        lineas += ["", "CONCLUSIÓN"]
+        lineas.append((datos.get("conclusion") or {}).get("texto", "").strip() or "[Pendiente]")
+        lineas += ["", "BIBLIOGRAFÍA"]
+        lineas.append((datos.get("bibliografia") or {}).get("texto", "").strip() or "[Pendiente]")
+        legacy = (datos.get("borrador_legacy") or "").strip()
+        if legacy:
+            lineas += ["", "BORRADOR ANTERIOR (v3.1)", legacy]
+        texto = "\n".join(lineas).rstrip() + "\n"
+        if guardar_md and self.proyecto_estudio_actual:
+            try:
+                self._proyecto_borrador_ruta(self.proyecto_estudio_actual["ruta"]).write_text(texto, encoding="utf-8")
+            except Exception as error:
+                print("CONSTRUCTOR v3.2.1: no pude actualizar borrador.md:", error)
+        return texto
+
+    def _proyecto_progreso_trabajo(self):
+        datos = self.proyecto_trabajo_estructurado or {}
+        componentes = []
+        componentes.append(("Introducción", bool((datos.get("introduccion") or {}).get("texto", "").strip())))
+        for numero, item in (datos.get("preguntas") or {}).items():
+            componentes.append((f"Pregunta {numero}", bool(item.get("respuesta", "").strip())))
+        componentes.append(("Conclusión", bool((datos.get("conclusion") or {}).get("texto", "").strip())))
+        componentes.append(("Bibliografía", bool((datos.get("bibliografia") or {}).get("texto", "").strip())))
+        total = len(componentes)
+        completos = sum(1 for _, ok in componentes if ok)
+        pct = round((completos / total) * 100) if total else 0
+        return completos, total, pct, componentes
+
+    def _proyecto_resumen_estado_trabajo(self):
+        completos, total, pct, componentes = self._proyecto_progreso_trabajo()
+        pendientes = [nombre for nombre, ok in componentes if not ok]
+        txt = f"El trabajo lleva {completos} de {total} secciones completadas ({pct}%)."
+        if pendientes:
+            txt += " Pendiente: " + ", ".join(pendientes) + "."
+        else:
+            txt += " La estructura principal está completa."
+        return txt
+
+    def _proyecto_refrescar_estado_trabajo_ui(self):
+        if self.aula_trabajo_progreso_var is not None:
+            try:
+                completos, total, pct, _ = self._proyecto_progreso_trabajo()
+                self.aula_trabajo_progreso_var.set(f"Progreso: {completos}/{total} · {pct}%")
+            except Exception:
+                pass
+        tree = self.aula_trabajo_estado_tree
+        if tree is None:
+            return
+        try:
+            for iid in tree.get_children():
+                tree.delete(iid)
+            datos = self.proyecto_trabajo_estructurado or {}
+            intro_ok = bool((datos.get("introduccion") or {}).get("texto", "").strip())
+            tree.insert("", "end", iid="introduccion", text="Introducción", values=("✓" if intro_ok else "Pendiente",))
+            desarrollo = tree.insert("", "end", iid="desarrollo", text="Desarrollo", values=("",), open=True)
+            for numero in sorted((datos.get("preguntas") or {}).keys(), key=lambda x: int(x) if str(x).isdigit() else 9999):
+                ok = bool(datos["preguntas"][numero].get("respuesta", "").strip())
+                tree.insert(desarrollo, "end", iid=f"pregunta:{numero}", text=f"Pregunta {numero}", values=("✓" if ok else "Pendiente",))
+            con_ok = bool((datos.get("conclusion") or {}).get("texto", "").strip())
+            bib_ok = bool((datos.get("bibliografia") or {}).get("texto", "").strip())
+            tree.insert("", "end", iid="conclusion", text="Conclusión", values=("✓" if con_ok else "Pendiente",))
+            tree.insert("", "end", iid="bibliografia", text="Bibliografía", values=("✓" if bib_ok else "Pendiente",))
+        except Exception:
+            pass
+
+    def _aula_trabajo_seleccionar_foco(self, _evento=None):
+        tree = self.aula_trabajo_estado_tree
+        if tree is None:
+            return
+        try:
+            sel = tree.selection()
+            if not sel:
+                return
+            iid = str(sel[0])
+            if iid.startswith("pregunta:"):
+                numero = iid.split(":", 1)[1]
+                self.proyecto_pregunta_foco = numero
+                self.proyecto_seccion_foco = iid
+                self._aula_chat_insertar("Beta", f"Foco de trabajo cambiado a Pregunta {numero}.")
+            elif iid in {"introduccion", "conclusion", "bibliografia"}:
+                self.proyecto_seccion_foco = iid
+                self.proyecto_pregunta_foco = ""
+                self._aula_chat_insertar("Beta", f"Foco de trabajo cambiado a {tree.item(iid, 'text')}.")
+        except Exception:
+            pass
+
+    def aula_sincronizar_estructura_trabajo(self):
+        self._proyecto_sincronizar_trabajo_estructura(guardar=True)
+        self._aula_cargar_borrador()
+        self._proyecto_refrescar_estado_trabajo_ui()
+
+    def _proyecto_accion_constructor_local(self, consulta):
+        t = normalizar(consulta or "")
+        if not t:
+            return "", []
+        if any(x in t for x in (
+            "agrega esta respuesta al trabajo", "agregar esta respuesta al trabajo",
+            "agrega la respuesta al trabajo", "agregar la respuesta al trabajo",
+            "guarda esta respuesta en el trabajo", "guardar esta respuesta en el trabajo",
+            "incorpora esta respuesta al trabajo", "anade esta respuesta al trabajo",
+        )):
+            ok, msg = self._proyecto_agregar_respuesta_estructurada()
+            return msg, []
+        if any(x in t for x in (
+            "estado del trabajo", "como va el trabajo", "que falta del trabajo",
+            "que me falta del trabajo", "avance del trabajo", "progreso del trabajo",
+        )):
+            return self._proyecto_resumen_estado_trabajo(), []
+        for clave, variantes in {
+            "introduccion": ("trabajemos la introduccion", "vamos con la introduccion", "hacer la introduccion"),
+            "conclusion": ("trabajemos la conclusion", "vamos con la conclusion", "hacer la conclusion"),
+            "bibliografia": ("trabajemos la bibliografia", "vamos con la bibliografia", "hacer la bibliografia"),
+        }.items():
+            if any(v in t for v in variantes):
+                self.proyecto_seccion_foco = clave
+                self.proyecto_pregunta_foco = ""
+                return f"Fijé el foco en {clave}. Podemos redactarla y luego agregar la respuesta directamente a esa sección del trabajo.", []
+        return "", []
 
     def _proyecto_guardar_manifest(self):
         proyecto = self.proyecto_estudio_actual
@@ -6018,11 +6364,14 @@ class BetaApp:
             datos.setdefault("archivos", [])
             datos.setdefault("chat", [])
             self.proyecto_estudio_actual = datos
+            self.proyecto_seccion_foco = ""
+            self.proyecto_pregunta_foco = ""
+            self._proyecto_cargar_trabajo_estructurado()
             self.proyecto_estudio_nombre_guardado = datos.get("nombre", nombre)
             self.memoria.cambiar_estado("proyecto_estudio_actual", self.proyecto_estudio_nombre_guardado)
             self._proyecto_refrescar_ui()
             if not silencioso:
-                print(f"PROYECTO v3.1.2: abierto '{self.proyecto_estudio_nombre_guardado}'.")
+                print(f"PROYECTO v3.2.1: abierto '{self.proyecto_estudio_nombre_guardado}'.")
             return True
         except Exception as error:
             print("PROYECTO: error abriendo proyecto:", error)
@@ -6076,12 +6425,15 @@ class BetaApp:
         datos.setdefault("archivos", [])
         datos.setdefault("chat", [])
         self.proyecto_estudio_actual = datos
+        self.proyecto_seccion_foco = ""
+        self.proyecto_pregunta_foco = ""
+        self._proyecto_cargar_trabajo_estructurado()
         self.proyecto_estudio_nombre_guardado = nombre
         self.memoria.cambiar_estado("proyecto_estudio_actual", nombre)
         self._proyecto_guardar_manifest()
         self._proyecto_refrescar_ui()
         self._aula_seleccionar_pestana_proyecto()
-        print(f"PROYECTO v3.1.2: activo '{nombre}'.")
+        print(f"PROYECTO v3.2.1: activo '{nombre}'.")
         if anunciar:
             self.responder(
                 f"proyecto {nombre} preparado. Puede agregar los PDF, Word o textos y trabajar conmigo desde el chat del Aula.",
@@ -6257,11 +6609,13 @@ class BetaApp:
                 })
                 existentes.add(sha)
                 ok += 1
-                print(f"PROYECTO v3.1.2: agregado {origen.name} ({len(texto)} caracteres).")
+                print(f"PROYECTO v3.2.1: agregado {origen.name} ({len(texto)} caracteres).")
             except Exception as error:
                 errores.append(f"{origen.name}: {error}")
                 print("PROYECTO: archivo omitido:", origen.name, error)
         self._proyecto_guardar_manifest()
+        if ok:
+            self._proyecto_sincronizar_trabajo_estructura(guardar=True)
         return {"ok": ok, "errores": errores}
 
     def aula_agregar_archivos_proyecto(self):
@@ -6333,7 +6687,10 @@ class BetaApp:
             except Exception:
                 pass
         self._aula_chat_restaurar()
+        if self.proyecto_estudio_actual:
+            self._proyecto_cargar_trabajo_estructurado()
         self._aula_cargar_borrador()
+        self._proyecto_refrescar_estado_trabajo_ui()
 
     def _aula_chat_insertar(self, autor, texto, fuentes=None):
         if self.aula_chat is None or not texto:
@@ -6636,6 +6993,7 @@ class BetaApp:
         if intencion.startswith("pregunta:"):
             numero = intencion.split(":", 1)[1]
             self.proyecto_pregunta_foco = str(numero)
+            self.proyecto_seccion_foco = f"pregunta:{numero}"
             coincidencias = [x for x in e["preguntas"] if str(x.get("numero")) == numero]
             if not coincidencias:
                 return "", []
@@ -6891,17 +7249,27 @@ class BetaApp:
         self._aula_chat_insertar("Señor", consulta)
         self._proyecto_registrar_chat("Señor", consulta)
 
-        # v3.1.2: las preguntas sobre el funcionamiento de Beta no se buscan en el PDF.
+        # v3.2.1: acciones del Constructor se resuelven antes de consultar documentos/IA.
+        respuesta_constructor, fuentes_constructor = self._proyecto_accion_constructor_local(consulta)
+        if respuesta_constructor:
+            self.proyecto_ultima_respuesta = respuesta_constructor
+            self._proyecto_registrar_chat("Beta", respuesta_constructor, fuentes_constructor)
+            self._aula_chat_insertar("Beta", respuesta_constructor, fuentes_constructor)
+            self.responder(respuesta_constructor, "normal", tipo_contexto="proyecto")
+            print(f"CONSTRUCTOR v3.2.1: acción local resuelta; foco={self.proyecto_seccion_foco or self.proyecto_pregunta_foco}")
+            return
+
+        # v3.2.1: las preguntas sobre el funcionamiento de Beta no se buscan en el PDF.
         respuesta_meta = self._proyecto_respuesta_meta_local(consulta)
         if respuesta_meta:
             self.proyecto_ultima_respuesta = respuesta_meta
             self._proyecto_registrar_chat("Beta", respuesta_meta, [])
             self._aula_chat_insertar("Beta", respuesta_meta, [])
             self.responder(respuesta_meta, "normal", tipo_contexto="proyecto")
-            print("AULA WORKSPACE v3.1.2: consulta meta respondida localmente.")
+            print("AULA WORKSPACE v3.2.1: consulta meta respondida localmente.")
             return
 
-        # v3.1.2: preguntas estructurales del trabajo no dependen de Ollama.
+        # v3.2.1: preguntas estructurales del trabajo no dependen de Ollama.
         respuesta_local, fuentes_locales = self._proyecto_respuesta_local(consulta)
         if respuesta_local:
             self.proyecto_ultima_respuesta = respuesta_local
@@ -6911,7 +7279,7 @@ class BetaApp:
             resumen_voz_fn = getattr(self, "_proyecto_resumen_voz", None)
             voz = resumen_voz_fn(respuesta_local, consulta) if callable(resumen_voz_fn) else respuesta_local
             self.responder(voz, "normal", tipo_contexto="proyecto")
-            print(f"AULA WORKSPACE v3.1.2: análisis local resuelto; fuentes={fuentes_locales}")
+            print(f"AULA WORKSPACE v3.2.1: análisis local resuelto; fuentes={fuentes_locales}")
             return
 
         if self._proyecto_es_pedir_explicacion(consulta) or self._proyecto_es_pedir_redaccion(consulta):
@@ -6931,7 +7299,7 @@ class BetaApp:
                     resumen_voz_fn = getattr(self, "_proyecto_resumen_voz", None)
                     voz = resumen_voz_fn(guiada, consulta) if callable(resumen_voz_fn) else guiada
                     self.responder(voz, "normal", tipo_contexto="proyecto")
-                    print(f"AULA WORKSPACE v3.1.2: seguimiento guiado local pregunta={self.proyecto_pregunta_foco} fuentes={fuentes_guiada}")
+                    print(f"AULA WORKSPACE v3.2.1: seguimiento guiado local pregunta={self.proyecto_pregunta_foco} fuentes={fuentes_guiada}")
                     return
 
         self.proyecto_consulta_en_curso = True
@@ -7000,10 +7368,10 @@ class BetaApp:
                             for ref in fuentes_guiada:
                                 if ref not in fuentes_labels:
                                     fuentes_labels.append(ref)
-                            print("AULA WORKSPACE v3.1.2: fallback guiado por pregunta activa tras fallo/timeout de Ollama.")
+                            print("AULA WORKSPACE v3.2.1: fallback guiado por pregunta activa tras fallo/timeout de Ollama.")
                         else:
                             respuesta = self._proyecto_fallback_documental(consulta, fuentes)
-                            print("AULA WORKSPACE v3.1.2: fallback documental activado tras fallo/timeout de Ollama.")
+                            print("AULA WORKSPACE v3.2.1: fallback documental activado tras fallo/timeout de Ollama.")
                     else:
                         self.proyecto_ultimo_error = ""
             except Exception as error:
@@ -7045,7 +7413,7 @@ class BetaApp:
             self.aula_chat_entrada.delete("1.0", "end")
         except Exception:
             pass
-        print(f"AULA WORKSPACE v3.1.2: consulta escrita='{consulta}'")
+        print(f"AULA WORKSPACE v3.2.1: consulta escrita='{consulta}'")
         self.consultar_proyecto_estudio_async(consulta, desde_voz=False)
 
     def _aula_cargar_borrador(self):
@@ -7058,12 +7426,14 @@ class BetaApp:
         proyecto = self.proyecto_estudio_actual
         if not proyecto:
             return
-        ruta = self._proyecto_borrador_ruta(proyecto["ruta"])
-        if ruta.exists():
-            try:
-                self.aula_trabajo.insert("1.0", ruta.read_text(encoding="utf-8"))
-            except Exception:
-                pass
+        if not isinstance(self.proyecto_trabajo_estructurado, dict):
+            self._proyecto_cargar_trabajo_estructurado()
+        texto = self._proyecto_renderizar_borrador(guardar_md=True)
+        try:
+            self.aula_trabajo.insert("1.0", texto)
+        except Exception:
+            pass
+        self._proyecto_refrescar_estado_trabajo_ui()
 
     def aula_guardar_borrador(self, silencioso=False):
         proyecto = self.proyecto_estudio_actual
@@ -7074,32 +7444,28 @@ class BetaApp:
             ruta = self._proyecto_borrador_ruta(proyecto["ruta"])
             ruta.write_text(contenido, encoding="utf-8")
             if not silencioso:
-                print(f"AULA WORKSPACE v3.1.2: borrador guardado en {ruta}.")
+                print(f"CONSTRUCTOR v3.2.1: borrador manual guardado en {ruta}.")
             return True
         except Exception as error:
-            print("AULA WORKSPACE: no pude guardar borrador:", error)
+            print("CONSTRUCTOR v3.2.1: no pude guardar borrador:", error)
             return False
 
     def aula_agregar_ultima_respuesta_al_trabajo(self):
-        respuesta = (self.proyecto_ultima_respuesta or "").strip()
-        if not respuesta:
+        ok, mensaje = self._proyecto_agregar_respuesta_estructurada()
+        if not ok:
             if self._aula_esta_abierta():
-                messagebox.showinfo("Beta Aula", "Todavía no hay una respuesta de proyecto para agregar.", parent=self.ventana_modo_estudio)
+                try:
+                    messagebox.showinfo("Beta Aula", mensaje, parent=self.ventana_modo_estudio)
+                except Exception:
+                    pass
             return
-        if self.aula_trabajo is None:
-            return
-        try:
-            actual = self.aula_trabajo.get("1.0", "end").strip()
-            if actual:
-                self.aula_trabajo.insert("end", "\n\n")
-            self.aula_trabajo.insert("end", respuesta)
-            self.aula_trabajo.see("end")
-            self.aula_guardar_borrador(silencioso=True)
-            if self.aula_notebook is not None and self.aula_tab_trabajo is not None:
+        self._aula_chat_insertar("Beta", mensaje)
+        if self.aula_notebook is not None and self.aula_tab_trabajo is not None:
+            try:
                 self.aula_notebook.select(self.aula_tab_trabajo)
                 self.aula_modo_principal = "proyecto"
-        except Exception:
-            pass
+            except Exception:
+                pass
 
     # ======================================================
     # TUTORA AVANZADA DE PYTHON v2.9.1
@@ -10090,12 +10456,12 @@ Recuerdos relevantes:
         if any(x in v for x in ("termina", "terminar", "cierra", "cerrar", "salir")):
             canon = "Beta termina modo estudio"
             if normalizar(w) != normalizar(canon):
-                print(f"ASR AULA v3.1.2: recuperando comando de cierre desde Vosk='{texto_vosk}'.")
+                print(f"ASR AULA v3.2.1: recuperando comando de cierre desde Vosk='{texto_vosk}'.")
             return canon
         if any(x in v for x in ("activa", "activar", "abre", "abrir", "abrimos", "abren", "abramos", "abremos")):
             canon = "Beta activa modo estudio"
             if normalizar(w) != normalizar(canon):
-                print(f"ASR AULA v3.1.2: recuperando comando de apertura desde Vosk='{texto_vosk}'.")
+                print(f"ASR AULA v3.2.1: recuperando comando de apertura desde Vosk='{texto_vosk}'.")
             return canon
         return w
 
@@ -12931,7 +13297,7 @@ Recuerdos relevantes:
             return
 
         print("RESPUESTA FINAL DE BETA [STREAMING]:", texto)
-        # v3.1.2: recuperar el contexto ANTES de finalizar_respuesta(), que lo elimina
+        # v3.2.1: recuperar el contexto ANTES de finalizar_respuesta(), que lo elimina
         # del mapa. v3.1.2 referenciaba una variable inexistente y podía lanzar NameError.
         tipo_contexto = self.respuesta_tipo_por_id.get(respuesta_id, "general")
         # El chat de proyectos se persiste en su propio manifiesto.
@@ -14981,7 +15347,7 @@ Recuerdos relevantes:
         if self.es_dato_sensible_para_no_guardar(original):
             return False
 
-        # v3.1.2: abrir/cerrar el Aula o cambiar de proyecto son acciones operativas, no preferencias.
+        # v3.2.1: abrir/cerrar el Aula o cambiar de proyecto son acciones operativas, no preferencias.
         if any(x in t for x in ("modo estudio", "el estudio")) and any(x in t for x in ("activa", "activar", "abre", "abrir", "abrimos", "abremos", "termina", "cerrar", "cierra")):
             return False
         if any(x in t for x in ("nuevo proyecto", "abre proyecto", "abrir proyecto", "carga archivo", "agrega archivo", "agregar archivo")):
@@ -15824,6 +16190,19 @@ Recuerdos relevantes:
 
         # No agregamos demora artificial antes de enrutar la orden.
         self.root.after(0, lambda: self.ejecutar_comando(comando))
+
+    def _es_consulta_hora(self, texto):
+        """Devuelve True solo si `hora` aparece como palabra independiente.
+
+        v3.2.1: evita que frases académicas como "ahora redactemos la respuesta"
+        activen accidentalmente la ruta del reloj porque "ahora" contiene
+        la subcadena "hora".
+        """
+        t = normalizar(texto or "")
+        palabras = set(re.findall(r"[a-z0-9áéíóúüñ]+", t, flags=re.IGNORECASE))
+        if "hora" not in palabras:
+            return False
+        return not any(p in palabras for p in {"temperatura", "clima", "tiempo"})
 
     def ejecutar_comando(self, comando):
         original = comando.strip()
@@ -16690,10 +17069,9 @@ Recuerdos relevantes:
             return
 
         # 7) Hora local del computador.
-        if (
-            "hora" in texto
-            and not any(p in texto for p in ["temperatura", "clima", "tiempo"])
-        ):
+        # v3.2.1: `hora` debe ser una palabra independiente; "ahora" no es
+        # una consulta horaria y debe continuar hacia el Workspace/Constructor.
+        if self._es_consulta_hora(texto):
             self.responder(f"son las {time.strftime('%H:%M')}.", "normal")
             return
 
