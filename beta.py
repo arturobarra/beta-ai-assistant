@@ -36,7 +36,7 @@ import urllib.request
 from datetime import datetime
 
 
-BETA_VERSION = "3.2.1"
+BETA_VERSION = "3.3.2"
 
 # ==========================================================
 # BETA v3.2.1 - AULA WORKSPACE: CONSTRUCTOR ESTRUCTURADO DE TRABAJOS
@@ -3666,6 +3666,8 @@ class BetaApp:
         self.aula_trabajo_estado_tree = None
         self.aula_trabajo_progreso_var = None
         self.proyecto_ultimo_error = ""
+        # v3.3.0: última entrega Word generada desde la plantilla del proyecto.
+        self.proyecto_ultimo_word = ""
         self.proyecto_estudio_nombre_guardado = (
             self.memoria.obtener_estado("proyecto_estudio_actual", "") or ""
         ).strip()
@@ -5720,7 +5722,9 @@ class BetaApp:
         trabajo_cab = ttk.Frame(trabajo_der)
         trabajo_cab.pack(fill="x", pady=(0, 6))
         ttk.Label(trabajo_cab, text="Constructor / borrador", font=("Segoe UI", 11, "bold")).pack(side="left")
-        ttk.Button(trabajo_cab, text="Guardar borrador", command=self.aula_guardar_borrador).pack(side="right")
+        ttk.Button(trabajo_cab, text="Generar Word final…", command=self.aula_generar_word_final).pack(side="right")
+        ttk.Button(trabajo_cab, text="Datos de entrega…", command=self.aula_editar_datos_entrega).pack(side="right", padx=6)
+        ttk.Button(trabajo_cab, text="Guardar borrador", command=self.aula_guardar_borrador).pack(side="right", padx=6)
         ttk.Button(
             trabajo_cab, text="Agregar respuesta al foco actual",
             command=self.aula_agregar_ultima_respuesta_al_trabajo,
@@ -5768,7 +5772,7 @@ class BetaApp:
         self._crear_ventana_modo_estudio()
         self._aula_actualizar_encabezado()
         self._aula_refrescar_ejercicio()
-        print("MODO ESTUDIO v3.2.1: Aula Workspace activa.")
+        print("MODO ESTUDIO v3.3.2: Aula Workspace activa.")
         if anunciar:
             self.responder(
                 "modo estudio activado. Abrí el aula de Beta. Las explicaciones, ejemplos y ejercicios quedarán visibles en la pizarra mientras seguimos conversando.",
@@ -5803,7 +5807,7 @@ class BetaApp:
         self.aula_chat_entrada = None
         self.aula_archivos_tree = None
         self.aula_trabajo = None
-        print("MODO ESTUDIO v3.2.1: Aula Workspace cerrada.")
+        print("MODO ESTUDIO v3.3.2: Aula Workspace cerrada.")
         if anunciar:
             self.responder(
                 "modo estudio finalizado. Conservaré el progreso y el tema de Python para retomarlos después.",
@@ -5926,7 +5930,7 @@ class BetaApp:
                 pass
             self.tutor_python_respuesta_timer = None
         self.tutor_python_respuesta_buffer = []
-        print(f"AULA WORKSPACE v3.2.1: respuesta de ejercicio escrita='{respuesta}'")
+        print(f"AULA WORKSPACE v3.3.2: respuesta de ejercicio escrita='{respuesta}'")
         self._aula_mostrar_respuesta_usuario("[Respuesta escrita] " + respuesta)
         try:
             self.memoria.guardar_conversacion("Señor", respuesta)
@@ -6001,6 +6005,308 @@ class BetaApp:
     def _proyecto_trabajo_ruta(self, ruta_proyecto):
         return Path(ruta_proyecto) / "trabajo.json"
 
+    def _proyecto_entregas_dir(self, ruta_proyecto):
+        return Path(ruta_proyecto) / "entregas"
+
+    def _proyecto_detectar_plantilla_word(self):
+        """Busca el DOCX del proyecto que más se parece al formato institucional de entrega."""
+        proyecto = self.proyecto_estudio_actual or {}
+        ruta_proyecto = Path(proyecto.get("ruta", "")) if proyecto.get("ruta") else None
+        if not ruta_proyecto:
+            return None
+        candidatos = []
+        for archivo in proyecto.get("archivos", []) or []:
+            if str(archivo.get("tipo", "")).lower() != "docx":
+                continue
+            rel = archivo.get("ruta")
+            if not rel:
+                continue
+            ruta = ruta_proyecto / rel
+            if not ruta.exists():
+                continue
+            texto = ""
+            texto_rel = archivo.get("texto")
+            if texto_rel:
+                try:
+                    texto = (ruta_proyecto / texto_rel).read_text(encoding="utf-8", errors="replace")
+                except Exception:
+                    texto = ""
+            if not texto:
+                try:
+                    texto = self._proyecto_extraer_texto(ruta)
+                except Exception:
+                    texto = ""
+            n = normalizar(texto)
+            claves = (
+                "identificacion del trabajo", "introduccion", "desarrollo",
+                "conclusion", "bibliografia", "texto de introduccion",
+                "texto de desarrollo", "texto de conclusion",
+            )
+            score = sum(1 for k in claves if k in n)
+            # El nombre del archivo aporta una pista, pero nunca reemplaza el contenido.
+            nombre_n = normalizar(archivo.get("nombre", ""))
+            if "formato" in nombre_n or "plantilla" in nombre_n:
+                score += 2
+            candidatos.append((score, ruta, archivo.get("nombre", ruta.name)))
+        if not candidatos:
+            return None
+        candidatos.sort(key=lambda x: (x[0], x[2]), reverse=True)
+        return candidatos[0][1] if candidatos[0][0] >= 4 else None
+
+    def _proyecto_preflight_word(self):
+        """Valida que exista proyecto, plantilla y todas las secciones principales completas."""
+        if not self.proyecto_estudio_actual:
+            return False, "Primero debe abrir un proyecto académico.", None
+        if not isinstance(self.proyecto_trabajo_estructurado, dict):
+            self._proyecto_cargar_trabajo_estructurado()
+        plantilla = self._proyecto_detectar_plantilla_word()
+        if plantilla is None:
+            return False, "No encontré una plantilla Word compatible dentro de los archivos del proyecto.", None
+        completos, total, _pct, componentes = self._proyecto_progreso_trabajo()
+        pendientes = [nombre for nombre, ok in componentes if not ok]
+        if completos < total:
+            return (
+                False,
+                "El trabajo todavía no está completo. Falta: " + ", ".join(pendientes) + ".",
+                plantilla,
+            )
+        meta = (self.proyecto_trabajo_estructurado or {}).get("metadatos") or {}
+        etiquetas_meta = {
+            "estudiante": "Nombre y apellido",
+            "carrera": "Carrera",
+            "docente": "Docente Online",
+            "fecha_entrega": "Fecha de entrega",
+        }
+        faltan_meta = [etiqueta for clave, etiqueta in etiquetas_meta.items() if not str(meta.get(clave, "")).strip()]
+        if faltan_meta:
+            return False, "Faltan datos de entrega: " + ", ".join(faltan_meta) + ".", plantilla
+        return True, "Trabajo completo, datos de entrega completos y plantilla Word disponible.", plantilla
+
+    def _docx_reemplazar_parrafo_simple(self, parrafo, texto):
+        """Reemplaza el contenido conservando el estilo del párrafo de la plantilla."""
+        try:
+            parrafo.clear()
+        except Exception:
+            # Compatibilidad con versiones antiguas de python-docx.
+            for run in list(parrafo.runs):
+                run.text = ""
+        parrafo.add_run((texto or "").strip())
+
+    def _docx_reemplazar_desarrollo(self, parrafo, preguntas):
+        """Inserta preguntas y respuestas en el bloque Desarrollo sin alterar la plantilla original."""
+        try:
+            parrafo.clear()
+        except Exception:
+            for run in list(parrafo.runs):
+                run.text = ""
+
+        def clave_num(x):
+            try:
+                return (0, int(x))
+            except Exception:
+                return (1, str(x))
+
+        numeros = sorted((preguntas or {}).keys(), key=clave_num)
+        for pos, numero in enumerate(numeros):
+            item = preguntas[numero]
+            r = parrafo.add_run(f"Pregunta {numero}")
+            r.bold = True
+            parrafo.add_run("\n")
+            if item.get("enunciado"):
+                r = parrafo.add_run(item.get("enunciado", "").strip())
+                r.italic = True
+                parrafo.add_run("\n\n")
+            r = parrafo.add_run("Respuesta")
+            r.bold = True
+            parrafo.add_run("\n")
+            parrafo.add_run(item.get("respuesta", "").strip())
+            if pos < len(numeros) - 1:
+                parrafo.add_run("\n\n")
+
+    def _proyecto_nombre_word_salida(self):
+        datos = self.proyecto_trabajo_estructurado or {}
+        proyecto = self.proyecto_estudio_actual or {}
+        base = self._proyecto_nombre_seguro(proyecto.get("nombre") or "trabajo")
+        modulo = re.sub(r"[^0-9A-Za-z_-]+", "", str(datos.get("modulo", "")).strip())
+        suf = f"_TI_M{modulo}" if modulo else "_TI"
+        return f"{base}{suf}_FINAL.docx"
+
+    def _proyecto_elegir_destino_word(self):
+        """Abre Guardar como y devuelve la ruta elegida por el usuario o None si cancela."""
+        if not self.proyecto_estudio_actual:
+            return None
+        ruta_proyecto = Path(self.proyecto_estudio_actual["ruta"])
+        entregas = self._proyecto_entregas_dir(ruta_proyecto)
+        entregas.mkdir(parents=True, exist_ok=True)
+        parent = self.ventana_modo_estudio if self._aula_esta_abierta() else self.root
+        try:
+            elegido = filedialog.asksaveasfilename(
+                parent=parent,
+                title="Guardar trabajo final de Beta",
+                initialdir=str(entregas),
+                initialfile=self._proyecto_nombre_word_salida(),
+                defaultextension=".docx",
+                filetypes=[("Documento Word", "*.docx")],
+            )
+        except Exception as error:
+            print("EXPORTADOR WORD v3.3.2: no pude abrir Guardar como:", error)
+            return None
+        if not elegido:
+            return None
+        salida = Path(elegido)
+        if salida.suffix.lower() != ".docx":
+            salida = salida.with_suffix(".docx")
+        return salida
+
+    def _proyecto_generar_word_final(self, permitir_incompleto=False, ruta_salida=None, elegir_destino=False):
+        """Genera una COPIA DOCX desde la plantilla y nunca modifica el archivo fuente."""
+        if not self.proyecto_estudio_actual:
+            return False, "Primero debe abrir un proyecto académico.", None
+        if not isinstance(self.proyecto_trabajo_estructurado, dict):
+            self._proyecto_cargar_trabajo_estructurado()
+        datos = self.proyecto_trabajo_estructurado or {}
+        plantilla = self._proyecto_detectar_plantilla_word()
+        if plantilla is None:
+            return False, "No encontré una plantilla Word compatible dentro del proyecto.", None
+        if not permitir_incompleto:
+            ok_pre, msg_pre, _ = self._proyecto_preflight_word()
+            if not ok_pre:
+                return False, msg_pre, None
+        try:
+            from docx import Document
+        except Exception:
+            return False, "Falta la dependencia python-docx para generar documentos Word.", None
+
+        ruta_proyecto = Path(self.proyecto_estudio_actual["ruta"])
+        entregas = self._proyecto_entregas_dir(ruta_proyecto)
+        entregas.mkdir(parents=True, exist_ok=True)
+        if ruta_salida is not None:
+            salida = Path(ruta_salida)
+            if salida.suffix.lower() != ".docx":
+                salida = salida.with_suffix(".docx")
+        elif elegir_destino:
+            salida = self._proyecto_elegir_destino_word()
+            if salida is None:
+                return False, "Exportación Word cancelada. No se creó ningún archivo.", None
+        else:
+            salida = entregas / self._proyecto_nombre_word_salida()
+            if salida.exists():
+                sello = datetime.now().strftime("%Y%m%d_%H%M%S")
+                salida = salida.with_name(f"{salida.stem}_{sello}{salida.suffix}")
+
+        try:
+            plantilla_resuelta = Path(plantilla).resolve()
+            salida_resuelta = Path(salida).resolve()
+        except Exception:
+            plantilla_resuelta = Path(plantilla)
+            salida_resuelta = Path(salida)
+        if salida_resuelta == plantilla_resuelta:
+            return False, "No puedo sobrescribir la plantilla original. Elija otro nombre o ubicación.", None
+        try:
+            salida.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(plantilla, salida)
+            doc = Document(str(salida))
+
+            # Completar los datos académicos que Beta conoce de forma verificable.
+            meta = datos.get("metadatos") if isinstance(datos.get("metadatos"), dict) else {}
+            for tabla in doc.tables:
+                for fila in tabla.rows:
+                    if len(fila.cells) < 2:
+                        continue
+                    etiqueta = normalizar(fila.cells[0].text or "")
+                    valor = None
+                    if etiqueta.startswith("modulo") and datos.get("modulo"):
+                        valor = str(datos.get("modulo"))
+                    elif etiqueta.startswith("asignatura") and datos.get("curso"):
+                        valor = str(datos.get("curso"))
+                    elif etiqueta in {"ra", "resultado de aprendizaje"} and datos.get("resultado_aprendizaje"):
+                        valor = str(datos.get("resultado_aprendizaje"))
+                    elif etiqueta.startswith("docente") and meta.get("docente"):
+                        valor = str(meta.get("docente"))
+                    elif etiqueta.startswith("fecha de entrega") and meta.get("fecha_entrega"):
+                        valor = str(meta.get("fecha_entrega"))
+                    if valor is not None:
+                        fila.cells[1].text = valor
+
+            # Si en el futuro se registran datos del estudiante, completar la primera fila libre.
+            estudiante = str(meta.get("estudiante", "")).strip()
+            carrera = str(meta.get("carrera", "")).strip()
+            if estudiante or carrera:
+                for tabla in doc.tables:
+                    if not tabla.rows or len(tabla.rows[0].cells) < 2:
+                        continue
+                    cab = normalizar(" ".join(c.text for c in tabla.rows[0].cells))
+                    if "nombre y apellido" in cab and "carrera" in cab and len(tabla.rows) > 1:
+                        if estudiante:
+                            tabla.rows[1].cells[0].text = estudiante
+                        if carrera:
+                            tabla.rows[1].cells[1].text = carrera
+                        break
+
+            intro = (datos.get("introduccion") or {}).get("texto", "").strip()
+            conclusion = (datos.get("conclusion") or {}).get("texto", "").strip()
+            bibliografia = (datos.get("bibliografia") or {}).get("texto", "").strip()
+            reemplazos = {
+                "texto de introduccion": intro or "[Pendiente]",
+                "texto de conclusion": conclusion or "[Pendiente]",
+                "ejemplo de formato apa": bibliografia or "[Pendiente]",
+            }
+            desarrollo_hecho = False
+            encontrados = set()
+            for parrafo in doc.paragraphs:
+                n = normalizar((parrafo.text or "").strip().rstrip("."))
+                if n == "texto de desarrollo":
+                    self._docx_reemplazar_desarrollo(parrafo, datos.get("preguntas") or {})
+                    desarrollo_hecho = True
+                    encontrados.add("desarrollo")
+                    continue
+                for clave, texto in reemplazos.items():
+                    if n == clave:
+                        self._docx_reemplazar_parrafo_simple(parrafo, texto)
+                        encontrados.add(clave)
+                        break
+
+            faltantes_plantilla = []
+            if "texto de introduccion" not in encontrados:
+                faltantes_plantilla.append("Introducción")
+            if not desarrollo_hecho:
+                faltantes_plantilla.append("Desarrollo")
+            if "texto de conclusion" not in encontrados:
+                faltantes_plantilla.append("Conclusión")
+            if "ejemplo de formato apa" not in encontrados:
+                faltantes_plantilla.append("Bibliografía")
+            if faltantes_plantilla:
+                try:
+                    salida.unlink(missing_ok=True)
+                except Exception:
+                    pass
+                return False, "La plantilla Word no contiene los marcadores esperados para: " + ", ".join(faltantes_plantilla) + ".", None
+
+            doc.save(str(salida))
+            datos["ultima_exportacion_word"] = str(salida)
+            historial = datos.get("exportaciones_word")
+            if not isinstance(historial, list):
+                historial = []
+            historial.append({
+                "ruta": str(salida),
+                "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "plantilla": str(plantilla),
+            })
+            datos["exportaciones_word"] = historial[-20:]
+            self.proyecto_trabajo_estructurado = datos
+            self._proyecto_guardar_trabajo_estructurado()
+            self.proyecto_ultimo_word = str(salida)
+            print(f"EXPORTADOR WORD v3.3.2: generado {salida}")
+            return True, f"Generé el Word final en la ubicación que eligió: {salida}", salida
+        except Exception as error:
+            try:
+                if salida.exists():
+                    salida.unlink()
+            except Exception:
+                pass
+            print("EXPORTADOR WORD v3.3.2: error:", error)
+            return False, f"No pude generar el documento Word: {error}", None
+
     def _proyecto_manifest_nuevo(self, nombre, ruta):
         ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         return {
@@ -6035,6 +6341,12 @@ class BetaApp:
             "modulo": e.get("modulo", ""),
             "curso": e.get("curso", ""),
             "resultado_aprendizaje": e.get("resultado_aprendizaje", ""),
+            "metadatos": {
+                "estudiante": "",
+                "carrera": "",
+                "docente": "",
+                "fecha_entrega": "",
+            },
             "introduccion": {"texto": "", "estado": "pendiente", "fuentes": []},
             "preguntas": preguntas,
             "conclusion": {"texto": "", "estado": "pendiente", "fuentes": []},
@@ -6053,7 +6365,7 @@ class BetaApp:
             try:
                 datos = json.loads(ruta.read_text(encoding="utf-8"))
             except Exception as error:
-                print("CONSTRUCTOR v3.2.1: trabajo.json inválido; reconstruyendo:", error)
+                print("CONSTRUCTOR v3.3.2: trabajo.json inválido; reconstruyendo:", error)
         if not isinstance(datos, dict):
             datos = self._proyecto_trabajo_base()
             legacy = self._proyecto_borrador_ruta(proyecto["ruta"])
@@ -6083,6 +6395,12 @@ class BetaApp:
                 actual[clave] = base.get(clave)
             else:
                 actual.setdefault(clave, "")
+        meta = actual.get("metadatos")
+        if not isinstance(meta, dict):
+            meta = {}
+        for clave_meta in ("estudiante", "carrera", "docente", "fecha_entrega"):
+            meta.setdefault(clave_meta, "")
+        actual["metadatos"] = meta
         for seccion in ("introduccion", "conclusion", "bibliografia"):
             valor = actual.get(seccion)
             if not isinstance(valor, dict):
@@ -6125,7 +6443,7 @@ class BetaApp:
             ruta.write_text(json.dumps(datos, ensure_ascii=False, indent=2), encoding="utf-8")
             return True
         except Exception as error:
-            print("CONSTRUCTOR v3.2.1: no pude guardar trabajo.json:", error)
+            print("CONSTRUCTOR v3.3.2: no pude guardar trabajo.json:", error)
             return False
 
     def _proyecto_ultima_respuesta_fuentes(self):
@@ -6135,7 +6453,131 @@ class BetaApp:
                 return list(entrada.get("fuentes") or [])
         return []
 
+    def _proyecto_secciones_mencionadas(self, consulta):
+        """Devuelve secciones explícitas mencionadas en una orden del Workspace."""
+        t = normalizar(consulta or "")
+        encontradas = []
+        reglas = (
+            ("introduccion", ("introduccion", "introduction")),
+            ("conclusion", ("conclusion",)),
+            ("bibliografia", ("bibliografia", "referencias")),
+        )
+        for clave, aliases in reglas:
+            if any(a in t for a in aliases):
+                encontradas.append(clave)
+        return encontradas
+
+    def _proyecto_actualizar_foco_seccion_desde_consulta(self, consulta):
+        """Mantiene el foco cuando el Señor habla de Introducción/Conclusión/Bibliografía."""
+        t = normalizar(consulta or "")
+        secciones = self._proyecto_secciones_mencionadas(consulta)
+        if len(secciones) != 1:
+            return ""
+        acciones = (
+            "trabaja", "trabajemos", "vamos con", "hacer", "haz", "redacta", "redactemos",
+            "genera", "generar", "prepara", "preparar", "agrega", "agregar", "guarda", "guardar",
+            "incorpora", "incorporar", "anade", "añade",
+        )
+        if not any(a in t for a in acciones):
+            return ""
+        clave = secciones[0]
+        self.proyecto_seccion_foco = clave
+        self.proyecto_pregunta_foco = ""
+        return clave
+
+    def _proyecto_cachear_borrador_seccion(self, clave, texto):
+        clave = normalizar(clave or "")
+        if clave not in {"introduccion", "conclusion", "bibliografia"}:
+            return
+        texto = (texto or "").strip()
+        if not texto:
+            return
+        cache = getattr(self, "proyecto_borradores_secciones", None)
+        if not isinstance(cache, dict):
+            cache = {}
+            self.proyecto_borradores_secciones = cache
+        cache[clave] = texto
+
+    def _proyecto_borrador_seccion(self, clave):
+        cache = getattr(self, "proyecto_borradores_secciones", None)
+        if not isinstance(cache, dict):
+            return ""
+        return str(cache.get(normalizar(clave or ""), "") or "").strip()
+
+    def _proyecto_redactar_seccion_local(self, clave):
+        """Redacta secciones generales usando solo la estructura/documentos ya cargados."""
+        clave = normalizar(clave or "")
+        datos = self.proyecto_trabajo_estructurado or {}
+        if clave not in {"introduccion", "conclusion", "bibliografia"}:
+            return "", []
+        fuentes = []
+        try:
+            elems = self._proyecto_elementos_trabajo_local()
+        except Exception:
+            elems = {}
+        for grupo in ("preguntas", "instrucciones", "estructura"):
+            for item in (elems.get(grupo) or []):
+                ref = item.get("fuente") if isinstance(item, dict) else ""
+                if ref and ref not in fuentes:
+                    fuentes.append(ref)
+        modulo = str(datos.get("modulo") or elems.get("modulo") or "").strip()
+        curso = str(datos.get("curso") or elems.get("curso") or "").strip()
+        ra = str(datos.get("resultado_aprendizaje") or elems.get("resultado_aprendizaje") or "").strip()
+        preguntas = datos.get("preguntas") or {}
+        enunciados = [str(v.get("enunciado") or "").strip() for v in preguntas.values() if isinstance(v, dict)]
+        respuestas = [str(v.get("respuesta") or "").strip() for v in preguntas.values() if isinstance(v, dict) and str(v.get("respuesta") or "").strip()]
+
+        if clave == "introduccion":
+            partes = []
+            inicio = "El presente trabajo"
+            if modulo:
+                inicio += f" corresponde al Módulo {modulo}"
+            if curso:
+                inicio += f" de la asignatura {curso}"
+            inicio += "."
+            partes.append(inicio)
+            if ra:
+                partes.append(f"Su desarrollo se orienta al resultado de aprendizaje: {ra}")
+            if enunciados:
+                if len(enunciados) >= 2:
+                    partes.append("La actividad se desarrolla en dos etapas: primero se aborda el modelado del proceso solicitado en la pregunta 1 y, posteriormente, la arquitectura de servicios requerida en la pregunta 2.")
+                else:
+                    partes.append("La actividad se desarrolla a partir del enunciado y de los requisitos indicados en la pregunta del trabajo.")
+            partes.append("A lo largo del desarrollo se organizan los antecedentes del caso, los productos solicitados y las respuestas correspondientes, manteniendo como base los documentos proporcionados para el proyecto.")
+            texto = " ".join(partes)
+        elif clave == "conclusion":
+            if respuestas:
+                texto = (
+                    "A partir del desarrollo realizado, fue posible organizar los requisitos del trabajo y relacionarlos con el escenario planteado en los documentos del proyecto. "
+                    "El proceso permitió abordar de manera ordenada las actividades solicitadas, desde el análisis del flujo de revisión técnica hasta la identificación de los elementos requeridos para la arquitectura orientada a servicios. "
+                    "En conjunto, las respuestas desarrolladas permiten dar cumplimiento a las preguntas del módulo y mantener coherencia con el resultado de aprendizaje indicado en la actividad."
+                )
+            else:
+                texto = (
+                    "La conclusión debe redactarse una vez desarrolladas las preguntas del trabajo. Actualmente no hay respuestas suficientes guardadas en el Constructor para elaborar una conclusión respaldada."
+                )
+        else:
+            archivos = []
+            proyecto = self.proyecto_estudio_actual or {}
+            for item in proyecto.get("archivos", []) or []:
+                nombre = str(item.get("nombre") or "").strip() if isinstance(item, dict) else ""
+                if nombre and nombre not in archivos:
+                    archivos.append(nombre)
+            if archivos:
+                lineas = []
+                for nombre in archivos:
+                    stem = Path(nombre).stem
+                    lineas.append(f"{stem}. (s. f.). Material académico proporcionado para el proyecto.")
+                texto = "\n".join(lineas)
+            else:
+                texto = "No hay archivos registrados en el proyecto para construir la bibliografía."
+        self._proyecto_cachear_borrador_seccion(clave, texto)
+        return texto, fuentes[:8]
+
     def _proyecto_agregar_respuesta_estructurada(self, respuesta=None, seccion=None):
+        seccion_norm = normalizar(seccion or self.proyecto_seccion_foco or "")
+        if respuesta is None and seccion_norm in {"introduccion", "conclusion", "bibliografia"}:
+            respuesta = self._proyecto_borrador_seccion(seccion_norm) or self.proyecto_ultima_respuesta
         respuesta = (respuesta if respuesta is not None else self.proyecto_ultima_respuesta or "").strip()
         if not respuesta:
             return False, "Todavía no hay una respuesta de Beta para agregar al trabajo."
@@ -6177,7 +6619,7 @@ class BetaApp:
         self._proyecto_guardar_trabajo_estructurado()
         self._proyecto_renderizar_borrador(guardar_md=True)
         self._proyecto_refrescar_estado_trabajo_ui()
-        print(f"CONSTRUCTOR v3.2.1: respuesta agregada a {destino}.")
+        print(f"CONSTRUCTOR v3.3.2: respuesta agregada a {destino}.")
         return True, f"Agregué la respuesta a {destino}."
 
     def _proyecto_renderizar_borrador(self, guardar_md=False):
@@ -6221,7 +6663,7 @@ class BetaApp:
             try:
                 self._proyecto_borrador_ruta(self.proyecto_estudio_actual["ruta"]).write_text(texto, encoding="utf-8")
             except Exception as error:
-                print("CONSTRUCTOR v3.2.1: no pude actualizar borrador.md:", error)
+                print("CONSTRUCTOR v3.3.2: no pude actualizar borrador.md:", error)
         return texto
 
     def _proyecto_progreso_trabajo(self):
@@ -6304,6 +6746,43 @@ class BetaApp:
         t = normalizar(consulta or "")
         if not t:
             return "", []
+
+        # v3.3.2: Introducción/Conclusión/Bibliografía se guardan como secciones reales, no como chat general.
+        secciones = self._proyecto_secciones_mencionadas(consulta)
+        if len(secciones) == 2 and set(secciones) == {"conclusion", "bibliografia"} and any(x in t for x in ("haz lo mismo", "redacta", "genera", "prepara")):
+            con, f1 = self._proyecto_redactar_seccion_local("conclusion")
+            bib, f2 = self._proyecto_redactar_seccion_local("bibliografia")
+            self.proyecto_seccion_foco = "conclusion"
+            self.proyecto_pregunta_foco = ""
+            texto = (
+                "Preparé por separado la Conclusión y la Bibliografía para que pueda revisarlas.\n\n"
+                "CONCLUSIÓN\n" + con + "\n\nBIBLIOGRAFÍA\n" + bib +
+                "\n\nSi están correctas, diga: Beta, agrega la conclusión y la bibliografía al trabajo."
+            )
+            return texto, list(dict.fromkeys((f1 or []) + (f2 or [])))
+        if len(secciones) == 2 and set(secciones) == {"conclusion", "bibliografia"} and any(x in t for x in ("agrega", "agregar", "guarda", "guardar", "incorpora")):
+            ok1, msg1 = self._proyecto_agregar_respuesta_estructurada(seccion="conclusion")
+            ok2, msg2 = self._proyecto_agregar_respuesta_estructurada(seccion="bibliografia")
+            if ok1 and ok2:
+                return "Agregué la Conclusión y la Bibliografía a sus secciones del trabajo.", []
+            return f"No pude completar ambas secciones. {msg1} {msg2}", []
+        if len(secciones) == 1 and any(x in t for x in ("agrega", "agregar", "guarda", "guardar", "incorpora", "incorporar", "anade", "añade")) and "trabajo" in t:
+            clave = secciones[0]
+            ok, msg = self._proyecto_agregar_respuesta_estructurada(seccion=clave)
+            return msg, []
+        if any(x in t for x in ("redactala y agregala", "redactalo y agregalo", "guardala en el trabajo", "agregala al trabajo")):
+            foco = normalizar(self.proyecto_seccion_foco or "")
+            if foco in {"introduccion", "conclusion", "bibliografia"}:
+                ok, msg = self._proyecto_agregar_respuesta_estructurada(seccion=foco)
+                return msg, []
+
+        if any(x in t for x in (
+            "genera el trabajo final en word", "generar el trabajo final en word",
+            "genera trabajo final en word", "exporta el trabajo a word",
+            "exportar el trabajo a word", "crea el word final", "crear el word final",
+        )):
+            ok, msg, _ruta = self._proyecto_generar_word_final(permitir_incompleto=False, elegir_destino=True)
+            return msg, []
         if any(x in t for x in (
             "agrega esta respuesta al trabajo", "agregar esta respuesta al trabajo",
             "agrega la respuesta al trabajo", "agregar la respuesta al trabajo",
@@ -7070,6 +7549,12 @@ class BetaApp:
             "ahora redactemos", "redactemos la respuesta", "redacta la respuesta",
             "desarrolla la respuesta", "hagamos la respuesta", "escribamos la respuesta",
             "prepara la respuesta", "redactemos el punto", "redactemos la pregunta",
+            "trabaja la introduccion", "trabajemos la introduccion", "redacta la introduccion",
+            "genera una introduccion", "genera la introduccion", "prepara la introduccion",
+            "trabaja la conclusion", "trabajemos la conclusion", "redacta la conclusion",
+            "genera una conclusion", "genera la conclusion", "prepara la conclusion",
+            "trabaja la bibliografia", "trabajemos la bibliografia", "redacta la bibliografia",
+            "genera una bibliografia", "genera la bibliografia", "prepara la bibliografia",
         ))
 
     def _proyecto_escenario_actividad_local(self):
@@ -7249,14 +7734,17 @@ class BetaApp:
         self._aula_chat_insertar("Señor", consulta)
         self._proyecto_registrar_chat("Señor", consulta)
 
-        # v3.2.1: acciones del Constructor se resuelven antes de consultar documentos/IA.
+        # v3.3.2: detectar primero si el Señor está trabajando una sección general.
+        self._proyecto_actualizar_foco_seccion_desde_consulta(consulta)
+
+        # Acciones del Constructor se resuelven antes de consultar documentos/IA.
         respuesta_constructor, fuentes_constructor = self._proyecto_accion_constructor_local(consulta)
         if respuesta_constructor:
             self.proyecto_ultima_respuesta = respuesta_constructor
             self._proyecto_registrar_chat("Beta", respuesta_constructor, fuentes_constructor)
             self._aula_chat_insertar("Beta", respuesta_constructor, fuentes_constructor)
             self.responder(respuesta_constructor, "normal", tipo_contexto="proyecto")
-            print(f"CONSTRUCTOR v3.2.1: acción local resuelta; foco={self.proyecto_seccion_foco or self.proyecto_pregunta_foco}")
+            print(f"CONSTRUCTOR v3.3.2: acción local resuelta; foco={self.proyecto_seccion_foco or self.proyecto_pregunta_foco}")
             return
 
         # v3.2.1: las preguntas sobre el funcionamiento de Beta no se buscan en el PDF.
@@ -7266,7 +7754,7 @@ class BetaApp:
             self._proyecto_registrar_chat("Beta", respuesta_meta, [])
             self._aula_chat_insertar("Beta", respuesta_meta, [])
             self.responder(respuesta_meta, "normal", tipo_contexto="proyecto")
-            print("AULA WORKSPACE v3.2.1: consulta meta respondida localmente.")
+            print("AULA WORKSPACE v3.3.2: consulta meta respondida localmente.")
             return
 
         # v3.2.1: preguntas estructurales del trabajo no dependen de Ollama.
@@ -7279,8 +7767,22 @@ class BetaApp:
             resumen_voz_fn = getattr(self, "_proyecto_resumen_voz", None)
             voz = resumen_voz_fn(respuesta_local, consulta) if callable(resumen_voz_fn) else respuesta_local
             self.responder(voz, "normal", tipo_contexto="proyecto")
-            print(f"AULA WORKSPACE v3.2.1: análisis local resuelto; fuentes={fuentes_locales}")
+            print(f"AULA WORKSPACE v3.3.2: análisis local resuelto; fuentes={fuentes_locales}")
             return
+
+        if self._proyecto_es_pedir_redaccion(consulta):
+            foco_sec = normalizar(self.proyecto_seccion_foco or "")
+            if foco_sec in {"introduccion", "conclusion", "bibliografia"}:
+                redactada, fuentes_sec = self._proyecto_redactar_seccion_local(foco_sec)
+                if redactada:
+                    self.proyecto_ultima_respuesta = redactada
+                    self.proyecto_ultimo_error = ""
+                    self._proyecto_registrar_chat("Beta", redactada, fuentes_sec)
+                    self._aula_chat_insertar("Beta", redactada, fuentes_sec)
+                    voz = f"Señor, preparé la {foco_sec}. La dejé completa en el chat para que la revise antes de agregarla al trabajo."
+                    self.responder(voz, "normal", tipo_contexto="proyecto")
+                    print(f"AULA WORKSPACE v3.3.2: borrador local de sección={foco_sec} listo.")
+                    return
 
         if self._proyecto_es_pedir_explicacion(consulta) or self._proyecto_es_pedir_redaccion(consulta):
             try:
@@ -7299,7 +7801,7 @@ class BetaApp:
                     resumen_voz_fn = getattr(self, "_proyecto_resumen_voz", None)
                     voz = resumen_voz_fn(guiada, consulta) if callable(resumen_voz_fn) else guiada
                     self.responder(voz, "normal", tipo_contexto="proyecto")
-                    print(f"AULA WORKSPACE v3.2.1: seguimiento guiado local pregunta={self.proyecto_pregunta_foco} fuentes={fuentes_guiada}")
+                    print(f"AULA WORKSPACE v3.3.2: seguimiento guiado local pregunta={self.proyecto_pregunta_foco} fuentes={fuentes_guiada}")
                     return
 
         self.proyecto_consulta_en_curso = True
@@ -7348,7 +7850,7 @@ class BetaApp:
                         {"role": "user", "content": (
                             f"PROYECTO: {proyecto.get('nombre','')}\n\n"
                             f"HISTORIAL RECIENTE DEL PROYECTO:\n{historial_txt}\n\n"
-                            f"PREGUNTA O FOCO ACTUAL DEL TRABAJO: {getattr(self, 'proyecto_pregunta_foco', '') or 'no fijado'}\n\n"
+                            f"PREGUNTA O FOCO ACTUAL DEL TRABAJO: {getattr(self, 'proyecto_seccion_foco', '') or getattr(self, 'proyecto_pregunta_foco', '') or 'no fijado'}\n\n"
                             f"PREGUNTA DEL SEÑOR:\n{consulta}\n\n"
                             f"DOCUMENTOS RECUPERADOS:\n{contexto}"
                         )},
@@ -7368,10 +7870,10 @@ class BetaApp:
                             for ref in fuentes_guiada:
                                 if ref not in fuentes_labels:
                                     fuentes_labels.append(ref)
-                            print("AULA WORKSPACE v3.2.1: fallback guiado por pregunta activa tras fallo/timeout de Ollama.")
+                            print("AULA WORKSPACE v3.3.2: fallback guiado por pregunta activa tras fallo/timeout de Ollama.")
                         else:
                             respuesta = self._proyecto_fallback_documental(consulta, fuentes)
-                            print("AULA WORKSPACE v3.2.1: fallback documental activado tras fallo/timeout de Ollama.")
+                            print("AULA WORKSPACE v3.3.2: fallback documental activado tras fallo/timeout de Ollama.")
                     else:
                         self.proyecto_ultimo_error = ""
             except Exception as error:
@@ -7390,6 +7892,9 @@ class BetaApp:
                 self.proyecto_consulta_en_curso = False
 
             self.proyecto_ultima_respuesta = respuesta
+            foco_sec = normalizar(getattr(self, "proyecto_seccion_foco", "") or "")
+            if foco_sec in {"introduccion", "conclusion", "bibliografia"}:
+                self._proyecto_cachear_borrador_seccion(foco_sec, respuesta)
             self._proyecto_registrar_chat("Beta", respuesta, fuentes_labels)
             def mostrar():
                 self._aula_chat_insertar("Beta", respuesta, fuentes_labels)
@@ -7413,7 +7918,7 @@ class BetaApp:
             self.aula_chat_entrada.delete("1.0", "end")
         except Exception:
             pass
-        print(f"AULA WORKSPACE v3.2.1: consulta escrita='{consulta}'")
+        print(f"AULA WORKSPACE v3.3.2: consulta escrita='{consulta}'")
         self.consultar_proyecto_estudio_async(consulta, desde_voz=False)
 
     def _aula_cargar_borrador(self):
@@ -7444,11 +7949,87 @@ class BetaApp:
             ruta = self._proyecto_borrador_ruta(proyecto["ruta"])
             ruta.write_text(contenido, encoding="utf-8")
             if not silencioso:
-                print(f"CONSTRUCTOR v3.2.1: borrador manual guardado en {ruta}.")
+                print(f"CONSTRUCTOR v3.3.2: borrador manual guardado en {ruta}.")
             return True
         except Exception as error:
-            print("CONSTRUCTOR v3.2.1: no pude guardar borrador:", error)
+            print("CONSTRUCTOR v3.3.2: no pude guardar borrador:", error)
             return False
+
+    def aula_editar_datos_entrega(self):
+        if not self.proyecto_estudio_actual:
+            try:
+                messagebox.showinfo("Beta Aula", "Primero abra un proyecto académico.", parent=self.ventana_modo_estudio)
+            except Exception:
+                pass
+            return
+        if not isinstance(self.proyecto_trabajo_estructurado, dict):
+            self._proyecto_cargar_trabajo_estructurado()
+        datos = self.proyecto_trabajo_estructurado or {}
+        meta = datos.get("metadatos") if isinstance(datos.get("metadatos"), dict) else {}
+
+        win = tk.Toplevel(self.ventana_modo_estudio)
+        win.title("Datos de entrega del trabajo")
+        win.geometry("560x330")
+        win.transient(self.ventana_modo_estudio)
+        marco = ttk.Frame(win, padding=16)
+        marco.pack(fill="both", expand=True)
+        campos = [
+            ("estudiante", "Nombre y apellido"),
+            ("carrera", "Carrera"),
+            ("docente", "Docente Online"),
+            ("fecha_entrega", "Fecha de entrega"),
+        ]
+        variables = {}
+        for fila, (clave, etiqueta) in enumerate(campos):
+            ttk.Label(marco, text=etiqueta + ":").grid(row=fila, column=0, sticky="w", pady=7)
+            var = tk.StringVar(value=str(meta.get(clave, "")))
+            variables[clave] = var
+            ttk.Entry(marco, textvariable=var, width=46).grid(row=fila, column=1, sticky="ew", padx=(12, 0), pady=7)
+        marco.columnconfigure(1, weight=1)
+        ttk.Label(
+            marco,
+            text="Módulo, asignatura y resultado de aprendizaje se completan automáticamente desde los documentos del proyecto.",
+            wraplength=500, justify="left",
+        ).grid(row=len(campos), column=0, columnspan=2, sticky="w", pady=(12, 10))
+
+        def guardar():
+            datos.setdefault("metadatos", {})
+            for clave, var in variables.items():
+                datos["metadatos"][clave] = var.get().strip()
+            self.proyecto_trabajo_estructurado = datos
+            self._proyecto_guardar_trabajo_estructurado()
+            print("EXPORTADOR WORD v3.3.2: datos de entrega actualizados.")
+            win.destroy()
+
+        botones = ttk.Frame(marco)
+        botones.grid(row=len(campos) + 1, column=0, columnspan=2, sticky="e", pady=(8, 0))
+        ttk.Button(botones, text="Cancelar", command=win.destroy).pack(side="right")
+        ttk.Button(botones, text="Guardar", command=guardar).pack(side="right", padx=(0, 8))
+
+    def aula_generar_word_final(self):
+        ok, mensaje, ruta = self._proyecto_generar_word_final(permitir_incompleto=False, elegir_destino=True)
+        self._aula_chat_insertar("Beta", mensaje)
+        try:
+            if self._aula_esta_abierta():
+                if ok:
+                    messagebox.showinfo(
+                        "Beta Aula - Word generado",
+                        f"{mensaje}\n\n{ruta}",
+                        parent=self.ventana_modo_estudio,
+                    )
+                elif "cancelada" in normalizar(mensaje):
+                    messagebox.showinfo(
+                        "Beta Aula - Exportación cancelada", mensaje,
+                        parent=self.ventana_modo_estudio,
+                    )
+                else:
+                    messagebox.showwarning(
+                        "Beta Aula - Word pendiente", mensaje,
+                        parent=self.ventana_modo_estudio,
+                    )
+        except Exception:
+            pass
+        return ok
 
     def aula_agregar_ultima_respuesta_al_trabajo(self):
         ok, mensaje = self._proyecto_agregar_respuesta_estructurada()
@@ -15383,6 +15964,8 @@ Recuerdos relevantes:
             return False
 
         # Comandos operativos no deben convertirse en recuerdos personales.
+        # Quitamos primero el wake word para que "Beta, genera..." también quede filtrado.
+        t_operativo = re.sub(r"^(?:beta|veta|meta|better)\s+", "", t).strip()
         comandos = (
             "abre ", "abrir ", "busca ", "buscar ", "reproduce ", "pon ",
             "crea ", "crear ", "borra ", "elimina ", "mueve ", "copia ",
@@ -15391,10 +15974,13 @@ Recuerdos relevantes:
             "defineme ", "dame ", "entregame ", "hablame ", "cuentame ",
             "resumeme ", "resume ", "muestrame ", "ensename ", "preguntame ",
             "compara ", "describeme ", "aclarame ", "ayudame ",
+            "agrega ", "agregar ", "agregara ", "guarda ", "guardar ",
+            "genera ", "generar ", "redacta ", "redactar ", "trabaja ", "trabajemos ",
+            "incorpora ", "incorporar ", "termina ", "cierra ",
             "dime la temperatura", "dime el clima", "dime el tiempo",
             "muestrame las fuentes", "abre la primera fuente",
         )
-        if t.startswith(comandos):
+        if t_operativo.startswith(comandos):
             return False
 
         # Las órdenes de tutoría describen una consulta, no una preferencia personal.
