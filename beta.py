@@ -10,6 +10,8 @@ import hashlib
 import json
 import math
 import os
+import platform
+import socket
 # Evita enlaces simbólicos de Hugging Face en Windows.
 # En equipos sin Modo desarrollador, los symlinks pueden provocar WinError 1314.
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS", "1")
@@ -33,13 +35,13 @@ import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
-BETA_VERSION = "3.3.3"
+BETA_VERSION = "3.5.2"
 
 # ==========================================================
-# BETA v3.3.3 - MIRADA CONTEXTUAL + AULA WORKSPACE + EXPORTACIÓN WORD
+# BETA v3.5.2 - CONTROL DE ATLAS + MIRADA CONTEXTUAL + AULA WORKSPACE
 # Mascota virtual + memoria + comandos aprendidos + clima
 # + Ollama/Qwen3 Instruct + memoria evolutiva + personalidad adaptativa
 # + voz híbrida: Vosk para activación y Faster-Whisper para dictado
@@ -95,9 +97,28 @@ BETA_VERSION = "3.3.3"
 # v3.0.0: aula interactiva propia activable por voz con "Beta, activa modo estudio"
 # v3.0.1: si un fragmento de respuesta tiene ASR dudoso, cancela la corrección pendiente
 # v3.1.0: Aula Workspace integra Clase/Pizarra + Proyecto/Chat + Trabajo/Borrador
-# v3.3.3: mirada contextual: Beta centra los ojos al frente durante toda respuesta hablada
+# v3.5.2: Control de Atlas: ventanas/aplicaciones, navegación contextual de carpetas/archivos
+# + estado real de CPU/RAM/discos/red; nunca confirma una acción local que no se ejecutó
+# + contexto de ventana/carpeta/archivo y resolución de coincidencias sin inventar rutas
+# + base de seguridad para acciones destructivas y futuras automatizaciones Office
+# v3.5.2 robustez Atlas: normalización fonética contextual de Word/Spotify/Steam/IPP
+# + cortafuegos para que órdenes de ventana ambiguas nunca caigan a Ollama
+# + selección de ventanas priorizando el proceso real y no títulos accidentales
+# + volumen Spotify absoluto/relativo, CPU por núcleo coherente e IP de la ruta activa
+# v3.5.2 precisión Atlas: recupera abres/potifai, porcentajes hablados y estado de Internet con ruido ASR
+# v3.5.2: mirada contextual: Beta centra los ojos al frente durante toda respuesta hablada
 # + al terminar la voz vuelve suavemente al seguimiento normal del puntero
 # + el estado se mantiene durante streaming completo y también en respaldo de voz Windows
+# v3.5.2 ubicaciones confiables: IPP=D:\\IPP y Beta=A:\\Beta tienen prioridad sobre búsqueda global
+# v3.5.2 explorador verificable: ubicar/listar carpetas usa disco real y nunca Ollama
+# v3.5.2 nombres equivalentes: Primer/1er, Segundo/2do, etc. + cortafuegos contextual de carpetas
+# v3.5.2 contexto de navegación: vuelve a IPP, búsqueda segura de carpetas hermanas y consultas con raíz explícita
+# + búsqueda segura por contexto/Escritorio/Documentos/OneDrive; omite .m2/.vscode/cachés por defecto
+# + interpreta calificadores como "en el disco A" y controla ventanas de carpetas por su ruta real
+# v3.5.2: orquestador de intenciones separa web, recordatorios, sistema, archivos, estudio y conversación
+# + Google/YouTube reales antes del Explorador; recordatorios persistentes en SQLite; fecha/hora local sin RAG
+# + memoria, contexto operativo y recordatorios quedan desacoplados; órdenes operativas no llegan a Ollama
+# v3.5.2: estabilización: orquestador antes de clima/RAG, hardware fonético, recordatorios consultables/reprogramables
 # v3.2.1: analiza localmente preguntas/instrucciones/estructura antes de depender de Ollama
 # + fallback documental verificable cuando Ollama falla o agota el tiempo
 # + separa consultas sobre Beta/Workspace de preguntas sobre los documentos
@@ -3344,6 +3365,36 @@ class BetaApp:
         self.root = root
         self.memoria = MemoriaBeta()
 
+        # Beta v3.5.2: contexto operativo real de Atlas. No se usa como memoria
+        # personal: solo conserva referencias efímeras de la sesión para órdenes
+        # como "ahora abre...", "minimízala" o "vuelve a la carpeta anterior".
+        self.atlas_carpeta_actual = None
+        self.atlas_historial_carpetas = []
+        self.atlas_ultimo_archivo = None
+        self.atlas_ultima_aplicacion = ""
+        self.atlas_ultima_ventana = None
+        self.atlas_ventana_usuario_previa = None
+        self.atlas_opciones_pendientes = []
+        self.atlas_tipo_opciones_pendientes = ""
+        self.atlas_opciones_hasta = 0.0
+        self.atlas_aclaracion_pendiente = None
+        # v3.5.2: ubicaciones confiables de Atlas. Estas rutas son control operativo,
+        # no memoria personal ni contenido de conversación.
+        self.atlas_ubicaciones_confiables = self._atlas_cargar_ubicaciones_confiables()
+        self.atlas_ultima_ruta_explorador = None
+        self.atlas_ultima_ruta_referida = None
+        # v3.5.2: confirmaciones efímeras para operaciones con archivos.
+        # Nunca se guardan como memoria personal.
+        self.atlas_confirmacion_pendiente = None
+        self.atlas_confirmacion_hasta = 0.0
+
+        # v3.5.2: recordatorios persistentes y orquestador de intenciones.
+        # El recordatorio vive en SQLite, separado de memoria personal y del
+        # contexto operativo de ventanas/carpetas.
+        self.orquestador_ultima_intencion = ""
+        self.recordatorio_alerta_activa = False
+        self._recordatorios_inicializar_db()
+
         # Respaldos v2.7.1. Se ejecutan en segundo plano y nunca bloquean
         # el arranque de voz, Spotify o la biblioteca.
         self.gestor_respaldos = GestorRespaldosBeta(self.memoria)
@@ -3767,7 +3818,7 @@ class BetaApp:
         self.radio_pupila = 6
         self.radio_brillo_pupila = 2
 
-        # v3.3.3 - Mirada contextual.
+        # v3.5.2 - Mirada contextual.
         # En reposo Beta sigue el puntero; mientras una respuesta está sonando
         # mantiene las pupilas centradas al frente. Los offsets se interpolan
         # para evitar saltos bruscos al entrar o salir del modo frontal.
@@ -3964,6 +4015,7 @@ class BetaApp:
         self.root.after(9000, self.preparar_biblioteca_en_segundo_plano)
         self.root.after(60000, self.vigilar_iniciativa)
         self.root.after(45000, self.vigilar_curiosidad)
+        self.root.after(12000, self._recordatorios_vigilar)
         self.root.after(RESPALDO_INICIO_MS, self.revisar_respaldo_automatico)
         threading.Thread(target=self.worker_memoria_inteligente, daemon=True).start()
 
@@ -5786,7 +5838,7 @@ class BetaApp:
         self._crear_ventana_modo_estudio()
         self._aula_actualizar_encabezado()
         self._aula_refrescar_ejercicio()
-        print("MODO ESTUDIO v3.3.3: Aula Workspace activa.")
+        print("MODO ESTUDIO v3.5.2: Aula Workspace activa.")
         if anunciar:
             self.responder(
                 "modo estudio activado. Abrí el aula de Beta. Las explicaciones, ejemplos y ejercicios quedarán visibles en la pizarra mientras seguimos conversando.",
@@ -5821,7 +5873,7 @@ class BetaApp:
         self.aula_chat_entrada = None
         self.aula_archivos_tree = None
         self.aula_trabajo = None
-        print("MODO ESTUDIO v3.3.3: Aula Workspace cerrada.")
+        print("MODO ESTUDIO v3.5.2: Aula Workspace cerrada.")
         if anunciar:
             self.responder(
                 "modo estudio finalizado. Conservaré el progreso y el tema de Python para retomarlos después.",
@@ -5944,7 +5996,7 @@ class BetaApp:
                 pass
             self.tutor_python_respuesta_timer = None
         self.tutor_python_respuesta_buffer = []
-        print(f"AULA WORKSPACE v3.3.3: respuesta de ejercicio escrita='{respuesta}'")
+        print(f"AULA WORKSPACE v3.5.2: respuesta de ejercicio escrita='{respuesta}'")
         self._aula_mostrar_respuesta_usuario("[Respuesta escrita] " + respuesta)
         try:
             self.memoria.guardar_conversacion("Señor", respuesta)
@@ -6163,7 +6215,7 @@ class BetaApp:
                 filetypes=[("Documento Word", "*.docx")],
             )
         except Exception as error:
-            print("EXPORTADOR WORD v3.3.3: no pude abrir Guardar como:", error)
+            print("EXPORTADOR WORD v3.5.2: no pude abrir Guardar como:", error)
             return None
         if not elegido:
             return None
@@ -6310,7 +6362,7 @@ class BetaApp:
             self.proyecto_trabajo_estructurado = datos
             self._proyecto_guardar_trabajo_estructurado()
             self.proyecto_ultimo_word = str(salida)
-            print(f"EXPORTADOR WORD v3.3.3: generado {salida}")
+            print(f"EXPORTADOR WORD v3.5.2: generado {salida}")
             return True, f"Generé el Word final en la ubicación que eligió: {salida}", salida
         except Exception as error:
             try:
@@ -6318,7 +6370,7 @@ class BetaApp:
                     salida.unlink()
             except Exception:
                 pass
-            print("EXPORTADOR WORD v3.3.3: error:", error)
+            print("EXPORTADOR WORD v3.5.2: error:", error)
             return False, f"No pude generar el documento Word: {error}", None
 
     def _proyecto_manifest_nuevo(self, nombre, ruta):
@@ -6379,7 +6431,7 @@ class BetaApp:
             try:
                 datos = json.loads(ruta.read_text(encoding="utf-8"))
             except Exception as error:
-                print("CONSTRUCTOR v3.3.3: trabajo.json inválido; reconstruyendo:", error)
+                print("CONSTRUCTOR v3.5.2: trabajo.json inválido; reconstruyendo:", error)
         if not isinstance(datos, dict):
             datos = self._proyecto_trabajo_base()
             legacy = self._proyecto_borrador_ruta(proyecto["ruta"])
@@ -6457,7 +6509,7 @@ class BetaApp:
             ruta.write_text(json.dumps(datos, ensure_ascii=False, indent=2), encoding="utf-8")
             return True
         except Exception as error:
-            print("CONSTRUCTOR v3.3.3: no pude guardar trabajo.json:", error)
+            print("CONSTRUCTOR v3.5.2: no pude guardar trabajo.json:", error)
             return False
 
     def _proyecto_ultima_respuesta_fuentes(self):
@@ -6633,7 +6685,7 @@ class BetaApp:
         self._proyecto_guardar_trabajo_estructurado()
         self._proyecto_renderizar_borrador(guardar_md=True)
         self._proyecto_refrescar_estado_trabajo_ui()
-        print(f"CONSTRUCTOR v3.3.3: respuesta agregada a {destino}.")
+        print(f"CONSTRUCTOR v3.5.2: respuesta agregada a {destino}.")
         return True, f"Agregué la respuesta a {destino}."
 
     def _proyecto_renderizar_borrador(self, guardar_md=False):
@@ -6677,7 +6729,7 @@ class BetaApp:
             try:
                 self._proyecto_borrador_ruta(self.proyecto_estudio_actual["ruta"]).write_text(texto, encoding="utf-8")
             except Exception as error:
-                print("CONSTRUCTOR v3.3.3: no pude actualizar borrador.md:", error)
+                print("CONSTRUCTOR v3.5.2: no pude actualizar borrador.md:", error)
         return texto
 
     def _proyecto_progreso_trabajo(self):
@@ -6761,7 +6813,7 @@ class BetaApp:
         if not t:
             return "", []
 
-        # v3.3.3: Introducción/Conclusión/Bibliografía se guardan como secciones reales, no como chat general.
+        # v3.5.2: Introducción/Conclusión/Bibliografía se guardan como secciones reales, no como chat general.
         secciones = self._proyecto_secciones_mencionadas(consulta)
         if len(secciones) == 2 and set(secciones) == {"conclusion", "bibliografia"} and any(x in t for x in ("haz lo mismo", "redacta", "genera", "prepara")):
             con, f1 = self._proyecto_redactar_seccion_local("conclusion")
@@ -7748,7 +7800,7 @@ class BetaApp:
         self._aula_chat_insertar("Señor", consulta)
         self._proyecto_registrar_chat("Señor", consulta)
 
-        # v3.3.3: detectar primero si el Señor está trabajando una sección general.
+        # v3.5.2: detectar primero si el Señor está trabajando una sección general.
         self._proyecto_actualizar_foco_seccion_desde_consulta(consulta)
 
         # Acciones del Constructor se resuelven antes de consultar documentos/IA.
@@ -7758,7 +7810,7 @@ class BetaApp:
             self._proyecto_registrar_chat("Beta", respuesta_constructor, fuentes_constructor)
             self._aula_chat_insertar("Beta", respuesta_constructor, fuentes_constructor)
             self.responder(respuesta_constructor, "normal", tipo_contexto="proyecto")
-            print(f"CONSTRUCTOR v3.3.3: acción local resuelta; foco={self.proyecto_seccion_foco or self.proyecto_pregunta_foco}")
+            print(f"CONSTRUCTOR v3.5.2: acción local resuelta; foco={self.proyecto_seccion_foco or self.proyecto_pregunta_foco}")
             return
 
         # v3.2.1: las preguntas sobre el funcionamiento de Beta no se buscan en el PDF.
@@ -7768,7 +7820,7 @@ class BetaApp:
             self._proyecto_registrar_chat("Beta", respuesta_meta, [])
             self._aula_chat_insertar("Beta", respuesta_meta, [])
             self.responder(respuesta_meta, "normal", tipo_contexto="proyecto")
-            print("AULA WORKSPACE v3.3.3: consulta meta respondida localmente.")
+            print("AULA WORKSPACE v3.5.2: consulta meta respondida localmente.")
             return
 
         # v3.2.1: preguntas estructurales del trabajo no dependen de Ollama.
@@ -7781,7 +7833,7 @@ class BetaApp:
             resumen_voz_fn = getattr(self, "_proyecto_resumen_voz", None)
             voz = resumen_voz_fn(respuesta_local, consulta) if callable(resumen_voz_fn) else respuesta_local
             self.responder(voz, "normal", tipo_contexto="proyecto")
-            print(f"AULA WORKSPACE v3.3.3: análisis local resuelto; fuentes={fuentes_locales}")
+            print(f"AULA WORKSPACE v3.5.2: análisis local resuelto; fuentes={fuentes_locales}")
             return
 
         if self._proyecto_es_pedir_redaccion(consulta):
@@ -7795,7 +7847,7 @@ class BetaApp:
                     self._aula_chat_insertar("Beta", redactada, fuentes_sec)
                     voz = f"Señor, preparé la {foco_sec}. La dejé completa en el chat para que la revise antes de agregarla al trabajo."
                     self.responder(voz, "normal", tipo_contexto="proyecto")
-                    print(f"AULA WORKSPACE v3.3.3: borrador local de sección={foco_sec} listo.")
+                    print(f"AULA WORKSPACE v3.5.2: borrador local de sección={foco_sec} listo.")
                     return
 
         if self._proyecto_es_pedir_explicacion(consulta) or self._proyecto_es_pedir_redaccion(consulta):
@@ -7815,7 +7867,7 @@ class BetaApp:
                     resumen_voz_fn = getattr(self, "_proyecto_resumen_voz", None)
                     voz = resumen_voz_fn(guiada, consulta) if callable(resumen_voz_fn) else guiada
                     self.responder(voz, "normal", tipo_contexto="proyecto")
-                    print(f"AULA WORKSPACE v3.3.3: seguimiento guiado local pregunta={self.proyecto_pregunta_foco} fuentes={fuentes_guiada}")
+                    print(f"AULA WORKSPACE v3.5.2: seguimiento guiado local pregunta={self.proyecto_pregunta_foco} fuentes={fuentes_guiada}")
                     return
 
         self.proyecto_consulta_en_curso = True
@@ -7884,10 +7936,10 @@ class BetaApp:
                             for ref in fuentes_guiada:
                                 if ref not in fuentes_labels:
                                     fuentes_labels.append(ref)
-                            print("AULA WORKSPACE v3.3.3: fallback guiado por pregunta activa tras fallo/timeout de Ollama.")
+                            print("AULA WORKSPACE v3.5.2: fallback guiado por pregunta activa tras fallo/timeout de Ollama.")
                         else:
                             respuesta = self._proyecto_fallback_documental(consulta, fuentes)
-                            print("AULA WORKSPACE v3.3.3: fallback documental activado tras fallo/timeout de Ollama.")
+                            print("AULA WORKSPACE v3.5.2: fallback documental activado tras fallo/timeout de Ollama.")
                     else:
                         self.proyecto_ultimo_error = ""
             except Exception as error:
@@ -7932,7 +7984,7 @@ class BetaApp:
             self.aula_chat_entrada.delete("1.0", "end")
         except Exception:
             pass
-        print(f"AULA WORKSPACE v3.3.3: consulta escrita='{consulta}'")
+        print(f"AULA WORKSPACE v3.5.2: consulta escrita='{consulta}'")
         self.consultar_proyecto_estudio_async(consulta, desde_voz=False)
 
     def _aula_cargar_borrador(self):
@@ -7963,10 +8015,10 @@ class BetaApp:
             ruta = self._proyecto_borrador_ruta(proyecto["ruta"])
             ruta.write_text(contenido, encoding="utf-8")
             if not silencioso:
-                print(f"CONSTRUCTOR v3.3.3: borrador manual guardado en {ruta}.")
+                print(f"CONSTRUCTOR v3.5.2: borrador manual guardado en {ruta}.")
             return True
         except Exception as error:
-            print("CONSTRUCTOR v3.3.3: no pude guardar borrador:", error)
+            print("CONSTRUCTOR v3.5.2: no pude guardar borrador:", error)
             return False
 
     def aula_editar_datos_entrega(self):
@@ -8012,7 +8064,7 @@ class BetaApp:
                 datos["metadatos"][clave] = var.get().strip()
             self.proyecto_trabajo_estructurado = datos
             self._proyecto_guardar_trabajo_estructurado()
-            print("EXPORTADOR WORD v3.3.3: datos de entrega actualizados.")
+            print("EXPORTADOR WORD v3.5.2: datos de entrega actualizados.")
             win.destroy()
 
         botones = ttk.Frame(marco)
@@ -11378,6 +11430,8 @@ Recuerdos relevantes:
             "cerrar ", "apaga", "reinicia", "crea carpeta", "borra ", "elimina ",
             "recuerda que", "aprende que", "olvida ", "que recuerdas de mi",
             "busca en google", "busca en internet", "investiga en internet",
+            "recordatorio", "avisame", "me avises", "calendario", "agenda",
+            "que fecha es hoy", "que dia es hoy", "todas tus funciones", "funciones de beta",
             "noticias", "hoy ", "actualmente", "ultima version", "última version",
             "precio actual", "cotizacion", "resultado de hoy",
         ]
@@ -14777,6 +14831,25 @@ Recuerdos relevantes:
         if self.esperando_orden and ahora <= self.tiempo_limite_orden:
             return True
 
+        # Si Beta acaba de ofrecer coincidencias reales, una respuesta breve
+        # como "uno", "dos" o "ninguna" es una continuación explícita.
+        # Sigue pasando por biometría, pero no exige repetir el wake word.
+        if getattr(self, "atlas_opciones_pendientes", None):
+            limite = float(getattr(self, "atlas_opciones_hasta", 0.0) or 0.0)
+            if not limite or ahora <= limite:
+                if re.fullmatch(r"(?:el |la )?(?:1|2|3|4|5|6|uno|dos|tres|cuatro|cinco|seis|primero|primera|segundo|segunda|tercero|tercera|cuarto|cuarta|quinto|quinta|sexto|sexta)|(?:cancela|ninguna|ninguno|dejalo)", t):
+                    return True
+
+        # v3.5.2: una confirmación explícita de una operación sensible habilita
+        # una sola respuesta corta sin repetir el wake word. La biometría sigue
+        # siendo obligatoria en la capa de audio.
+        if getattr(self, "atlas_confirmacion_pendiente", None):
+            limite = float(getattr(self, "atlas_confirmacion_hasta", 0.0) or 0.0)
+            if limite and ahora > limite:
+                self.atlas_confirmacion_pendiente = None
+            elif re.fullmatch(r"(?:si|sí|confirmo|confirma|de acuerdo|hazlo|adelante|acepto|no|cancela|cancelar|dejalo|déjalo)", t):
+                return True
+
         wake = self._wake_en_inicio(t, incluir_ambiguos=True)
         if self.modo_escucha == "silencio":
             if not wake:
@@ -15982,6 +16055,10 @@ Recuerdos relevantes:
         # Comandos operativos no deben convertirse en recuerdos personales.
         # Quitamos primero el wake word para que "Beta, genera..." también quede filtrado.
         t_operativo = re.sub(r"^(?:beta|veta|meta|better)\s+", "", t).strip()
+        try:
+            t_operativo = self._atlas_normalizar_orden_operativa(t_operativo)
+        except Exception:
+            pass
         comandos = (
             "abre ", "abrir ", "busca ", "buscar ", "reproduce ", "pon ",
             "crea ", "crear ", "borra ", "elimina ", "mueve ", "copia ",
@@ -15993,10 +16070,44 @@ Recuerdos relevantes:
             "agrega ", "agregar ", "agregara ", "guarda ", "guardar ",
             "genera ", "generar ", "redacta ", "redactar ", "trabaja ", "trabajemos ",
             "incorpora ", "incorporar ", "termina ", "cierra ",
+            "minimiza ", "minimizar ", "maximiza ", "maximizar ",
+            "restaura ", "restaurar ", "pausa", "reanuda", "continua ",
+            "entra a ", "entra en ", "vuelve a ", "volver a ",
             "dime la temperatura", "dime el clima", "dime el tiempo",
+            "dime el estado", "estado de ", "estado del ", "estado de atlas",
             "muestrame las fuentes", "abre la primera fuente",
         )
         if t_operativo.startswith(comandos):
+            return False
+
+        # v3.5.2: navegación/gestión de carpetas y archivos es contexto operativo,
+        # incluso si la frase contiene "quiero". Evita recuerdos falsos como
+        # "El Señor quiere hacer la carpeta Primer Semestre" por errores de ASR.
+        if any(obj in t_operativo for obj in ("carpeta", "archivo", "documento")) and any(
+            verbo in t_operativo for verbo in (
+                "abre", "abrir", "ubica", "ubicar", "localiza", "buscar", "busca",
+                "revisa", "revisar", "muestra", "mostrar", "muestrame", "entra",
+                "cierra", "cerrar", "minimiza", "maximiza", "quiero que", "hagas", "haz"
+            )
+        ):
+            return False
+
+        # v3.5.2: un recordatorio/agenda es una tarea programada, no memoria
+        # personal. Evita que frases como "necesito que me avises..." terminen
+        # además como recuerdos o pendientes inferidos por Qwen.
+        if any(x in t_operativo for x in (
+            "recuerdame", "recordatorio", "avisame", "avisa me",
+            "me avises", "me recuerdes", "calendario", "agenda",
+            "que me tienes que recordar", "quien me tiene que recordar"
+        )):
+            return False
+        # Navegación web y consultas de sistema son acciones/contexto operativo,
+        # nunca hechos personales que la memoria inteligente deba inferir.
+        if any(x in t_operativo for x in ("youtube", "google", "chrome")) and any(
+            v in t_operativo for v in ("abre", "busca", "buscar", "entra", "ve a")
+        ):
+            return False
+        if "temperatura" in t_operativo and any(x in self._orq_normalizar_hardware_contextual(t_operativo) for x in ("cpu", "gpu", "procesador", "computador", "atlas")):
             return False
 
         # Las órdenes de tutoría describen una consulta, no una preferencia personal.
@@ -16701,6 +16812,20 @@ Recuerdos relevantes:
         if self.pregunta_curiosa_pendiente and ahora > self.pregunta_curiosa_hasta:
             self.cancelar_pregunta_curiosa("tiempo agotado")
 
+        # CONTROL ATLAS: después de preguntar cuál coincidencia abrir, aceptamos
+        # una única selección corta sin wake word. La voz ya fue validada.
+        if getattr(self, "atlas_opciones_pendientes", None):
+            wake_atlas = self._wake_en_inicio(texto_normal, incluir_ambiguos=False)
+            if wake_atlas is None and self._atlas_resolver_opcion_pendiente(texto_original):
+                return
+
+        # CONTROL ATLAS v3.5.2: una confirmación sensible pendiente acepta
+        # únicamente sí/no sin wake word. No se mezcla con conversación general.
+        if getattr(self, "atlas_confirmacion_pendiente", None):
+            wake_conf = self._wake_en_inicio(texto_normal, incluir_ambiguos=False)
+            if wake_conf is None and self._atlas_resolver_confirmacion_pendiente(texto_original):
+                return
+
         # CONVERSACIÓN EXPLÍCITA: solo aquí se aceptan frases sin decir Beta.
         if self.modo_escucha == "conversacion" and ahora <= self.modo_conversacion_hasta:
             if (
@@ -16787,6 +16912,15 @@ Recuerdos relevantes:
         self.actualizar_contexto_turno("Señor", comando)
         self.memoria.registrar_interaccion()
         self.interacciones_desde_curiosidad += 1
+        # Capturamos la ventana del usuario antes de responder. La ventana
+        # flotante de Beta es topmost, pero no debe convertirse en el objetivo
+        # de frases como "minimiza esta ventana".
+        try:
+            activa = self._atlas_obtener_ventana_activa()
+            if activa and normalizar(activa.get("titulo", "")) != "beta":
+                self.atlas_ventana_usuario_previa = activa
+        except Exception:
+            pass
         self.expresion_pensando()
         self.ultima_frase_inicio = time.perf_counter()
 
@@ -17421,6 +17555,13 @@ Recuerdos relevantes:
             self.fallos_consecutivos = 0
             return
 
+        # Beta v3.5.2: ORQUESTADOR DE INTENCIONES PRIMARIO.
+        # Debe ejecutarse ANTES de fuentes, RAG y clima. Así una frase como
+        # "temperatura del CPU", "abre YouTube" o "recuérdame..." nunca
+        # puede ser secuestrada por el contexto académico o meteorológico.
+        if self._orquestar_intencion_previa(original):
+            return
+
         # 3.6) Fuentes de libros técnicos o apuntes académicos.
         if self.manejar_comando_fuentes_tecnicas(texto):
             return
@@ -17558,6 +17699,11 @@ Recuerdos relevantes:
             self.responder("cancelé el procesamiento anterior y ya estoy disponible.", "normal")
             return
 
+        # Control de Atlas queda después del orquestador: solo recibe órdenes
+        # que realmente pertenecen a ventanas, aplicaciones, archivos o carpetas.
+        if self._atlas_manejar_comando(original):
+            return
+
         # 5.8) Spotify: abrir, buscar y controlar reproducción. Las órdenes
         # "reproduce música de X" sin plataforma explícita usan Spotify.
         orden_spotify = self.extraer_orden_spotify(original)
@@ -17692,6 +17838,9 @@ Recuerdos relevantes:
                 "inicia ",
                 "apaga ",
                 "reinicia ",
+                "programa un recordatorio",
+                "guarda un recordatorio",
+                "anota un recordatorio",
             ]
         ):
             self.no_entendi(texto, "no sé realizar esa acción todavía.")
@@ -17781,6 +17930,2705 @@ Recuerdos relevantes:
             self.responder(mensaje, "confundida")
         else:
             self.responder("sigo sin entender esa petición.", "molesta")
+
+    # ======================================================
+    # CONTROL DE ATLAS v3.5.2
+    # ======================================================
+
+    def _atlas_quitar_wake(self, texto):
+        t = normalizar(texto or "")
+        t = re.sub(r"^(?:beta|veta|meta|metas|petra)\s+", "", t).strip()
+        t = re.sub(r"^(?:por favor\s+)?(?:me\s+)?(?:puedes|podrias|podrias por favor)\s+", "", t).strip()
+        # Continuadores conversacionales no cambian la intención operativa.
+        t = re.sub(r"^(?:ahora|entonces|bien)\s+", "", t).strip()
+        return t
+
+    def _atlas_nombre_amigable_app(self, clave):
+        nombres = {
+            "spotify": "Spotify", "word": "Word", "excel": "Excel",
+            "steam": "Steam", "explorador": "Explorador", "chrome": "Chrome",
+            "notepad": "Bloc de notas", "calculadora": "Calculadora",
+        }
+        return nombres.get((clave or "").lower(), clave or "la ventana")
+
+    def _atlas_normalizar_orden_operativa(self, texto):
+        """Normaliza solo el pequeño vocabulario de control de Atlas.
+
+        v3.5.2: esta capa es deliberadamente contextual. No modifica el texto
+        general de la conversación ni alimenta a Ollama; únicamente ayuda al
+        enrutador local a recuperar deformaciones frecuentes de Vosk/Whisper.
+        """
+        t = normalizar(texto or "")
+        if not t:
+            return ""
+
+        # Casos reales observados en Atlas. Se aplican antes del análisis por
+        # tokens porque Whisper puede fusionar verbo + aplicación.
+        frases = [
+            (r"\bmini\s*miss\s*award\b", "minimiza word"),
+            (r"\bminimissaward\b", "minimiza word"),
+            (r"\bmaximis\s+award\b", "maximiza word"),
+            (r"\bmaximisa\s+word\b", "maximiza word"),
+            (r"\bmaximisa\s+war\b", "maximiza word"),
+            (r"\bserrar\s+word\b", "cierra word"),
+            (r"\bsierra\s+word\b", "cierra word"),
+            # Caso real de Whisper: "Beta, abre worth" -> "Veda Avery World".
+            # Solo se corrige dentro del enrutador operativo de Atlas.
+            (r"\b(?:veda\s+)?avery\s+world\b", "abre word"),
+        ]
+        for patron, reemplazo in frases:
+            t = re.sub(patron, reemplazo, t)
+
+        tokens = t.split()
+        salida = []
+        for tok in tokens:
+            # Verbos operativos: toleramos deformaciones fonéticas conservando
+            # prefijos distintivos para no tocar conversación normal.
+            if tok in {"abres", "avres", "avre", "avery", "habre", "habres", "abreme"} or tok.startswith(("abr", "avr")) and difflib.SequenceMatcher(None, tok, "abre").ratio() >= 0.55:
+                tok = "abre"
+            elif tok.startswith("minim") and difflib.SequenceMatcher(None, tok, "minimiza").ratio() >= 0.55:
+                tok = "minimiza"
+            elif tok.startswith("maxim") and difflib.SequenceMatcher(None, tok, "maximiza").ratio() >= 0.55:
+                tok = "maximiza"
+            elif tok in {"sierra", "serrar", "serra", "cierrame"} or tok.startswith("cierr"):
+                tok = "cierra"
+            elif tok.startswith("restaur"):
+                tok = "restaura"
+            salida.append(tok)
+        t = " ".join(salida)
+
+        # Variantes de modo verbal frecuentes en órdenes de volumen. Se limitan
+        # a frases que contienen "volumen" para no alterar conversación normal.
+        if "volumen" in t:
+            t = re.sub(r"\bsuba\b", "sube", t)
+            t = re.sub(r"\bbaje\b", "baja", t)
+            t = re.sub(r"\baumente\b", "aumenta", t)
+            t = re.sub(r"\bdisminuya\b", "disminuye", t)
+
+        # Alias de aplicaciones solo si la frase ya parece una orden operativa.
+        contexto_control = bool(re.search(r"\b(?:abre|abrir|inicia|iniciar|pon|minimiza|maximiza|restaura|cierra)\b", t))
+        if contexto_control:
+            alias_frase = [
+                ("spotify", ["espotifai", "es potifai", "potifai", "potifay", "potify", "esputifai", "es putifai", "espontifice", "es pontifice"]),
+                ("word", ["worth", "work", "war", "world", "award", "a word", "a war"]),
+                ("steam", ["estima", "estin", "stim"]),
+            ]
+            for canon, variantes in alias_frase:
+                for variante in variantes:
+                    if re.search(r"(?<!\w)" + re.escape(variante) + r"(?!\w)", t):
+                        t = re.sub(r"(?<!\w)" + re.escape(variante) + r"(?!\w)", canon, t)
+                        break
+        return re.sub(r"\s+", " ", t).strip()
+
+    def _atlas_normalizar_nombre_carpeta(self, nombre):
+        """Recupera alias únicamente dentro del contexto de navegación."""
+        n = normalizar(nombre or "").strip()
+        clave = self._atlas_alias_ubicacion(n)
+        return clave or n
+
+    def _atlas_clave_nombre_carpeta(self, nombre):
+        """Clave semántica para comparar nombres REALES con formas naturales.
+
+        No modifica rutas ni inventa nombres. Solo permite reconocer que, por
+        ejemplo, ``Primer Semestre``, ``1er Semestre`` y ``Semestre 1`` se
+        refieren al mismo nombre lógico. La ruta física existente siempre gana.
+        """
+        n = normalizar(nombre or "").strip()
+        n = re.sub(r"[_\-]+", " ", n)
+        n = re.sub(r"\s+", " ", n).strip()
+        ordinales = {
+            "primer": "1", "primero": "1", "primera": "1", "1er": "1", "1ro": "1", "1ra": "1",
+            "segundo": "2", "segunda": "2", "2do": "2", "2da": "2",
+            "tercer": "3", "tercero": "3", "tercera": "3", "3ro": "3", "3ra": "3",
+            "cuarto": "4", "cuarta": "4", "4to": "4", "4ta": "4",
+            "quinto": "5", "quinta": "5", "5to": "5", "5ta": "5",
+            "sexto": "6", "sexta": "6", "6to": "6", "6ta": "6",
+            "septimo": "7", "septima": "7", "7mo": "7", "7ma": "7",
+            "octavo": "8", "octava": "8", "8vo": "8", "8va": "8",
+            "noveno": "9", "novena": "9", "9no": "9", "9na": "9",
+            "decimo": "10", "decima": "10", "10mo": "10", "10ma": "10",
+        }
+        tokens = [ordinales.get(tok, tok) for tok in n.split()]
+        # Normalizamos ``semestre 1`` y ``1 semestre`` a la misma forma.
+        if "semestre" in tokens:
+            nums = [x for x in tokens if x.isdigit()]
+            otros = [x for x in tokens if x != "semestre" and not x.isdigit()]
+            if nums:
+                return "semestre " + nums[0] + ((" " + " ".join(otros)) if otros else "")
+        return " ".join(tokens)
+
+    def _atlas_nombres_carpeta_equivalentes(self, a, b):
+        return bool(a and b and self._atlas_clave_nombre_carpeta(a) == self._atlas_clave_nombre_carpeta(b))
+
+    def _atlas_raiz_confiable_para_ruta(self, ruta):
+        """Devuelve la raíz confiable que contiene ``ruta`` sin inventar nada."""
+        try:
+            p = Path(ruta).resolve()
+        except Exception:
+            return None
+        for info in (getattr(self, "atlas_ubicaciones_confiables", {}) or {}).values():
+            try:
+                raiz = Path(str(info.get("ruta") or "")).resolve()
+                if not raiz.exists() or not raiz.is_dir():
+                    continue
+                if p == raiz or raiz in p.parents:
+                    return raiz
+            except Exception:
+                continue
+        return None
+
+    def _atlas_buscar_hijos_directos(self, raiz, nombre):
+        """Busca un nombre únicamente entre hijos reales de una carpeta real."""
+        try:
+            base = Path(raiz)
+            if not base.exists() or not base.is_dir():
+                return []
+            buscado = normalizar(nombre or "").strip()
+            exactos, parciales = [], []
+            for p in base.iterdir():
+                if not p.is_dir():
+                    continue
+                n = normalizar(p.name)
+                if n == buscado or self._atlas_nombres_carpeta_equivalentes(p.name, buscado):
+                    exactos.append(p)
+                elif buscado and buscado in n:
+                    parciales.append(p)
+            return exactos or parciales
+        except Exception:
+            return []
+
+    def _atlas_cargar_ubicaciones_confiables(self):
+        """Carga un pequeño registro local de rutas conocidas de Atlas.
+
+        Las ubicaciones predeterminadas son deliberadamente explícitas. No se
+        usan para inferir datos personales; solo evitan búsquedas globales
+        inseguras cuando el Señor nombra una carpeta conocida.
+        """
+        base = {
+            "ipp": {
+                "ruta": r"D:\IPP",
+                "alias": ["ipp", "i pe pe", "ipepe", "y pepe", "y pe pe", "y pe", "i pepe", "ypepe"],
+            },
+            "beta": {
+                "ruta": str(Path(BASE_DIR)),
+                "alias": ["beta", "carpeta beta", "proyecto beta"],
+            },
+        }
+        ruta_cfg = Path(BASE_DIR) / "ubicaciones_atlas.json"
+        try:
+            if ruta_cfg.exists():
+                datos = json.loads(ruta_cfg.read_text(encoding="utf-8"))
+                if isinstance(datos, dict):
+                    for clave, valor in datos.items():
+                        if isinstance(valor, dict) and valor.get("ruta"):
+                            base[normalizar(clave)] = {
+                                "ruta": str(valor.get("ruta")),
+                                "alias": list(valor.get("alias") or [clave]),
+                            }
+        except Exception as error:
+            print("CONTROL ATLAS: no pude leer ubicaciones_atlas.json:", error)
+        return base
+
+    def _atlas_alias_ubicacion(self, texto):
+        n = normalizar(texto or "").strip()
+        n = re.sub(r"^(?:la\s+)?carpeta\s+", "", n).strip()
+        for clave, info in (getattr(self, "atlas_ubicaciones_confiables", {}) or {}).items():
+            candidatos = [clave] + list(info.get("alias") or [])
+            for alias in candidatos:
+                a = normalizar(alias).strip()
+                if n == a:
+                    return clave
+        return ""
+
+    def _atlas_ruta_confiable(self, nombre):
+        clave = self._atlas_alias_ubicacion(nombre)
+        if not clave:
+            return None
+        info = (getattr(self, "atlas_ubicaciones_confiables", {}) or {}).get(clave) or {}
+        ruta = Path(str(info.get("ruta") or ""))
+        if str(ruta):
+            return ruta
+        return None
+
+    def _atlas_separar_nombre_y_ubicacion(self, texto):
+        """Separa el nombre de carpeta de calificadores de ubicación.
+
+        Ej.: ``beta que se encuentra en el disco a`` -> (``beta``, ``A``)
+        y ``ipp del escritorio`` -> (``ipp``, ``escritorio``).
+        """
+        t = normalizar(texto or "").strip()
+        scope = ""
+        # Disco/unidad explícita.
+        m = re.search(r"\s+(?:que\s+se\s+encuentra\s+|que\s+esta\s+|ubicad[ao]\s+)?(?:en\s+)?(?:el\s+)?(?:disco|unidad)\s+([a-z])\b.*$", t)
+        if m:
+            scope = m.group(1).upper()
+            t = t[:m.start()].strip()
+        else:
+            # Ubicaciones humanas frecuentes.
+            for etiqueta, patron in [
+                ("escritorio", r"\s+(?:en|del|de)\s+(?:el\s+)?escritorio\b.*$"),
+                ("documentos", r"\s+(?:en|del|de)\s+(?:mis\s+)?documentos\b.*$"),
+            ]:
+                m = re.search(patron, t)
+                if m:
+                    scope = etiqueta
+                    t = t[:m.start()].strip()
+                    break
+        t = re.sub(r"^(?:la\s+)?carpeta\s+", "", t).strip()
+        return t, scope
+
+    def _atlas_ruta_por_scope(self, nombre, scope):
+        nombre = self._atlas_normalizar_nombre_carpeta(nombre)
+        scope = (scope or "").strip()
+        if not scope:
+            return None
+        if len(scope) == 1 and scope.isalpha():
+            base = Path(scope.upper() + ":\\")
+        elif scope == "escritorio":
+            base = Path(obtener_escritorio())
+        elif scope == "documentos":
+            candidatos = [Path.home() / "Documents", Path.home() / "Documentos"]
+            base = next((x for x in candidatos if x.exists()), candidatos[0])
+        else:
+            return None
+        destino = base / nombre
+        return destino
+
+    def _atlas_ventana_explorador_por_ruta(self, ruta):
+        """Localiza la ventana de Explorer que muestra exactamente ``ruta``."""
+        if os.name != "nt":
+            return None
+        objetivo = os.path.normcase(os.path.normpath(str(Path(ruta))))
+        script = (
+            "$s=New-Object -ComObject Shell.Application; "
+            "$s.Windows() | ForEach-Object { try { "
+            "$p=$_.Document.Folder.Self.Path; "
+            "if($p){ [PSCustomObject]@{HWND=[int64]$_.HWND;Path=$p;Name=$_.LocationName} } "
+            "} catch {} } | ConvertTo-Json -Compress"
+        )
+        try:
+            flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            r = subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True,
+                               text=True, timeout=4, creationflags=flags)
+            raw = (r.stdout or "").strip()
+            if not raw:
+                return None
+            datos = json.loads(raw)
+            if isinstance(datos, dict):
+                datos = [datos]
+            for item in datos or []:
+                p = item.get("Path")
+                if p and os.path.normcase(os.path.normpath(str(p))) == objetivo:
+                    return {"hwnd": int(item.get("HWND") or 0), "titulo": item.get("Name") or Path(p).name,
+                            "pid": 0, "proceso": "explorer.exe", "ruta": Path(p)}
+        except Exception as error:
+            print("CONTROL ATLAS: no pude localizar ventana Explorer por ruta:", error)
+        return None
+
+    def _atlas_controlar_carpeta_ventana(self, accion, nombre):
+        limpio, scope = self._atlas_separar_nombre_y_ubicacion(nombre)
+        ruta = self._atlas_ruta_confiable(limpio)
+        if scope:
+            explicita = self._atlas_ruta_por_scope(limpio, scope)
+            if explicita and explicita.exists():
+                ruta = explicita
+        if not ruta and self.atlas_carpeta_actual:
+            actual = Path(self.atlas_carpeta_actual)
+            if self._atlas_nombres_carpeta_equivalentes(actual.name, limpio):
+                ruta = actual
+        if not ruta or not Path(ruta).exists():
+            self.responder(f"no encontré una ubicación confiable para la carpeta {limpio}.", "confundida")
+            return True
+        ventana = self._atlas_ventana_explorador_por_ruta(ruta)
+        if not ventana:
+            self.responder(f"la carpeta {Path(ruta).name} existe, pero no encontré su ventana abierta.", "confundida")
+            return True
+        previa = self.atlas_ventana_usuario_previa
+        try:
+            self.atlas_ventana_usuario_previa = ventana
+            return self._atlas_controlar_ventana(accion, "")
+        finally:
+            self.atlas_ventana_usuario_previa = previa
+
+    def _atlas_extraer_porcentaje(self, texto):
+        """Extrae un nivel absoluto 0..100 después de a/al/en.
+
+        Acepta tanto dígitos como números hablados frecuentes: ``a un 50``,
+        ``a cincuenta``, ``en treinta y cinco``. Devuelve None si la frase no
+        expresa un destino absoluto, para conservar los cambios relativos.
+        """
+        t = normalizar(texto or "")
+        m = re.search(r"\b(?:a|al|en)\s+(?:un\s+|el\s+)?(\d{1,3})\b", t)
+        if m:
+            n = int(m.group(1))
+            return n if 0 <= n <= 100 else None
+
+        unidades = {
+            "cero":0, "uno":1, "una":1, "dos":2, "tres":3, "cuatro":4,
+            "cinco":5, "seis":6, "siete":7, "ocho":8, "nueve":9,
+        }
+        especiales = {
+            "diez":10, "once":11, "doce":12, "trece":13, "catorce":14,
+            "quince":15, "dieciseis":16, "diecisiete":17, "dieciocho":18,
+            "diecinueve":19, "veinte":20, "veintiuno":21, "veintidos":22,
+            "veintitres":23, "veinticuatro":24, "veinticinco":25,
+            "veintiseis":26, "veintisiete":27, "veintiocho":28, "veintinueve":29,
+            "cien":100, "ciento":100,
+        }
+        decenas = {"treinta":30, "cuarenta":40, "cincuenta":50, "sesenta":60,
+                   "setenta":70, "ochenta":80, "noventa":90}
+        m = re.search(r"\b(?:a|al|en)\s+(.+)$", t)
+        if not m:
+            return None
+        toks = m.group(1).split()[:5]
+        while toks and toks[0] in {"un", "una", "el"}:
+            toks.pop(0)
+        if not toks:
+            return None
+        if toks[0] in especiales:
+            return especiales[toks[0]]
+        if toks[0] in decenas:
+            n = decenas[toks[0]]
+            if len(toks) >= 3 and toks[1] == "y" and toks[2] in unidades:
+                n += unidades[toks[2]]
+            return n
+        if toks[0] in unidades:
+            return unidades[toks[0]]
+        return None
+
+    def _atlas_detectar_app(self, texto):
+        t = self._atlas_normalizar_orden_operativa(texto)
+        alias = [
+            ("spotify", ["spotify"]),
+            ("word", ["word", "winword", "microsoft word"]),
+            ("excel", ["excel", "microsoft excel"]),
+            ("steam", ["steam"]),
+            ("explorador", ["explorador", "explorador de archivos", "explorer"]),
+            ("chrome", ["chrome", "google chrome"]),
+            ("notepad", ["bloc de notas", "notepad"]),
+            ("calculadora", ["calculadora", "calculator"]),
+        ]
+        for clave, nombres in alias:
+            if any(re.search(r"(?<!\w)" + re.escape(n) + r"(?!\w)", t) for n in nombres):
+                return clave
+        return ""
+
+    def _atlas_obtener_ventana_activa(self):
+        if os.name != "nt":
+            return None
+        try:
+            user32 = ctypes.windll.user32
+            hwnd = int(user32.GetForegroundWindow())
+            if not hwnd:
+                return None
+            largo = int(user32.GetWindowTextLengthW(hwnd))
+            buf = ctypes.create_unicode_buffer(max(1, largo + 1))
+            user32.GetWindowTextW(hwnd, buf, len(buf))
+            pid = ctypes.c_ulong(0)
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            proceso = ""
+            try:
+                import psutil
+                proceso = psutil.Process(pid.value).name()
+            except Exception:
+                pass
+            return {"hwnd": hwnd, "titulo": buf.value.strip(), "pid": int(pid.value), "proceso": proceso}
+        except Exception:
+            return None
+
+    def _atlas_enumerar_ventanas(self):
+        if os.name != "nt":
+            return []
+        ventanas = []
+        try:
+            user32 = ctypes.windll.user32
+            callback_t = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+
+            def callback(hwnd, _):
+                try:
+                    if not user32.IsWindowVisible(hwnd):
+                        return True
+                    largo = int(user32.GetWindowTextLengthW(hwnd))
+                    if largo <= 0:
+                        return True
+                    buf = ctypes.create_unicode_buffer(largo + 1)
+                    user32.GetWindowTextW(hwnd, buf, largo + 1)
+                    titulo = buf.value.strip()
+                    if not titulo:
+                        return True
+                    pid = ctypes.c_ulong(0)
+                    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                    proceso = ""
+                    try:
+                        import psutil
+                        proceso = psutil.Process(pid.value).name()
+                    except Exception:
+                        pass
+                    ventanas.append({"hwnd": int(hwnd), "titulo": titulo, "pid": int(pid.value), "proceso": proceso})
+                except Exception:
+                    pass
+                return True
+
+            user32.EnumWindows(callback_t(callback), 0)
+        except Exception as error:
+            print("CONTROL ATLAS: no pude enumerar ventanas:", error)
+        return ventanas
+
+    def _atlas_ventanas_de_app(self, app):
+        """Devuelve ventanas de una aplicación priorizando el proceso real.
+
+        v3.5.2 evita elegir una ventana solo porque el título contiene una
+        palabra parecida. Word/Spotify/etc. primero deben coincidir por proceso;
+        el título queda como respaldo para aplicaciones UWP o casos sin psutil.
+        """
+        app = (app or "").lower()
+        procesos = {
+            "spotify": ["spotify.exe"],
+            "word": ["winword.exe"],
+            "excel": ["excel.exe"],
+            "steam": ["steam.exe", "steamwebhelper.exe"],
+            "explorador": ["explorer.exe"],
+            "chrome": ["chrome.exe"],
+            "notepad": ["notepad.exe"],
+            "calculadora": ["calculatorapp.exe", "calculator.exe"],
+        }.get(app, [])
+        titulos = {
+            "spotify": ["spotify"],
+            "word": ["word"],
+            "excel": ["excel"],
+            "steam": ["steam"],
+            "explorador": ["explorador de archivos", "file explorer"],
+            "chrome": ["google chrome", "chrome"],
+            "notepad": ["bloc de notas", "notepad"],
+            "calculadora": ["calculadora", "calculator"],
+        }.get(app, [app])
+        por_proceso = []
+        por_titulo = []
+        for v in self._atlas_enumerar_ventanas():
+            proc = normalizar(v.get("proceso") or "")
+            titulo = normalizar(v.get("titulo") or "")
+            if any(proc == normalizar(p) for p in procesos if p):
+                por_proceso.append(v)
+            elif any(re.search(r"(?<!\w)" + re.escape(normalizar(k)) + r"(?!\w)", titulo) for k in titulos if k):
+                por_titulo.append(v)
+        # Si conocemos al menos una ventana por el ejecutable, descartamos por
+        # completo coincidencias débiles del título. Esto impide que VS Code,
+        # una canción de Spotify o un documento cuyo título diga "Word" gane
+        # por estar activo.
+        return por_proceso if por_proceso else por_titulo
+
+    def _atlas_controlar_ventana(self, accion, app=""):
+        if os.name != "nt":
+            self.responder("el control de ventanas solo está disponible en Atlas con Windows.", "confundida")
+            return True
+
+        objetivo = None
+        if app:
+            if app == "explorador" and getattr(self, "atlas_ultima_ruta_explorador", None):
+                objetivo = self._atlas_ventana_explorador_por_ruta(self.atlas_ultima_ruta_explorador)
+            if objetivo is None:
+                coincidencias = self._atlas_ventanas_de_app(app)
+                if coincidencias:
+                    activa = self.atlas_ventana_usuario_previa or self._atlas_obtener_ventana_activa()
+                    if activa:
+                        objetivo = next((v for v in coincidencias if v["hwnd"] == activa.get("hwnd")), None)
+                    objetivo = objetivo or coincidencias[0]
+        else:
+            objetivo = self.atlas_ventana_usuario_previa or self._atlas_obtener_ventana_activa()
+
+        if not objetivo or not objetivo.get("hwnd"):
+            nombre = self._atlas_nombre_amigable_app(app) if app else "esa ventana"
+            self.responder(f"no encontré {nombre} abierto.", "confundida")
+            return True
+
+        try:
+            hwnd = int(objetivo["hwnd"])
+            user32 = ctypes.windll.user32
+            if accion == "minimizar":
+                user32.ShowWindow(hwnd, 6)
+                time.sleep(0.05)
+                ok = bool(user32.IsIconic(hwnd))
+                verbo = "minimizada"
+            elif accion == "maximizar":
+                user32.ShowWindow(hwnd, 3)
+                time.sleep(0.05)
+                ok = bool(user32.IsZoomed(hwnd))
+                verbo = "maximizada"
+            elif accion == "restaurar":
+                user32.ShowWindow(hwnd, 9)
+                try:
+                    user32.SetForegroundWindow(hwnd)
+                except Exception:
+                    pass
+                time.sleep(0.05)
+                ok = bool(user32.IsWindow(hwnd)) and not bool(user32.IsIconic(hwnd))
+                verbo = "restaurada"
+            elif accion == "cerrar":
+                # WM_CLOSE es intencional: Word/Excel conservan su diálogo nativo
+                # de guardado. Confirmamos que Windows aceptó el mensaje, pero no
+                # afirmamos que la ventana ya desapareció si hay cambios pendientes.
+                ok = bool(user32.PostMessageW(hwnd, 0x0010, 0, 0))
+                verbo = "cerrando"
+            else:
+                return False
+            if not ok:
+                raise RuntimeError("Windows no confirmó la acción")
+            self.atlas_ultima_ventana = objetivo
+            if app:
+                self.atlas_ultima_aplicacion = app
+            nombre = self._atlas_nombre_amigable_app(app) if app else (objetivo.get("titulo") or "Ventana")
+            if accion == "cerrar":
+                self.responder(f"cerrando {nombre}; si hay cambios sin guardar, la aplicación pedirá confirmación.", "normal")
+            else:
+                self.responder(f"{nombre} {verbo}.", "normal")
+            print(f"CONTROL ATLAS v3.5.2: ventana {accion} hwnd={hwnd} titulo={objetivo.get('titulo','')!r}")
+        except Exception as error:
+            print("CONTROL ATLAS: error controlando ventana:", error)
+            self.responder("no pude realizar esa acción sobre la ventana.", "molesta")
+        return True
+
+    def _atlas_ruta_app_registro(self, exe):
+        if os.name != "nt":
+            return None
+        try:
+            import winreg
+            for raiz in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+                for prefijo in (r"Software\Microsoft\Windows\CurrentVersion\App Paths",
+                                r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths"):
+                    try:
+                        with winreg.OpenKey(raiz, prefijo + "\\" + exe) as key:
+                            valor, _ = winreg.QueryValueEx(key, None)
+                            p = Path(str(valor).strip('"'))
+                            if p.exists():
+                                return p
+                    except OSError:
+                        continue
+        except Exception:
+            pass
+        return None
+
+    def _atlas_abrir_aplicacion(self, app):
+        app = (app or "").lower()
+        nombre = self._atlas_nombre_amigable_app(app)
+        if os.name != "nt":
+            self.responder("la apertura de aplicaciones de Atlas requiere Windows.", "confundida")
+            return True
+        try:
+            if app == "spotify":
+                # En modo Control Atlas nunca caemos a la web si existe/esperamos
+                # la aplicación local. El URI spotify: lo registra la app instalada.
+                try:
+                    os.startfile("spotify:")
+                except Exception:
+                    local = Path(os.environ.get("APPDATA", "")) / "Spotify" / "Spotify.exe"
+                    if not local.exists():
+                        raise FileNotFoundError("Spotify local no encontrado")
+                    subprocess.Popen([str(local)])
+            elif app == "explorador":
+                subprocess.Popen(["explorer.exe"])
+            elif app == "notepad":
+                subprocess.Popen(["notepad.exe"])
+            elif app == "calculadora":
+                subprocess.Popen(["calc.exe"])
+            elif app == "chrome":
+                ruta = self.obtener_ruta_chrome()
+                if not ruta:
+                    raise FileNotFoundError("Chrome no encontrado")
+                subprocess.Popen([ruta])
+            elif app in {"word", "excel"}:
+                exe = "WINWORD.EXE" if app == "word" else "EXCEL.EXE"
+                ruta = self._atlas_ruta_app_registro(exe)
+                if not ruta:
+                    ruta_which = shutil.which(exe)
+                    ruta = Path(ruta_which) if ruta_which else None
+                if not ruta:
+                    raise FileNotFoundError(f"{nombre} no encontrado")
+                subprocess.Popen([str(ruta)])
+            elif app == "steam":
+                steam = None
+                try:
+                    import winreg
+                    for raiz, clave in [
+                        (winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam"),
+                        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Valve\Steam"),
+                    ]:
+                        try:
+                            with winreg.OpenKey(raiz, clave) as k:
+                                for campo in ("SteamExe", "InstallPath"):
+                                    try:
+                                        valor, _ = winreg.QueryValueEx(k, campo)
+                                        candidato = Path(valor) if campo == "SteamExe" else Path(valor) / "steam.exe"
+                                        if candidato.exists():
+                                            steam = candidato
+                                            break
+                                    except OSError:
+                                        continue
+                            if steam:
+                                break
+                        except OSError:
+                            continue
+                except Exception:
+                    pass
+                if not steam:
+                    for candidato in [
+                        Path(os.environ.get("ProgramFiles(x86)", "")) / "Steam" / "steam.exe",
+                        Path(os.environ.get("ProgramFiles", "")) / "Steam" / "steam.exe",
+                    ]:
+                        if candidato.exists():
+                            steam = candidato
+                            break
+                if not steam:
+                    raise FileNotFoundError("Steam local no encontrado")
+                subprocess.Popen([str(steam)])
+            else:
+                return False
+            self.atlas_ultima_aplicacion = app
+            self.responder(f"abriendo {nombre}.", "feliz")
+            print(f"CONTROL ATLAS v3.5.2: aplicación abierta={app}")
+        except Exception as error:
+            print(f"CONTROL ATLAS: no pude abrir {app}:", error)
+            self.responder(f"no pude encontrar o abrir {nombre} en Atlas.", "molesta")
+        return True
+
+    def _atlas_ruta_explorador_activa(self):
+        if os.name != "nt":
+            return None
+        ventana = self.atlas_ventana_usuario_previa or self._atlas_obtener_ventana_activa()
+        if not ventana or not ventana.get("hwnd"):
+            return None
+        hwnd = int(ventana["hwnd"])
+        script = (
+            "$s=New-Object -ComObject Shell.Application; "
+            f"$w=$s.Windows() | Where-Object {{ [int64]$_.HWND -eq {hwnd} }} | Select-Object -First 1; "
+            "if($w){$w.Document.Folder.Self.Path}"
+        )
+        try:
+            flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            r = subprocess.run(["powershell", "-NoProfile", "-Command", script],
+                               capture_output=True, text=True, timeout=3, creationflags=flags)
+            valor = (r.stdout or "").strip().splitlines()
+            if valor:
+                p = Path(valor[-1].strip())
+                if p.exists() and p.is_dir():
+                    return p
+        except Exception:
+            pass
+        return None
+
+    def _atlas_raices_busqueda(self):
+        """Raíces seguras para búsquedas ordinarias.
+
+        v3.5.2 deja de recorrer ``Path.home()`` y la raíz de A: por defecto.
+        Eso evita falsos positivos dentro de .m2, .vscode, caches y repositorios.
+        """
+        raices = []
+        activa = self._atlas_ruta_explorador_activa()
+        if activa:
+            self.atlas_carpeta_actual = activa
+        for p in [self.atlas_carpeta_actual, obtener_escritorio(), Path.home() / "Documents",
+                  Path.home() / "Documentos", Path.home() / "OneDrive"]:
+            if p and Path(p).exists():
+                pp = Path(p)
+                if pp not in raices:
+                    raices.append(pp)
+        return raices
+
+    def _atlas_buscar_elementos(self, nombre, tipo="cualquiera", extensiones=None):
+        buscado = normalizar(nombre or "").strip()
+        if not buscado:
+            return []
+        extensiones = {e.lower() for e in (extensiones or [])}
+        if tipo == "carpeta":
+            confiable = self._atlas_ruta_confiable(buscado)
+            if confiable and confiable.exists():
+                return [confiable]
+        omitir = {"appdata", "$recycle.bin", "system volume information", ".git", ".m2", ".vscode",
+                  ".cache", ".gradle", ".npm", "node_modules", "windows", "program files", "program files (x86)"}
+        exactos, parciales = [], []
+        vistos = set()
+        max_nodos = 7000
+        nodos = 0
+
+        def aceptar(p):
+            if tipo == "carpeta" and not p.is_dir():
+                return False
+            if tipo == "archivo" and not p.is_file():
+                return False
+            if extensiones and p.is_file() and p.suffix.lower() not in extensiones:
+                return False
+            return True
+
+        # Primero hijos directos de la carpeta contextual: la conversación tiene
+        # prioridad sobre búsquedas globales.
+        raices = self._atlas_raices_busqueda()
+        # v3.5.2: si estamos dentro de una subcarpeta de una ubicación
+        # confiable (por ejemplo D:\IPP\1er Semestre), una carpeta hermana
+        # como "Segundo Semestre" se busca también en su padre inmediato.
+        # Esto solo se aplica a CARPETAS y nunca habilita una búsqueda global.
+        if tipo == "carpeta" and self.atlas_carpeta_actual:
+            try:
+                actual_ctx = Path(self.atlas_carpeta_actual)
+                raiz_conf = self._atlas_raiz_confiable_para_ruta(actual_ctx)
+                padre = actual_ctx.parent
+                if raiz_conf and padre.exists() and padre.is_dir() and (padre == raiz_conf or raiz_conf in padre.parents):
+                    if padre not in raices:
+                        raices.insert(1 if raices else 0, padre)
+            except Exception:
+                pass
+        for raiz in raices:
+            try:
+                for p in raiz.iterdir():
+                    if not aceptar(p):
+                        continue
+                    n = normalizar(p.stem if p.is_file() else p.name)
+                    if n == buscado or (p.is_dir() and self._atlas_nombres_carpeta_equivalentes(p.name, buscado)):
+                        exactos.append(p)
+                    elif buscado in n:
+                        parciales.append(p)
+            except Exception:
+                pass
+            if exactos:
+                return list(dict.fromkeys(exactos))[:12]
+            # Solo la primera raíz (contextual) recibe prioridad de coincidencias
+            # parciales directas.
+            if parciales:
+                return list(dict.fromkeys(parciales))[:12]
+
+        for raiz in raices:
+            cola = [(raiz, 0)]
+            while cola and nodos < max_nodos:
+                actual, profundidad = cola.pop(0)
+                try:
+                    hijos = list(actual.iterdir())
+                except Exception:
+                    continue
+                for p in hijos:
+                    nodos += 1
+                    if nodos >= max_nodos:
+                        break
+                    try:
+                        if str(p).lower() in vistos:
+                            continue
+                        vistos.add(str(p).lower())
+                        n = normalizar(p.stem if p.is_file() else p.name)
+                        if aceptar(p):
+                            if n == buscado or (p.is_dir() and self._atlas_nombres_carpeta_equivalentes(p.name, buscado)):
+                                exactos.append(p)
+                            elif buscado in n or difflib.SequenceMatcher(None, buscado, n).ratio() >= 0.86:
+                                parciales.append(p)
+                        oculto_tecnico = p.is_dir() and (p.name.startswith(".") or normalizar(p.name) in omitir)
+                        if p.is_dir() and profundidad < 4 and not oculto_tecnico:
+                            cola.append((p, profundidad + 1))
+                    except Exception:
+                        continue
+            if exactos:
+                break
+        return list(dict.fromkeys(exactos or parciales))[:12]
+
+
+    def _atlas_nombre_carpeta_valido(self, nombre):
+        """Evita que fragmentos incompletos disparen búsquedas arbitrarias."""
+        limpio, _scope = self._atlas_separar_nombre_y_ubicacion(nombre)
+        n = self._atlas_normalizar_nombre_carpeta(limpio)
+        n = normalizar(n or "").strip(" .")
+        if not n:
+            return False
+        stop = {
+            "de", "del", "la", "el", "una", "un", "carpeta", "archivo",
+            "documento", "esto", "eso", "aqui", "ahi",
+        }
+        if n in stop:
+            return False
+        # Un solo carácter suele ser un residuo de ASR, no un nombre fiable.
+        if len(n) < 2 and not n.isdigit():
+            return False
+        return True
+
+    def _atlas_resolver_carpeta_real(self, nombre):
+        """Devuelve únicamente rutas de carpetas que existen realmente.
+
+        Respeta ubicación confiable, alcance explícito y después contexto/raíces
+        seguras. Nunca inventa una ruta ni consulta a Ollama.
+        """
+        # Los helpers internos pueden pasar una ruta ya verificada. Si existe
+        # físicamente, se acepta directamente; jamás se construye una ruta a
+        # partir de texto libre en este punto.
+        try:
+            directo = Path(str(nombre))
+            if directo.exists() and directo.is_dir():
+                return [directo]
+        except Exception:
+            pass
+        limpio, scope = self._atlas_separar_nombre_y_ubicacion(nombre)
+        limpio = self._atlas_normalizar_nombre_carpeta(limpio)
+        n = normalizar(limpio or "").strip()
+
+        if n in {"esta", "actual", "esta carpeta", "carpeta actual", "aqui"}:
+            activa = self._atlas_ruta_explorador_activa() or self.atlas_carpeta_actual
+            p = Path(activa) if activa else None
+            return [p] if p and p.exists() and p.is_dir() else []
+
+        if not self._atlas_nombre_carpeta_valido(limpio):
+            return []
+
+        confiable = self._atlas_ruta_confiable(limpio)
+        if confiable and confiable.exists() and confiable.is_dir() and not scope:
+            return [Path(confiable)]
+
+        if scope:
+            destino = self._atlas_ruta_por_scope(limpio, scope)
+            if destino and destino.exists() and destino.is_dir():
+                return [Path(destino)]
+            return []
+
+        # Si el contexto actual ya es la carpeta nombrada, no volvemos a buscar.
+        actual = self.atlas_carpeta_actual
+        if actual:
+            pactual = Path(actual)
+            if pactual.exists() and pactual.is_dir() and (normalizar(pactual.name) == n or self._atlas_nombres_carpeta_equivalentes(pactual.name, limpio)):
+                return [pactual]
+
+        return [Path(p) for p in self._atlas_buscar_elementos(limpio, tipo="carpeta") if Path(p).exists() and Path(p).is_dir()]
+
+    def _atlas_ubicar_carpeta_por_nombre(self, nombre):
+        """Informa rutas verificadas sin abrir ni inventar ubicaciones."""
+        if not self._atlas_nombre_carpeta_valido(nombre):
+            self.responder("necesito el nombre de la carpeta que quiere ubicar.", "confundida")
+            return True
+        rutas = self._atlas_resolver_carpeta_real(nombre)
+        if not rutas:
+            limpio, _ = self._atlas_separar_nombre_y_ubicacion(nombre)
+            self.responder(f"no encontré una carpeta real llamada {limpio} en el contexto y ubicaciones seguras.", "confundida")
+            print(f"CONTROL ATLAS v3.5.2: ubicación no encontrada para {limpio!r}; sin fallback a Ollama.")
+            return True
+        if len(rutas) == 1:
+            p = rutas[0]
+            self.atlas_ultima_ruta_referida = p
+            self.responder(f"la carpeta {p.name} está en {p}.", "normal")
+            print(f"CONTROL ATLAS v3.5.2: ubicación verificada={p}")
+            return True
+        detalles = "; ".join(f"{i}, {p}" for i, p in enumerate(rutas[:6], 1))
+        self.responder(f"encontré varias carpetas reales con ese nombre: {detalles}. Indique una ubicación más específica.", "confundida")
+        print(f"CONTROL ATLAS v3.5.2: múltiples ubicaciones verificadas={rutas[:6]}")
+        return True
+
+    def _atlas_listar_contenido_carpeta(self, nombre):
+        """Lista contenido real del sistema de archivos; nunca usa generación."""
+        if not self._atlas_nombre_carpeta_valido(nombre):
+            self.responder("necesito saber qué carpeta quiere revisar.", "confundida")
+            return True
+        rutas = self._atlas_resolver_carpeta_real(nombre)
+        if not rutas:
+            limpio, _ = self._atlas_separar_nombre_y_ubicacion(nombre)
+            self.responder(f"no encontré una carpeta real llamada {limpio} para revisar su contenido.", "confundida")
+            print(f"CONTROL ATLAS v3.5.2: contenido no disponible; carpeta inexistente {limpio!r}.")
+            return True
+        if len(rutas) > 1:
+            detalles = "; ".join(f"{i}, {p}" for i, p in enumerate(rutas[:6], 1))
+            self.responder(f"encontré varias carpetas reales con ese nombre: {detalles}. Indique cuál quiere revisar.", "confundida")
+            return True
+
+        ruta = rutas[0]
+        try:
+            hijos = sorted(list(ruta.iterdir()), key=lambda p: (not p.is_dir(), normalizar(p.name)))
+        except Exception as error:
+            print(f"CONTROL ATLAS v3.5.2: no pude leer {ruta}: {error}")
+            self.responder(f"encontré {ruta.name}, pero Windows no me permitió leer su contenido.", "molesta")
+            return True
+
+        carpetas = [p.name for p in hijos if p.is_dir()]
+        archivos = [p.name for p in hijos if p.is_file()]
+        self.atlas_ultima_ruta_referida = ruta
+        # Mostrar/revisar explícitamente una carpeta cambia el CONTEXTO
+        # conversacional de navegación, aunque Windows no abra otra ventana.
+        # Así, después de "muéstrame el contenido de IPP", "abre Segundo
+        # Semestre" se resuelve dentro de D:\IPP y no dentro del 1er semestre.
+        self.atlas_carpeta_actual = ruta
+
+        if not hijos:
+            self.responder(f"la carpeta {ruta.name} está vacía.", "normal")
+            print(f"CONTROL ATLAS v3.5.2: contenido verificado {ruta}: vacío")
+            return True
+
+        partes = [f"en {ruta.name} encontré {len(carpetas)} carpeta{'s' if len(carpetas) != 1 else ''} y {len(archivos)} archivo{'s' if len(archivos) != 1 else ''}"]
+        if carpetas:
+            muestra = ", ".join(carpetas[:8])
+            if len(carpetas) > 8:
+                muestra += f", y {len(carpetas)-8} más"
+            partes.append("carpetas: " + muestra)
+        if archivos:
+            muestra = ", ".join(archivos[:8])
+            if len(archivos) > 8:
+                muestra += f", y {len(archivos)-8} más"
+            partes.append("archivos: " + muestra)
+        self.responder(". ".join(partes) + ".", "normal")
+        print(f"CONTROL ATLAS v3.5.2: contenido verificado={ruta} carpetas={len(carpetas)} archivos={len(archivos)}")
+        return True
+
+    def _atlas_abrir_ruta(self, ruta, tipo=""):
+        try:
+            p = Path(ruta)
+            if not p.exists():
+                raise FileNotFoundError(str(p))
+            os.startfile(str(p))
+            if p.is_dir():
+                anterior = self.atlas_carpeta_actual
+                if anterior and Path(anterior) != p:
+                    self.atlas_historial_carpetas.append(Path(anterior))
+                    self.atlas_historial_carpetas = self.atlas_historial_carpetas[-20:]
+                self.atlas_carpeta_actual = p
+                self.atlas_ultima_ruta_explorador = p
+                self.atlas_ultima_aplicacion = "explorador"
+                self.responder(f"abriendo {p.name or str(p)}.", "feliz")
+            else:
+                self.atlas_ultimo_archivo = p
+                self.responder(f"abriendo {p.name}.", "feliz")
+            print(f"CONTROL ATLAS v3.5.2: ruta abierta={p}")
+        except Exception as error:
+            print("CONTROL ATLAS: no pude abrir ruta:", error)
+            self.responder("no pude abrir ese elemento.", "molesta")
+        return True
+
+    def _atlas_ofrecer_coincidencias(self, rutas, tipo):
+        rutas = [Path(p) for p in rutas]
+        if not rutas:
+            return False
+        if len(rutas) == 1:
+            return self._atlas_abrir_ruta(rutas[0], tipo)
+        self.atlas_opciones_pendientes = rutas[:6]
+        self.atlas_tipo_opciones_pendientes = tipo
+        self.atlas_opciones_hasta = time.time() + 25.0
+        partes = []
+        for i, p in enumerate(self.atlas_opciones_pendientes, 1):
+            # Dos niveles de contexto suelen ser más útiles que solo el padre
+            # inmediato (p. ej. "cl" / "edu"). No se inventan rutas.
+            padres = [x.name for x in list(p.parents)[:2] if x.name]
+            contexto = " / ".join(reversed(padres)) if padres else str(p.parent)
+            partes.append(f"{i}, {p.name}, en {contexto}")
+        self.responder("encontré varias coincidencias: " + "; ".join(partes) + ". Dígame el número que quiere abrir.", "confundida")
+        return True
+
+    def _atlas_resolver_opcion_pendiente(self, texto):
+        if not self.atlas_opciones_pendientes:
+            return False
+        limite = float(getattr(self, "atlas_opciones_hasta", 0.0) or 0.0)
+        if limite and time.time() > limite:
+            self.atlas_opciones_pendientes = []
+            self.atlas_tipo_opciones_pendientes = ""
+            self.atlas_opciones_hasta = 0.0
+            return False
+        t = self._atlas_quitar_wake(texto)
+        numeros = {"1":1, "uno":1, "primera":1, "primero":1, "2":2, "dos":2, "segunda":2, "segundo":2,
+                   "3":3, "tres":3, "tercera":3, "tercero":3, "4":4, "cuatro":4, "cuarta":4,
+                   "5":5, "cinco":5, "quinta":5, "6":6, "seis":6, "sexta":6}
+        elegido = None
+        for token, numero in numeros.items():
+            if re.search(r"(?<!\w)" + re.escape(token) + r"(?!\w)", t):
+                elegido = numero
+                break
+        if elegido and 1 <= elegido <= len(self.atlas_opciones_pendientes):
+            ruta = self.atlas_opciones_pendientes[elegido - 1]
+            tipo = self.atlas_tipo_opciones_pendientes
+            self.atlas_opciones_pendientes = []
+            self.atlas_tipo_opciones_pendientes = ""
+            self.atlas_opciones_hasta = 0.0
+            return self._atlas_abrir_ruta(ruta, tipo)
+        if any(x in t for x in ["cancela", "ninguna", "ninguno", "dejalo"]):
+            self.atlas_opciones_pendientes = []
+            self.atlas_tipo_opciones_pendientes = ""
+            self.atlas_opciones_hasta = 0.0
+            self.responder("cancelado.", "normal")
+            return True
+        return False
+
+    def _atlas_extraer_nombre(self, original, tipo):
+        t = self._atlas_quitar_wake(original)
+        if tipo == "carpeta":
+            patrones = [
+                r"^(?:abre|abrir|entra a|entra en|ve a|ir a)\s+(?:la\s+)?carpeta\s+(.+)$",
+                r"^(?:abre|abrir|entra a|entra en|ve a|ir a)\s+(.+)$",
+            ]
+        else:
+            patrones = [
+                r"^(?:abre|abrir|busca|buscar|encuentra|localiza)\s+(?:el\s+)?(?:archivo|documento)\s+(.+)$",
+                r"^(?:abre|abrir|busca|buscar|encuentra|localiza)\s+(?:el\s+)?(?:word|excel|pdf)\s+(?:llamado|llamada|de)?\s*(.+)$",
+            ]
+        for patron in patrones:
+            m = re.match(patron, t)
+            if m:
+                nombre = m.group(1).strip()
+                # Conservamos el calificador para que el resolvedor pueda distinguir
+                # "Beta en el disco A" de un nombre literal larguísimo.
+                return nombre
+        return ""
+
+    def _atlas_abrir_carpeta_por_nombre(self, nombre):
+        limpio, scope = self._atlas_separar_nombre_y_ubicacion(nombre)
+        limpio = self._atlas_normalizar_nombre_carpeta(limpio)
+
+        if not self._atlas_nombre_carpeta_valido(limpio):
+            self.responder("necesito el nombre exacto de la carpeta que quiere abrir.", "confundida")
+            print(f"CONTROL ATLAS v3.5.2: búsqueda de carpeta bloqueada por nombre incompleto: {nombre!r}")
+            return True
+
+        # 1) Una ubicación confiable gana siempre frente a búsquedas globales.
+        confiable = self._atlas_ruta_confiable(limpio)
+        if confiable and confiable.exists() and not scope:
+            print(f"CONTROL ATLAS v3.5.2: ubicación confiable {limpio} -> {confiable}")
+            return self._atlas_abrir_ruta(confiable, "carpeta")
+
+        # 2) Si el Señor nombró una unidad/Escritorio/Documentos, respetamos ese
+        # alcance exacto y no buscamos en otras ubicaciones.
+        if scope:
+            destino = self._atlas_ruta_por_scope(limpio, scope)
+            if destino and destino.exists() and destino.is_dir():
+                return self._atlas_abrir_ruta(destino, "carpeta")
+            self.responder(f"no encontré la carpeta {limpio} en la ubicación indicada.", "confundida")
+            return True
+
+        # 3) Solo después usamos las raíces seguras/contextuales.
+        coincidencias = self._atlas_buscar_elementos(limpio, tipo="carpeta")
+        if not coincidencias:
+            actual = self.atlas_carpeta_actual
+            sugerencias = []
+            try:
+                if actual and Path(actual).exists() and Path(actual).is_dir():
+                    sugerencias = [p.name for p in Path(actual).iterdir() if p.is_dir()][:8]
+            except Exception:
+                sugerencias = []
+            if sugerencias:
+                self.responder(
+                    f"no encontré una carpeta llamada {limpio} dentro del contexto actual {Path(actual).name}. "
+                    f"Las carpetas reales que veo allí incluyen: {', '.join(sugerencias)}.",
+                    "confundida",
+                )
+            else:
+                self.responder(f"no encontré una carpeta llamada {limpio} en las ubicaciones seguras que revisé.", "confundida")
+            print(f"CONTROL ATLAS v3.5.2: carpeta no encontrada={limpio!r}; sin fallback a Ollama.")
+            return True
+        return self._atlas_ofrecer_coincidencias(coincidencias, "carpeta")
+
+    def _atlas_abrir_archivo_por_nombre(self, nombre, tipo_archivo=""):
+        extensiones = None
+        if tipo_archivo == "word":
+            extensiones = {".doc", ".docx", ".docm"}
+        elif tipo_archivo == "excel":
+            extensiones = {".xls", ".xlsx", ".xlsm", ".xlsb"}
+        elif tipo_archivo == "pdf":
+            extensiones = {".pdf"}
+        coincidencias = self._atlas_buscar_elementos(nombre, tipo="archivo", extensiones=extensiones)
+        if not coincidencias:
+            self.responder(f"no encontré un archivo que coincida con {nombre}.", "confundida")
+            return True
+        return self._atlas_ofrecer_coincidencias(coincidencias, "archivo")
+
+    def _atlas_volver_carpeta(self):
+        if self.atlas_historial_carpetas:
+            destino = self.atlas_historial_carpetas.pop()
+            # Evita volver a agregar el origen al historial durante esta apertura.
+            actual = self.atlas_carpeta_actual
+            self.atlas_carpeta_actual = None
+            resultado = self._atlas_abrir_ruta(destino, "carpeta")
+            if actual and self.atlas_historial_carpetas and self.atlas_historial_carpetas[-1] == actual:
+                self.atlas_historial_carpetas.pop()
+            return resultado
+        activa = self._atlas_ruta_explorador_activa()
+        if activa and activa.parent != activa:
+            self.atlas_carpeta_actual = activa
+            return self._atlas_abrir_ruta(activa.parent, "carpeta")
+        self.responder("no tengo una carpeta anterior en el contexto actual.", "confundida")
+        return True
+
+    def _atlas_crear_carpeta_contextual(self, nombre):
+        limpio = re.sub(r'[<>:"/\\|?*]', "", (nombre or "")).strip(" .")
+        if not limpio:
+            self.responder("necesito un nombre válido para la carpeta.", "confundida")
+            return True
+        base = self._atlas_ruta_explorador_activa() or self.atlas_carpeta_actual or obtener_escritorio()
+        destino = Path(base) / limpio
+        try:
+            if destino.exists():
+                self.responder(f"la carpeta {limpio} ya existe en {Path(base).name or str(base)}.", "confundida")
+                return True
+            destino.mkdir(parents=False)
+            self.atlas_carpeta_actual = Path(base)
+            self.responder(f"carpeta {limpio} creada.", "feliz")
+            print(f"CONTROL ATLAS v3.5.2: carpeta creada={destino}")
+        except Exception as error:
+            print("CONTROL ATLAS: no pude crear carpeta:", error)
+            self.responder("no pude crear esa carpeta.", "molesta")
+        return True
+
+    # ======================================================
+    # CONTROL DE ARCHIVOS SEGURO v3.5.2
+    # ======================================================
+
+    def _atlas_base_operacion_archivos(self):
+        """Carpeta real sobre la que operan crear/renombrar/copiar/mover.
+
+        La ruta activa del Explorador tiene prioridad. Si no puede verificarse,
+        se usa el contexto operativo ya verificado y finalmente el Escritorio.
+        """
+        activa = self._atlas_ruta_explorador_activa()
+        if activa and Path(activa).exists() and Path(activa).is_dir():
+            self.atlas_carpeta_actual = Path(activa)
+            return Path(activa)
+        if self.atlas_carpeta_actual and Path(self.atlas_carpeta_actual).exists():
+            return Path(self.atlas_carpeta_actual)
+        return Path(obtener_escritorio())
+
+    def _atlas_nombre_windows_seguro(self, nombre, extension=""):
+        nombre = (nombre or "").strip().strip('"').strip("'")
+        nombre = re.sub(r'[<>:"/\\|?*]', "", nombre).strip(" .")
+        if not nombre:
+            return ""
+        reservados = {"CON","PRN","AUX","NUL",*(f"COM{i}" for i in range(1,10)),*(f"LPT{i}" for i in range(1,10))}
+        raiz = nombre.split(".",1)[0].upper()
+        if raiz in reservados:
+            return ""
+        if extension and not nombre.lower().endswith(extension.lower()):
+            nombre += extension
+        return nombre[:180]
+
+    def _atlas_es_ruta_protegida(self, ruta):
+        try:
+            p = Path(ruta).resolve()
+        except Exception:
+            return True
+        protegidas = []
+        try:
+            beta_root = Path(BASE_DIR).resolve()
+            # Beta no administra destructivamente su propia instalación.
+            if p == beta_root or beta_root in p.parents:
+                return True
+            protegidas.append(beta_root)
+        except Exception:
+            pass
+        for info in (getattr(self, "atlas_ubicaciones_confiables", {}) or {}).values():
+            try:
+                q = Path(str(info.get("ruta") or "")).resolve()
+                if q.exists():
+                    protegidas.append(q)
+            except Exception:
+                pass
+        # Para otras ubicaciones confiables (por ejemplo D:\IPP) solo se
+        # protege la raíz; sus subcarpetas sí pueden administrarse con las
+        # confirmaciones correspondientes.
+        return any(p == q for q in protegidas)
+
+    def _atlas_elemento_contextual(self, referencia, tipo="cualquiera"):
+        r = normalizar(referencia or "").strip()
+        base = self._atlas_base_operacion_archivos()
+        if r in {"esta carpeta","la carpeta","carpeta actual","esta","actual"}:
+            return base if base.exists() and base.is_dir() else None
+        if r in {"este archivo","el archivo","archivo actual","ultimo archivo","ultimo"}:
+            p = Path(self.atlas_ultimo_archivo) if self.atlas_ultimo_archivo else None
+            return p if p and p.exists() and p.is_file() else None
+        # Ruta literal existente.
+        try:
+            p = Path(referencia)
+            if p.exists() and (tipo == "cualquiera" or (tipo == "archivo" and p.is_file()) or (tipo == "carpeta" and p.is_dir())):
+                return p
+        except Exception:
+            pass
+        # Primero hijos directos del contexto: evita búsquedas globales para
+        # operaciones que podrían modificar datos.
+        candidatos=[]
+        try:
+            for p in base.iterdir():
+                if tipo == "archivo" and not p.is_file():
+                    continue
+                if tipo == "carpeta" and not p.is_dir():
+                    continue
+                buscado = normalizar(referencia or "")
+                n = normalizar(p.stem if p.is_file() else p.name)
+                n_completo = normalizar(p.name)
+                if n == buscado or n_completo == buscado or (p.is_dir() and self._atlas_nombres_carpeta_equivalentes(p.name, referencia)):
+                    candidatos.append(p)
+        except Exception:
+            pass
+        return candidatos[0] if len(candidatos) == 1 else None
+
+    def _atlas_destino_carpeta(self, referencia):
+        r = normalizar(referencia or "").strip()
+        if r in {"aqui","aqui mismo","esta carpeta","carpeta actual"}:
+            return self._atlas_base_operacion_archivos()
+        confiable = self._atlas_ruta_confiable(referencia)
+        if confiable and Path(confiable).exists() and Path(confiable).is_dir():
+            return Path(confiable)
+        p = self._atlas_elemento_contextual(referencia, "carpeta")
+        return Path(p) if p and Path(p).is_dir() else None
+
+    def _atlas_solicitar_confirmacion(self, accion, datos, mensaje):
+        self.atlas_confirmacion_pendiente = {"accion": accion, "datos": datos}
+        self.atlas_confirmacion_hasta = time.time() + 30.0
+        self.responder(mensaje + " ¿Confirma?", "confundida")
+        print(f"CONTROL ATLAS v3.5.2: confirmación requerida accion={accion}")
+        return True
+
+    def _atlas_resolver_confirmacion_pendiente(self, texto):
+        pendiente = getattr(self, "atlas_confirmacion_pendiente", None)
+        if not pendiente:
+            return False
+        if time.time() > float(getattr(self, "atlas_confirmacion_hasta", 0.0) or 0.0):
+            self.atlas_confirmacion_pendiente = None
+            self.atlas_confirmacion_hasta = 0.0
+            return False
+        t = self._atlas_quitar_wake(texto)
+        if t in {"no","cancela","cancelar","dejalo","déjalo"}:
+            self.atlas_confirmacion_pendiente = None
+            self.atlas_confirmacion_hasta = 0.0
+            self.responder("cancelado. No hice cambios.", "normal")
+            return True
+        if t not in {"si","sí","confirmo","confirma","de acuerdo","hazlo","adelante","acepto"}:
+            return False
+        self.atlas_confirmacion_pendiente = None
+        self.atlas_confirmacion_hasta = 0.0
+        return self._atlas_ejecutar_operacion_confirmada(pendiente.get("accion"), pendiente.get("datos") or {})
+
+    def _atlas_crear_word_vacio(self, destino):
+        try:
+            from docx import Document
+            doc = Document()
+            doc.save(str(destino))
+            return True, ""
+        except Exception as error:
+            return False, str(error)
+
+    def _atlas_crear_excel_vacio(self, destino):
+        """Crea XLSX real usando Excel instalado, sin pywin32."""
+        if os.name != "nt":
+            return False, "Excel COM solo está disponible en Windows."
+        ruta = str(destino).replace("'", "''")
+        script = (
+            "$ErrorActionPreference='Stop'; "
+            "$excel=New-Object -ComObject Excel.Application; "
+            "$excel.DisplayAlerts=$false; "
+            "try{$wb=$excel.Workbooks.Add(); $wb.SaveAs('" + ruta + "',51); $wb.Close($false)} "
+            "finally{$excel.Quit(); [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel)|Out-Null}"
+        )
+        try:
+            flags=getattr(subprocess,"CREATE_NO_WINDOW",0)
+            r=subprocess.run(["powershell","-NoProfile","-Command",script],capture_output=True,text=True,timeout=20,creationflags=flags)
+            return (r.returncode == 0 and Path(destino).exists()), ((r.stderr or r.stdout or "").strip())
+        except Exception as error:
+            return False, str(error)
+
+    def _atlas_crear_documento(self, tipo, nombre):
+        ext = ".docx" if tipo == "word" else ".xlsx"
+        predeterminado = "Documento Word" if tipo == "word" else "Libro Excel"
+        seguro = self._atlas_nombre_windows_seguro(nombre or predeterminado, ext)
+        if not seguro:
+            self.responder("necesito un nombre válido para el archivo.", "confundida")
+            return True
+        base = self._atlas_base_operacion_archivos()
+        destino = base / seguro
+        if destino.exists():
+            return self._atlas_solicitar_confirmacion(
+                "sobrescribir_documento", {"tipo": tipo, "destino": str(destino)},
+                f"ya existe {destino.name}. Para crear el nuevo archivo tendría que sobrescribirlo."
+            )
+        return self._atlas_materializar_documento(tipo, destino)
+
+    def _atlas_materializar_documento(self, tipo, destino):
+        destino = Path(destino)
+        ok, error = self._atlas_crear_word_vacio(destino) if tipo == "word" else self._atlas_crear_excel_vacio(destino)
+        if not ok or not destino.exists():
+            print(f"CONTROL ATLAS v3.5.2: no pude crear {tipo}: {error}")
+            self.responder(f"no pude crear el archivo {tipo}.", "molesta")
+            return True
+        self.atlas_ultimo_archivo = destino
+        self.atlas_ultima_ruta_referida = destino
+        try:
+            os.startfile(str(destino))
+            self.responder(f"creé y abrí {destino.name}.", "feliz")
+        except Exception:
+            self.responder(f"creé {destino.name}, pero no pude abrirlo automáticamente.", "normal")
+        print(f"CONTROL ATLAS v3.5.2: documento creado={destino}")
+        return True
+
+    def _atlas_renombrar(self, referencia, nuevo_nombre, tipo="cualquiera"):
+        origen = self._atlas_elemento_contextual(referencia, tipo)
+        if not origen:
+            self.responder("no pude identificar un único elemento real para renombrar.", "confundida")
+            return True
+        origen = Path(origen)
+        ext = origen.suffix if origen.is_file() else ""
+        seguro = self._atlas_nombre_windows_seguro(nuevo_nombre, ext if origen.is_file() else "")
+        if not seguro:
+            self.responder("el nuevo nombre no es válido.", "confundida")
+            return True
+        destino = origen.with_name(seguro)
+        if destino.exists() and destino != origen:
+            self.responder(f"ya existe {destino.name}. No lo sobrescribí.", "confundida")
+            return True
+        try:
+            origen.rename(destino)
+            if self.atlas_carpeta_actual and Path(self.atlas_carpeta_actual) == origen:
+                self.atlas_carpeta_actual = destino
+            if self.atlas_ultimo_archivo and Path(self.atlas_ultimo_archivo) == origen:
+                self.atlas_ultimo_archivo = destino
+            self.atlas_ultima_ruta_referida = destino
+            self.responder(f"renombré {origen.name} como {destino.name}.", "feliz")
+            print(f"CONTROL ATLAS v3.5.2: renombrado {origen} -> {destino}")
+        except Exception as error:
+            print("CONTROL ATLAS v3.5.2: error renombrando:", error)
+            self.responder("no pude renombrar ese elemento.", "molesta")
+        return True
+
+    def _atlas_copiar(self, referencia, destino_ref, tipo="cualquiera"):
+        origen = self._atlas_elemento_contextual(referencia, tipo)
+        destino_dir = self._atlas_destino_carpeta(destino_ref)
+        if not origen or not destino_dir:
+            self.responder("no pude verificar el origen o la carpeta de destino.", "confundida")
+            return True
+        origen, destino_dir = Path(origen), Path(destino_dir)
+        destino = destino_dir / origen.name
+        try:
+            origen_r, destino_dir_r, destino_r = origen.resolve(), destino_dir.resolve(), destino.resolve()
+            if origen_r == destino_r or (origen.is_dir() and (destino_dir_r == origen_r or origen_r in destino_dir_r.parents)):
+                self.responder("no copiaré una carpeta dentro de sí misma ni sobre el mismo origen.", "confundida")
+                return True
+        except Exception:
+            pass
+        if destino.exists():
+            return self._atlas_solicitar_confirmacion(
+                "copiar_sobrescribir", {"origen": str(origen), "destino": str(destino)},
+                f"{destino.name} ya existe en {destino_dir.name}; copiarlo reemplazaría contenido existente."
+            )
+        return self._atlas_ejecutar_copia(origen, destino)
+
+    def _atlas_ejecutar_copia(self, origen, destino):
+        try:
+            origen, destino = Path(origen), Path(destino)
+            if origen.is_dir():
+                shutil.copytree(origen, destino)
+            else:
+                shutil.copy2(origen, destino)
+            if not destino.exists():
+                raise IOError("el destino no apareció tras la copia")
+            self.atlas_ultima_ruta_referida = destino
+            self.responder(f"copié {origen.name} en {destino.parent.name or destino.parent}.", "feliz")
+            print(f"CONTROL ATLAS v3.5.2: copia verificada {origen} -> {destino}")
+        except Exception as error:
+            print("CONTROL ATLAS v3.5.2: error copiando:", error)
+            self.responder("no pude completar la copia.", "molesta")
+        return True
+
+    def _atlas_mover(self, referencia, destino_ref, tipo="cualquiera"):
+        origen = self._atlas_elemento_contextual(referencia, tipo)
+        destino_dir = self._atlas_destino_carpeta(destino_ref)
+        if not origen or not destino_dir:
+            self.responder("no pude verificar el origen o la carpeta de destino.", "confundida")
+            return True
+        origen, destino_dir = Path(origen), Path(destino_dir)
+        if self._atlas_es_ruta_protegida(origen):
+            self.responder("esa ubicación está protegida y no la moveré.", "molesta")
+            return True
+        destino = destino_dir / origen.name
+        try:
+            origen_r, destino_dir_r, destino_r = origen.resolve(), destino_dir.resolve(), destino.resolve()
+            if origen_r == destino_r or (origen.is_dir() and (destino_dir_r == origen_r or origen_r in destino_dir_r.parents)):
+                self.responder("no moveré una carpeta dentro de sí misma ni al mismo lugar.", "confundida")
+                return True
+        except Exception:
+            pass
+        msg = f"voy a mover {origen.name} a {destino_dir}."
+        if destino.exists():
+            msg += " Allí ya existe un elemento con el mismo nombre y podría reemplazarse."
+        return self._atlas_solicitar_confirmacion("mover", {"origen": str(origen), "destino": str(destino)}, msg)
+
+    def _atlas_enviar_papelera(self, ruta):
+        if os.name != "nt":
+            return False, "La Papelera de reciclaje requiere Windows."
+        ruta = str(Path(ruta)).replace("'", "''")
+        es_dir = Path(ruta.replace("''", "'")).is_dir()
+        metodo = "DeleteDirectory" if es_dir else "DeleteFile"
+        script = (
+            "Add-Type -AssemblyName Microsoft.VisualBasic; "
+            f"[Microsoft.VisualBasic.FileIO.FileSystem]::{metodo}('{ruta}',"
+            "[Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs,"
+            "[Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin)"
+        )
+        try:
+            flags=getattr(subprocess,"CREATE_NO_WINDOW",0)
+            r=subprocess.run(["powershell","-NoProfile","-Command",script],capture_output=True,text=True,timeout=20,creationflags=flags)
+            return r.returncode == 0, (r.stderr or r.stdout or "").strip()
+        except Exception as error:
+            return False, str(error)
+
+    def _atlas_eliminar(self, referencia, tipo="cualquiera"):
+        origen = self._atlas_elemento_contextual(referencia, tipo)
+        if not origen:
+            self.responder("no pude identificar un único elemento real para eliminar.", "confundida")
+            return True
+        origen = Path(origen)
+        if self._atlas_es_ruta_protegida(origen):
+            self.responder("esa ubicación está protegida y no la eliminaré.", "molesta")
+            return True
+        return self._atlas_solicitar_confirmacion(
+            "eliminar", {"origen": str(origen)},
+            f"voy a enviar {origen.name} a la Papelera de reciclaje."
+        )
+
+    def _atlas_nombre_unico(self, destino):
+        destino=Path(destino)
+        if not destino.exists():
+            return destino
+        base, ext = destino.stem, destino.suffix
+        for i in range(1,1000):
+            candidato=destino.with_name(f"{base} ({i}){ext}")
+            if not candidato.exists():
+                return candidato
+        return destino.with_name(f"{base} copia{ext}")
+
+    def _atlas_plan_organizacion(self, ruta):
+        ruta=Path(ruta)
+        categorias={
+            "PDF": {".pdf"}, "Word": {".doc", ".docx"}, "Excel": {".xls", ".xlsx", ".xlsm", ".csv"},
+            "Presentaciones": {".ppt", ".pptx"}, "Imagenes": {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".heic"},
+            "Comprimidos": {".zip", ".7z", ".rar", ".tar", ".gz"}, "Texto": {".txt", ".md", ".rtf"},
+        }
+        plan=[]; conteo={}
+        try:
+            archivos=[p for p in ruta.iterdir() if p.is_file() and not p.name.startswith(".") and p.name.lower() != "desktop.ini"]
+        except Exception:
+            return [],{}
+        for p in archivos:
+            cat="Otros"
+            for nombre, exts in categorias.items():
+                if p.suffix.lower() in exts:
+                    cat=nombre; break
+            plan.append((p, ruta/cat/p.name))
+            conteo[cat]=conteo.get(cat,0)+1
+        return plan, conteo
+
+    def _atlas_mover_lote_tipo(self, tipo_nombre, destino_ref):
+        grupos={
+            "pdf": {".pdf"}, "word": {".doc", ".docx"}, "excel": {".xls", ".xlsx", ".xlsm", ".csv"},
+            "imagenes": {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".heic"},
+        }
+        clave=normalizar(tipo_nombre or "").strip()
+        if clave in {"imagen","imagenes","fotos"}: clave="imagenes"
+        exts=grupos.get(clave)
+        destino=self._atlas_destino_carpeta(destino_ref)
+        base=self._atlas_base_operacion_archivos()
+        if not exts or not destino:
+            self.responder("no pude verificar el tipo de archivos o la carpeta de destino.", "confundida")
+            return True
+        archivos=[]
+        try:
+            archivos=[p for p in base.iterdir() if p.is_file() and p.suffix.lower() in exts]
+        except Exception:
+            archivos=[]
+        if not archivos:
+            self.responder(f"no encontré archivos {clave} en {base.name or base}.", "normal")
+            return True
+        return self._atlas_solicitar_confirmacion(
+            "mover_lote", {"archivos":[str(p) for p in archivos], "destino":str(destino)},
+            f"encontré {len(archivos)} archivos {clave}. Los moveré a {Path(destino).name or destino}."
+        )
+
+    def _atlas_organizar_carpeta_actual(self):
+        ruta=self._atlas_base_operacion_archivos()
+        plan, conteo=self._atlas_plan_organizacion(ruta)
+        if not plan:
+            self.responder("no encontré archivos que necesiten organización en esta carpeta.", "normal")
+            return True
+        resumen=", ".join(f"{v} {k}" for k,v in sorted(conteo.items()))
+        return self._atlas_solicitar_confirmacion(
+            "organizar", {"ruta": str(ruta)},
+            f"encontré {len(plan)} archivos: {resumen}. Los organizaré en subcarpetas por tipo."
+        )
+
+    def _atlas_ejecutar_operacion_confirmada(self, accion, datos):
+        try:
+            if accion == "sobrescribir_documento":
+                destino=Path(datos["destino"]); tipo=datos["tipo"]
+                if self._atlas_es_ruta_protegida(destino):
+                    self.responder("ese destino está protegido y no lo sobrescribiré.", "molesta"); return True
+                if destino.exists():
+                    if destino.is_dir():
+                        self.responder("el destino es una carpeta; no puedo sobrescribirla con un documento.", "molesta"); return True
+                    destino.unlink()
+                return self._atlas_materializar_documento(tipo, destino)
+            if accion == "copiar_sobrescribir":
+                origen, destino=Path(datos["origen"]),Path(datos["destino"])
+                if self._atlas_es_ruta_protegida(destino):
+                    self.responder("el destino está protegido y no lo sobrescribiré.", "molesta"); return True
+                if destino.exists():
+                    if destino.is_dir(): shutil.rmtree(destino)
+                    else: destino.unlink()
+                return self._atlas_ejecutar_copia(origen,destino)
+            if accion == "mover":
+                origen, destino=Path(datos["origen"]),Path(datos["destino"])
+                if not origen.exists():
+                    self.responder("el origen ya no existe; no moví nada.", "confundida"); return True
+                if destino.exists():
+                    if self._atlas_es_ruta_protegida(destino):
+                        self.responder("el destino existente está protegido; no moví nada.", "molesta"); return True
+                    if destino.is_dir(): shutil.rmtree(destino)
+                    else: destino.unlink()
+                shutil.move(str(origen),str(destino))
+                if not destino.exists(): raise IOError("movimiento no verificado")
+                self.atlas_ultima_ruta_referida=destino
+                self.responder(f"moví {origen.name} a {destino.parent.name or destino.parent}.", "feliz")
+                print(f"CONTROL ATLAS v3.5.2: movimiento verificado {origen} -> {destino}")
+                return True
+            if accion == "eliminar":
+                origen=Path(datos["origen"])
+                if not origen.exists():
+                    self.responder("el elemento ya no existe; no eliminé nada.", "normal"); return True
+                if self._atlas_es_ruta_protegida(origen):
+                    self.responder("esa ubicación está protegida y no la eliminaré.", "molesta"); return True
+                ok,error=self._atlas_enviar_papelera(origen)
+                if ok and not origen.exists():
+                    self.responder(f"envié {origen.name} a la Papelera de reciclaje.", "normal")
+                    print(f"CONTROL ATLAS v3.5.2: eliminación verificada papelera={origen}")
+                elif ok:
+                    self.responder("Windows aceptó la operación, pero todavía veo el elemento; no puedo confirmar que se eliminó.", "confundida")
+                else:
+                    print("CONTROL ATLAS v3.5.2: error papelera:",error)
+                    self.responder("no pude enviar ese elemento a la Papelera de reciclaje.", "molesta")
+                return True
+            if accion == "mover_lote":
+                destino_dir=Path(datos["destino"]); movidos=0
+                destino_dir.mkdir(parents=False,exist_ok=True)
+                for item in datos.get("archivos",[]):
+                    origen=Path(item)
+                    if not origen.exists() or not origen.is_file():
+                        continue
+                    destino=self._atlas_nombre_unico(destino_dir/origen.name)
+                    shutil.move(str(origen),str(destino)); movidos+=1
+                self.responder(f"moví {movidos} archivos a {destino_dir.name or destino_dir}.", "feliz")
+                print(f"CONTROL ATLAS v3.5.2: movimiento por lote verificado destino={destino_dir} movidos={movidos}")
+                return True
+            if accion == "organizar":
+                ruta=Path(datos["ruta"]); plan,_=self._atlas_plan_organizacion(ruta)
+                movidos=0
+                for origen,destino in plan:
+                    if not origen.exists(): continue
+                    destino.parent.mkdir(exist_ok=True)
+                    destino=self._atlas_nombre_unico(destino)
+                    shutil.move(str(origen),str(destino)); movidos+=1
+                self.responder(f"organicé {movidos} archivos en {ruta.name or ruta}.", "feliz")
+                print(f"CONTROL ATLAS v3.5.2: organización verificada ruta={ruta} movidos={movidos}")
+                return True
+        except Exception as error:
+            print(f"CONTROL ATLAS v3.5.2: operación confirmada falló accion={accion}:",error)
+            self.responder("no pude completar la operación; no la daré por realizada.", "molesta")
+            return True
+        self.responder("la operación pendiente ya no es válida.", "confundida")
+        return True
+
+    def _atlas_cpu_modelo(self):
+        modelo = platform.processor().strip()
+        if os.name == "nt":
+            try:
+                import winreg
+                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\CentralProcessor\0") as k:
+                    modelo, _ = winreg.QueryValueEx(k, "ProcessorNameString")
+            except Exception:
+                pass
+        return re.sub(r"\s+", " ", modelo).strip() or "procesador no identificado"
+
+    def _atlas_gpu_nvidia(self):
+        exe = shutil.which("nvidia-smi")
+        if not exe:
+            candidatos = [Path(os.environ.get("ProgramW6432", "")) / "NVIDIA Corporation" / "NVSMI" / "nvidia-smi.exe"]
+            exe = next((str(p) for p in candidatos if p.exists()), None)
+        if not exe:
+            return None
+        try:
+            flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            r = subprocess.run([exe, "--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu",
+                                "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=4, creationflags=flags)
+            linea = (r.stdout or "").strip().splitlines()[0]
+            partes = [x.strip() for x in linea.split(",")]
+            if len(partes) >= 5:
+                return {"nombre":partes[0], "uso":float(partes[1]), "mem_usada":float(partes[2]),
+                        "mem_total":float(partes[3]), "temperatura":float(partes[4])}
+        except Exception:
+            pass
+        return None
+
+    def _atlas_snapshot_sistema(self):
+        try:
+            import psutil
+        except Exception as error:
+            return {"error": "psutil", "detalle": str(error)}
+        d = {}
+        d["cpu_modelo"] = self._atlas_cpu_modelo()
+        # Una sola ventana de muestreo para total y núcleos. En v3.4.0 el
+        # segundo cpu_percent(interval=None, percpu=True) podía devolver ceros
+        # inmediatamente después del muestreo global.
+        por_nucleo = list(psutil.cpu_percent(interval=0.35, percpu=True))
+        d["cpu_por_nucleo"] = por_nucleo
+        d["cpu"] = float(sum(por_nucleo) / len(por_nucleo)) if por_nucleo else 0.0
+        d["nucleos"] = psutil.cpu_count(logical=False) or 0
+        d["hilos"] = psutil.cpu_count(logical=True) or 0
+        freq = psutil.cpu_freq()
+        d["freq_actual"] = float(freq.current) if freq else None
+        d["freq_max"] = float(freq.max) if freq and freq.max else None
+        vm = psutil.virtual_memory()
+        d["ram_total"] = int(vm.total); d["ram_usada"] = int(vm.used); d["ram_disp"] = int(vm.available); d["ram_pct"] = float(vm.percent)
+        d["procesos"] = len(psutil.pids())
+        top=[]
+        for p in psutil.process_iter(["name", "memory_info"]):
+            try:
+                rss = p.info["memory_info"].rss if p.info.get("memory_info") else 0
+                if rss > 0:
+                    top.append((rss, p.info.get("name") or "proceso"))
+            except Exception:
+                pass
+        d["top_ram"] = sorted(top, reverse=True)[:5]
+        unidad = os.environ.get("SystemDrive", "C:") + "\\" if os.name == "nt" else "/"
+        try:
+            du = psutil.disk_usage(unidad)
+            d["disco_unidad"] = unidad; d["disco_total"] = du.total; d["disco_usado"] = du.used; d["disco_libre"] = du.free; d["disco_pct"] = float(du.percent)
+        except Exception:
+            pass
+        io1 = psutil.net_io_counters()
+        dio1 = psutil.disk_io_counters()
+        t0 = time.perf_counter(); time.sleep(0.45); io2 = psutil.net_io_counters(); dio2 = psutil.disk_io_counters(); dt=max(0.01,time.perf_counter()-t0)
+        d["red_bajada"] = max(0.0, (io2.bytes_recv-io1.bytes_recv)/dt)
+        d["red_subida"] = max(0.0, (io2.bytes_sent-io1.bytes_sent)/dt)
+        if dio1 and dio2:
+            d["disco_lectura"] = max(0.0, (dio2.read_bytes-dio1.read_bytes)/dt)
+            d["disco_escritura"] = max(0.0, (dio2.write_bytes-dio1.write_bytes)/dt)
+        d["red_recibido"] = int(io2.bytes_recv); d["red_enviado"] = int(io2.bytes_sent)
+        activas=[]
+        stats_if = psutil.net_if_stats()
+        for nombre, st in stats_if.items():
+            if st.isup and not any(x in normalizar(nombre) for x in ["loopback", "bluetooth"]):
+                activas.append(nombre)
+
+        # Elegimos primero la IP que Windows realmente usaría para salir a
+        # Internet. Así evitamos reportar adaptadores APIPA 169.254.x.x cuando
+        # hay otra interfaz con la ruta predeterminada. No se envían datos por
+        # este socket UDP; connect() solo resuelve la ruta local.
+        ip = ""
+        interfaz_activa = ""
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                sock.connect(("1.1.1.1", 80))
+                ip = str(sock.getsockname()[0] or "")
+            finally:
+                sock.close()
+        except Exception:
+            ip = ""
+        try:
+            addrs_por_if = psutil.net_if_addrs()
+            if ip:
+                for nombre, addrs in addrs_por_if.items():
+                    if any(getattr(a, "family", None) == socket.AF_INET and str(a.address) == ip for a in addrs):
+                        interfaz_activa = nombre
+                        break
+            if not ip:
+                # Respaldo: preferimos IPv4 privada válida y dejamos APIPA para
+                # el final porque normalmente indica ausencia de DHCP.
+                candidatos = []
+                for nombre in activas:
+                    for a in addrs_por_if.get(nombre, []):
+                        addr = str(getattr(a, "address", "") or "")
+                        if getattr(a, "family", None) != socket.AF_INET or addr.startswith("127."):
+                            continue
+                        prioridad = 0 if addr.startswith("169.254.") else 10
+                        candidatos.append((prioridad, nombre, addr))
+                if candidatos:
+                    _, interfaz_activa, ip = sorted(candidatos, reverse=True)[0]
+        except Exception:
+            pass
+        d["interfaces"] = activas
+        d["interfaz_activa"] = interfaz_activa
+        nombre_red = interfaz_activa or (activas[0] if activas else "")
+        nred = normalizar(nombre_red)
+        d["tipo_red"] = "Wi-Fi" if any(x in nred for x in ["wifi", "wi fi", "wlan", "inalambr"] ) else ("Ethernet" if nombre_red else "sin conexión activa")
+        d["ip_local"] = ip
+        d["latencia_ms"] = None
+        try:
+            flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            comando_ping = ["ping", "-n", "1", "-w", "1200", "1.1.1.1"] if os.name == "nt" else ["ping", "-c", "1", "-W", "1", "1.1.1.1"]
+            pr = subprocess.run(comando_ping, capture_output=True, text=True, timeout=2.0, creationflags=flags)
+            salida_ping = (pr.stdout or "") + " " + (pr.stderr or "")
+            m = re.search(r"(?:time|tiempo)[=<]\s*([0-9]+(?:[.,][0-9]+)?)\s*ms", salida_ping, re.IGNORECASE)
+            if m:
+                d["latencia_ms"] = float(m.group(1).replace(",", "."))
+        except Exception:
+            pass
+        d["gpu"] = self._atlas_gpu_nvidia()
+        # psutil no ofrece sensores de temperatura fiables en Windows. Nunca
+        # convertimos zonas térmicas ACPI genéricas en "temperatura CPU".
+        d["cpu_temp"] = None
+        try:
+            if hasattr(psutil, "sensors_temperatures"):
+                temps = psutil.sensors_temperatures(fahrenheit=False) or {}
+                for grupo in temps.values():
+                    for s in grupo:
+                        etiqueta = normalizar(getattr(s, "label", "") or "")
+                        if "cpu" in etiqueta or "package" in etiqueta:
+                            d["cpu_temp"] = float(s.current); raise StopIteration
+        except StopIteration:
+            pass
+        except Exception:
+            pass
+        return d
+
+    @staticmethod
+    def _atlas_gb(bytes_):
+        return float(bytes_ or 0) / (1024 ** 3)
+
+    @staticmethod
+    def _atlas_tasa(valor):
+        valor=float(valor or 0)
+        if valor >= 1024**2:
+            return f"{valor/(1024**2):.1f} MB/s"
+        if valor >= 1024:
+            return f"{valor/1024:.0f} KB/s"
+        return f"{valor:.0f} B/s"
+
+    def _atlas_estado_sistema_async(self, seccion="resumen"):
+        self.procesando = True
+        self.procesando_desde = time.time()
+        self.procesando_tipo = "estado_atlas"
+        proceso_local = self.proceso_id = self.proceso_id + 1
+
+        def trabajo():
+            datos = self._atlas_snapshot_sistema()
+            if proceso_local != self.proceso_id:
+                return
+            if datos.get("error") == "psutil":
+                respuesta = "no puedo leer todavía el estado de Atlas porque falta el componente psutil."
+            elif seccion == "cpu":
+                temp = f" Temperatura {datos['cpu_temp']:.0f} °C." if datos.get("cpu_temp") is not None else " El sensor de temperatura del CPU no está disponible."
+                freq = f" Frecuencia actual {datos['freq_actual']/1000:.2f} GHz." if datos.get("freq_actual") else ""
+                carga_max = max(datos.get("cpu_por_nucleo") or [0])
+                respuesta = f"{datos['cpu_modelo']}. CPU {datos['cpu']:.0f}%. {datos['nucleos']} núcleos y {datos['hilos']} hilos; núcleo más cargado {carga_max:.0f}%.{freq}{temp}"
+            elif seccion == "ram":
+                top = ", ".join(f"{n} {self._atlas_gb(b):.1f} GB" for b,n in datos.get("top_ram",[])[:3])
+                respuesta = (f"RAM {datos['ram_pct']:.0f}%: {self._atlas_gb(datos['ram_usada']):.1f} de "
+                             f"{self._atlas_gb(datos['ram_total']):.1f} GB en uso; {self._atlas_gb(datos['ram_disp']):.1f} GB disponibles."
+                             + (f" Los procesos que más usan son {top}." if top else ""))
+            elif seccion == "disco":
+                actividad = ""
+                if "disco_lectura" in datos:
+                    actividad = f" Actividad actual: lectura {self._atlas_tasa(datos.get('disco_lectura'))}, escritura {self._atlas_tasa(datos.get('disco_escritura'))}."
+                respuesta = (f"Disco {datos.get('disco_unidad','')}: {datos.get('disco_pct',0):.0f}% usado; "
+                             f"{self._atlas_gb(datos.get('disco_libre',0)):.1f} GB libres de {self._atlas_gb(datos.get('disco_total',0)):.1f} GB." + actividad)
+            elif seccion == "red":
+                respuesta = (f"Red {datos.get('tipo_red','')}: conectada" if datos.get('interfaces') else "Red: no detecto una interfaz activa")
+                if datos.get("interfaces"):
+                    respuesta += (f". Tráfico actual: descarga {self._atlas_tasa(datos.get('red_bajada'))} y subida {self._atlas_tasa(datos.get('red_subida'))}."
+                                  + (f" IP local {datos['ip_local']}." if datos.get('ip_local') else "")
+                                  + (f" Latencia {datos['latencia_ms']:.0f} ms." if datos.get('latencia_ms') is not None else ""))
+            elif seccion == "gpu":
+                gpu=datos.get("gpu")
+                if gpu:
+                    respuesta=(f"GPU {gpu['nombre']}: {gpu['uso']:.0f}% de uso, {gpu['mem_usada']:.0f} de {gpu['mem_total']:.0f} MB de memoria y {gpu['temperatura']:.0f} °C.")
+                else:
+                    respuesta="no tengo un sensor de GPU accesible actualmente; no voy a inventar esos valores."
+            else:
+                gpu=datos.get("gpu")
+                gpu_txt=f" GPU {gpu['uso']:.0f}% a {gpu['temperatura']:.0f} °C." if gpu else " GPU: sensor no disponible."
+                temp_txt=f" CPU a {datos['cpu_temp']:.0f} °C." if datos.get("cpu_temp") is not None else " Temperatura CPU: sensor no disponible."
+                respuesta=(f"Atlas: CPU {datos['cpu']:.0f}%, RAM {datos['ram_pct']:.0f}%, disco {datos.get('disco_pct',0):.0f}%."
+                           f"{gpu_txt}{temp_txt} Red {datos.get('tipo_red','')}, descarga {self._atlas_tasa(datos.get('red_bajada'))}, subida {self._atlas_tasa(datos.get('red_subida'))}. "
+                           f"{datos['nucleos']} núcleos, {datos['hilos']} hilos y {datos['procesos']} procesos activos.")
+            def terminar():
+                if proceso_local != self.proceso_id:
+                    return
+                self.procesando=False; self.procesando_desde=0.0; self.procesando_tipo=""
+                self.responder(respuesta, "normal")
+                print("CONTROL ATLAS v3.5.2: estado real del sistema consultado.")
+            self.root.after(0, terminar)
+        threading.Thread(target=trabajo, daemon=True).start()
+        return True
+
+    def _atlas_manejar_aclaracion(self, original):
+        if not self.atlas_aclaracion_pendiente:
+            return False
+        t=self._atlas_quitar_wake(original)
+        pendiente=self.atlas_aclaracion_pendiente
+        if any(x in t for x in ["minimiza", "minimizar", "solo minimiza"]):
+            self.atlas_aclaracion_pendiente=None
+            return self._atlas_controlar_ventana("minimizar", pendiente.get("app", ""))
+        if any(x in t for x in ["cierra", "cerrar", "cierralo", "cierrala"]):
+            self.atlas_aclaracion_pendiente=None
+            return self._atlas_controlar_ventana("cerrar", pendiente.get("app", ""))
+        if any(x in t for x in ["cancela", "dejalo", "ninguna"]):
+            self.atlas_aclaracion_pendiente=None
+            self.responder("cancelado.", "normal")
+            return True
+        return False
+
+    def _atlas_manejar_comando(self, original):
+        t = self._atlas_normalizar_orden_operativa(self._atlas_quitar_wake(original))
+        if not t:
+            return False
+        if self._atlas_resolver_opcion_pendiente(original):
+            return True
+        if self._atlas_resolver_confirmacion_pendiente(original):
+            return True
+        if self._atlas_manejar_aclaracion(original):
+            return True
+
+        # Estado real del computador. El enrutador tolera ruido ASR antes de
+        # "estado" (p. ej. "betatimer estado de la internet") para impedir que
+        # una consulta del sistema termine en la biblioteca académica/Ollama.
+        if any(x in t for x in ["estado de mi computador", "estado del computador", "estado de atlas",
+                                "como esta mi computador", "como esta atlas", "estado del pc", "estado del equipo"]):
+            return self._atlas_estado_sistema_async("resumen")
+        if any(x in t for x in ["estado del procesador", "estado de cpu", "como esta el procesador", "uso del procesador", "uso de cpu"]) \
+                or ("estado" in t and any(k in t for k in ["procesador", " cpu"])):
+            return self._atlas_estado_sistema_async("cpu")
+        if any(x in t for x in ["memoria ram", "estado de ram", "uso de ram", "cuanta ram"]) \
+                or ("estado" in t and "ram" in t):
+            return self._atlas_estado_sistema_async("ram")
+        if any(x in t for x in ["estado del disco", "espacio en disco", "espacio del disco", "estado del ssd", "cuanto espacio"]) \
+                or ("estado" in t and any(k in t for k in ["disco", "ssd"])):
+            return self._atlas_estado_sistema_async("disco")
+        if any(x in t for x in ["estado de internet", "estado de la internet", "estado de la red", "como esta internet", "uso de red", "velocidad de red"]) \
+                or ("estado" in t and any(k in t for k in ["internet", " red"])):
+            return self._atlas_estado_sistema_async("red")
+        if any(x in t for x in ["estado de la gpu", "uso de gpu", "temperatura de gpu", "estado de gpu"]) \
+                or ("estado" in t and "gpu" in t):
+            return self._atlas_estado_sistema_async("gpu")
+
+        # Navegación contextual. Una ubicación confiable nombrada de forma
+        # explícita se ejecuta localmente y actualiza el contexto REAL; nunca
+        # se responde mediante Ollama con un "ya estoy" ficticio.
+        m_volver_raiz = re.match(r"^(?:vuelve|volver|regresa|regresar)\s+a\s+(?:la\s+carpeta\s+)?(.+)$", t)
+        if m_volver_raiz:
+            objetivo_raiz = m_volver_raiz.group(1).strip()
+            ruta_raiz = self._atlas_ruta_confiable(objetivo_raiz)
+            if ruta_raiz and Path(ruta_raiz).exists() and Path(ruta_raiz).is_dir():
+                return self._atlas_abrir_ruta(ruta_raiz, "carpeta")
+        if any(x in t for x in ["vuelve a la carpeta anterior", "volver a la carpeta anterior", "carpeta anterior", "vuelve atras"]):
+            return self._atlas_volver_carpeta()
+        if t in {"abre esa carpeta", "abrir esa carpeta", "entra a esa carpeta"}:
+            if self.atlas_carpeta_actual:
+                return self._atlas_abrir_ruta(self.atlas_carpeta_actual, "carpeta")
+            self.responder("todavía no tengo una carpeta concreta en el contexto.", "confundida")
+            return True
+        # Creación real de documentos Office en la carpeta contextual.
+        m = re.match(r"^(?:crea|crear)\s+(?:un|una)?\s*(?:documento\s+)?word(?:\s+(?:llamado|llamada))?\s*(.*)$", t)
+        if m:
+            return self._atlas_crear_documento("word", m.group(1).strip())
+        m = re.match(r"^(?:crea|crear)\s+(?:un|una)?\s*(?:archivo\s+)?excel(?:\s+(?:llamado|llamada))?\s*(.*)$", t)
+        if m:
+            return self._atlas_crear_documento("excel", m.group(1).strip())
+
+        # Renombrado seguro: no sobrescribe destinos existentes.
+        m = re.match(r"^renombra\s+(esta carpeta|la carpeta|este archivo|el archivo)\s+(?:a|como)\s+(.+)$", t)
+        if m:
+            tipo_ref = "carpeta" if "carpeta" in m.group(1) else "archivo"
+            return self._atlas_renombrar(m.group(1), m.group(2).strip(), tipo_ref)
+        m = re.match(r"^renombra\s+(.+?)\s+(?:a|como)\s+(.+)$", t)
+        if m:
+            return self._atlas_renombrar(m.group(1).strip(), m.group(2).strip())
+
+        # Copiar es directo solo cuando no pisa nada; cualquier sobrescritura
+        # requiere confirmación. Mover siempre requiere confirmación.
+        m = re.match(r"^copia\s+(.+?)\s+(?:a|en)\s+(?:la\s+)?(?:carpeta\s+)?(.+)$", t)
+        if m:
+            return self._atlas_copiar(m.group(1).strip(), m.group(2).strip())
+        m_lote = re.match(r"^mueve\s+(?:los|las)\s+(pdf|word|excel|imagenes|imagen|fotos)\s+(?:a|en)\s+(?:la\s+)?(?:carpeta\s+)?(.+)$", t)
+        if m_lote:
+            return self._atlas_mover_lote_tipo(m_lote.group(1), m_lote.group(2).strip())
+        m = re.match(r"^mueve\s+(.+?)\s+(?:a|en)\s+(?:la\s+)?(?:carpeta\s+)?(.+)$", t)
+        if m:
+            return self._atlas_mover(m.group(1).strip(), m.group(2).strip())
+
+        # Eliminación siempre a Papelera y siempre con confirmación.
+        m = re.match(r"^(?:elimina|eliminar|borra|borrar)\s+(.+)$", t)
+        if m:
+            ref=m.group(1).strip()
+            ref=re.sub(r"^(?:la|el)\s+", "", ref).strip()
+            return self._atlas_eliminar(ref)
+
+        if re.fullmatch(r"(?:organiza|ordenar|ordena)\s+(?:esta|la)\s+carpeta", t) or re.fullmatch(r"separa\s+(?:los\s+)?word\s+de\s+(?:los\s+)?excel", t):
+            return self._atlas_organizar_carpeta_actual()
+
+        m = re.match(r"^(?:crea|crear)\s+(?:una\s+)?carpeta\s+(?:llamada\s+)?(.+)$", t)
+        if m:
+            return self._atlas_crear_carpeta_contextual(m.group(1).strip())
+
+        # v3.5.2: orden explícita con raíz conocida + acción + hijo.
+        # Ej.: "en la carpeta IPP ubica la carpeta segundo semestre".
+        # Se analiza estructuralmente y jamás se envía a Ollama.
+        m_raiz_accion = re.match(
+            r"^(?:en|dentro\s+de)\s+(?:la\s+)?carpeta\s+(.+?)\s+"
+            r"(ubica|localiza|encuentra|busca|abre|entra|muestra|muestrame|mostrame|revisa|lista)\s+"
+            r"(?:el\s+contenido\s+(?:de|del)\s+)?(?:la\s+)?(?:carpeta\s+)?(.+)$",
+            t,
+        )
+        if m_raiz_accion:
+            raiz_nombre, accion_raiz, hijo_nombre = [x.strip() for x in m_raiz_accion.groups()]
+            raiz = self._atlas_ruta_confiable(raiz_nombre)
+            if raiz and Path(raiz).exists() and Path(raiz).is_dir():
+                candidatos = self._atlas_buscar_hijos_directos(raiz, hijo_nombre)
+                if len(candidatos) == 1:
+                    hijo = candidatos[0]
+                    if accion_raiz in {"ubica", "localiza", "encuentra", "busca"}:
+                        self.atlas_ultima_ruta_referida = hijo
+                        self.responder(f"la carpeta {hijo.name} está en {hijo}.", "normal")
+                        print(f"CONTROL ATLAS v3.5.2: ubicación contextual verificada={hijo}")
+                        return True
+                    if accion_raiz in {"muestra", "muestrame", "mostrame", "revisa", "lista"}:
+                        return self._atlas_listar_contenido_carpeta(str(hijo))
+                    return self._atlas_abrir_ruta(hijo, "carpeta")
+                if len(candidatos) > 1:
+                    return self._atlas_ofrecer_coincidencias(candidatos, "carpeta")
+                self.responder(f"no encontré una subcarpeta real llamada {hijo_nombre} dentro de {Path(raiz).name}.", "confundida")
+                print(f"CONTROL ATLAS v3.5.2: hijo contextual no encontrado={hijo_nombre!r} raiz={raiz}")
+                return True
+
+        # v3.5.2: frases naturales con una raíz conocida y una subcarpeta.
+        # Ej.: "en la carpeta IPP quiero que abras la carpeta primer semestre".
+        # Si Whisper deforma "abras" como "hagas", solo ejecutamos cuando la
+        # subcarpeta EXISTE realmente dentro de la ubicación confiable nombrada.
+        if "carpeta" in t:
+            claves_mencionadas = [
+                clave for clave in (getattr(self, "atlas_ubicaciones_confiables", {}) or {})
+                if re.search(r"(?<!\w)" + re.escape(clave) + r"(?!\w)", t)
+            ]
+            if claves_mencionadas and any(x in t for x in ["quiero que", "abre", "abrir", "hagas", "haz", "entra"]):
+                # Tomamos el ÚLTIMO nombre introducido por "carpeta". Así
+                # "en la carpeta IPP quiero que abras la carpeta Primer Semestre"
+                # separa correctamente raíz=IPP e hijo=Primer Semestre aunque
+                # normalizar() haya eliminado la coma.
+                m_sub = [x.strip() for x in t.split("carpeta ")[1:] if x.strip()]
+                if m_sub:
+                    objetivo_sub = m_sub[-1].strip()
+                    objetivo_sub = re.sub(r"\s+(?:por favor|ahora)$", "", objetivo_sub).strip()
+                    # Si el último nombre vuelve a ser la propia raíz, no lo tratamos como hijo.
+                    if self._atlas_alias_ubicacion(objetivo_sub) not in claves_mencionadas:
+                        raiz = self._atlas_ruta_confiable(claves_mencionadas[0])
+                        if raiz and Path(raiz).exists():
+                            candidatos = []
+                            try:
+                                for p in Path(raiz).iterdir():
+                                    if p.is_dir() and self._atlas_nombres_carpeta_equivalentes(p.name, objetivo_sub):
+                                        candidatos.append(p)
+                            except Exception:
+                                candidatos = []
+                            if len(candidatos) == 1:
+                                return self._atlas_abrir_ruta(candidatos[0], "carpeta")
+                            if len(candidatos) > 1:
+                                return self._atlas_ofrecer_coincidencias(candidatos, "carpeta")
+                            # Es claramente una orden de carpetas, pero no hay ruta real.
+                            self.responder(f"no encontré una subcarpeta real llamada {objetivo_sub} dentro de {Path(raiz).name}.", "confundida")
+                            print(f"CONTROL ATLAS v3.5.2: subcarpeta contextual inexistente={objetivo_sub!r} raiz={raiz}")
+                            return True
+
+        # Consultas verificables del Explorador. Estas intenciones jamás
+        # pasan a Ollama porque deben responder únicamente con el disco real.
+        m = re.match(r"^(?:ubica|ubicar|localiza|localizar|encuentra|encontrar|busca|buscar)\s+(?:la\s+)?carpeta\s+(.+)$", t)
+        if m:
+            return self._atlas_ubicar_carpeta_por_nombre(m.group(1).strip())
+
+        patrones_contenido = [
+            r"^(?:revisa|revisar|muestra|mostrar|muestrame|mostrame|lista|listar|listame)\s+(?:el\s+)?contenido\s+(?:de|del)\s+(?:la\s+)?(?:carpeta\s+)?(.+)$",
+            r"^(?:revisa|revisar|muestra|mostrar|muestrame|mostrame|lista|listar|listame)\s+(?:la\s+)?carpeta\s+(.+)$",
+            r"^(?:que\s+hay|que\s+tiene|dime\s+que\s+hay)\s+(?:en|dentro\s+de)\s+(?:la\s+)?(?:carpeta\s+)?(.+)$",
+        ]
+        for patron in patrones_contenido:
+            m = re.match(patron, t)
+            if m:
+                return self._atlas_listar_contenido_carpeta(m.group(1).strip())
+
+        # Abrir/buscar archivos con tipo conocido.
+        if any(v in t for v in ["abre ", "abrir ", "busca ", "buscar ", "encuentra ", "localiza "]):
+            for tipo_archivo, palabra in [("word", "word"), ("excel", "excel"), ("pdf", "pdf")]:
+                if palabra in t and not (t in {f"abre {palabra}", f"abrir {palabra}"}):
+                    nombre=self._atlas_extraer_nombre(original, "archivo")
+                    if nombre:
+                        return self._atlas_abrir_archivo_por_nombre(nombre, tipo_archivo)
+            if any(x in t for x in ["archivo ", "documento "]):
+                nombre=self._atlas_extraer_nombre(original, "archivo")
+                if nombre:
+                    return self._atlas_abrir_archivo_por_nombre(nombre)
+
+        # Carpeta explícita o navegación tipo "entra a programación".
+        if any(x in t for x in ["carpeta ", "entra a ", "entra en "]):
+            nombre=self._atlas_extraer_nombre(original, "carpeta")
+            if nombre and nombre not in {"esa carpeta", "la carpeta"}:
+                return self._atlas_abrir_carpeta_por_nombre(nombre)
+
+        # Control de una ventana de carpeta por identidad de ruta real.
+        m_carpeta_ventana = re.match(
+            r"^(minimiza|maximiza|restaura|cierra)\s+(?:la\s+)?carpeta\s+(.+)$", t
+        )
+        if m_carpeta_ventana:
+            accion_map = {"minimiza":"minimizar", "maximiza":"maximizar", "restaura":"restaurar", "cierra":"cerrar"}
+            return self._atlas_controlar_carpeta_ventana(accion_map[m_carpeta_ventana.group(1)], m_carpeta_ventana.group(2))
+
+        # Una ubicación confiable también puede nombrarse como objetivo de
+        # ventana sin decir la palabra "carpeta": "cierra IPP", "minimiza y pepe".
+        m_ubicacion_ventana = re.match(r"^(minimiza|maximiza|restaura|cierra)\s+(.+)$", t)
+        if m_ubicacion_ventana:
+            objetivo_ubicacion = m_ubicacion_ventana.group(2).strip()
+            clave_ubicacion = self._atlas_alias_ubicacion(objetivo_ubicacion)
+            # "Beta" por sí solo puede referirse al asistente, por lo que solo
+            # se trata como carpeta cuando el usuario dice explícitamente
+            # "la carpeta Beta" (ruta atendida arriba). IPP sí es inequívoco.
+            if clave_ubicacion and clave_ubicacion != "beta":
+                accion_map = {"minimiza":"minimizar", "maximiza":"maximizar", "restaura":"restaurar", "cierra":"cerrar"}
+                return self._atlas_controlar_carpeta_ventana(
+                    accion_map[m_ubicacion_ventana.group(1)], objetivo_ubicacion
+                )
+
+        app = self._atlas_detectar_app(t)
+
+        # Volumen de Spotify. v3.5.2 distingue valor absoluto de cambio
+        # relativo y acepta porcentajes hablados/dictados de varias formas.
+        spotify_relevante = (app == "spotify" or self.atlas_ultima_aplicacion == "spotify" or self._spotify_contexto_vigente())
+        if "volumen" in t and spotify_relevante:
+            nivel = self._atlas_extraer_porcentaje(t)
+            if nivel is not None:
+                self.spotify_volumen_fijar_async(nivel)
+                return True
+            if any(x in t for x in ["sube", "subir", "suba", "aumenta", "aumentar", "aumente"]):
+                self.spotify_volumen_async(+10)
+                return True
+            if any(x in t for x in ["baja", "bajar", "baje", "disminuye", "disminuir", "disminuya"]):
+                self.spotify_volumen_async(-10)
+                return True
+            # Cortafuegos: si hay contexto Spotify y se mencionó volumen pero la
+            # transcripción no permitió resolver la acción, jamás cae a Ollama
+            # para que el modelo afirme un cambio que no ejecutó.
+            self.responder("entendí una orden de volumen, pero no quedó suficientemente clara. Repita si quiere subir, bajar o fijar un porcentaje.", "confundida")
+            print(f"CONTROL ATLAS v3.5.2: orden de volumen bloqueada por ambigüedad: {t!r}")
+            return True
+
+        # "Abre segundo semestre" / "abre IPP": si no es una aplicación
+        # conocida, Beta busca primero una carpeta REAL. Cuando hay un contexto
+        # de Explorer, sus hijos tienen prioridad. Si no existe, no inventa ruta.
+        m_contexto = re.match(r"^(?:abre|abrir)\s+(?:la\s+|el\s+)?(.+)$", t)
+        if m_contexto and not app:
+            objetivo = m_contexto.group(1).strip()
+            objetivo = self._atlas_normalizar_nombre_carpeta(objetivo)
+            if objetivo in {"esta ventana", "esa ventana", "esto", "esa carpeta", "esta carpeta"}:
+                if objetivo in {"esta ventana", "esa ventana", "esto"}:
+                    return self._atlas_controlar_ventana("restaurar", "")
+            elif objetivo and not any(x in objetivo for x in ["archivo ", "documento "]):
+                return self._atlas_abrir_carpeta_por_nombre(objetivo)
+
+
+        # Lenguaje ambiguo: no decidimos por el usuario si significa cerrar o
+        # simplemente quitar de la vista.
+        if app and any(x in t for x in ["quita " + app + " de la pantalla", "saca " + app + " de la pantalla"]):
+            self.atlas_aclaracion_pendiente={"tipo":"ventana", "app":app}
+            self.responder(f"¿quiere minimizar o cerrar {self._atlas_nombre_amigable_app(app)}?", "confundida")
+            return True
+
+        # Apertura de aplicaciones.
+        if app and any(v in t for v in ["abre", "abrir", "inicia", "iniciar", "pon"]):
+            # "abre el Word llamado X" se resolvió arriba como archivo.
+            return self._atlas_abrir_aplicacion(app)
+
+        # Acciones sobre ventanas; soporta pronombres y ASR fonético.
+        accion=""
+        if re.search(r"\b(?:minimiza|minimizar|minimizalo|minimizala|minimice)\b", t): accion="minimizar"
+        elif re.search(r"\b(?:maximiza|maximizar|maximizalo|maximizala|maximice)\b", t): accion="maximizar"
+        elif re.search(r"\b(?:restaura|restaurar|restauralo|restaurala)\b", t): accion="restaurar"
+        elif re.search(r"\b(?:cierra|cerrar|cierralo|cierrala|cierrame)\b", t) or (app and t.startswith("ya termine con")): accion="cerrar"
+        if accion:
+            pronombre_contextual = bool(re.search(r"\b(?:minimizalo|minimizala|maximizalo|maximizala|restauralo|restaurala|cierralo|cierrala)\b", t))
+            referencia_activa = any(x in t for x in ["esta ventana", "esa ventana", "esto", "esta aplicacion", "la ventana"])
+
+            # Quitamos palabras funcionales para saber si el usuario mencionó un
+            # objetivo que no pudimos identificar. v3.4.0 trataba cualquier app
+            # desconocida como "ventana activa", lo que llegó a maximizar VS Code
+            # cuando se había dicho Spotify.
+            residuo = t
+            residuo = re.sub(r"\b(?:minimiza|minimizar|minimizalo|minimizala|minimice|maximiza|maximizar|maximizalo|maximizala|maximice|restaura|restaurar|restauralo|restaurala|cierra|cerrar|cierralo|cierrala|cierrame)\b", " ", residuo)
+            residuo = re.sub(r"\b(?:esta|esa|la|el|ventana|aplicacion|por favor|esto)\b", " ", residuo)
+            residuo = re.sub(r"\s+", " ", residuo).strip()
+
+            if not app and pronombre_contextual and self.atlas_ultima_aplicacion:
+                app = self.atlas_ultima_aplicacion
+            elif not app and not referencia_activa and not residuo and self.atlas_ultima_aplicacion:
+                # "Beta, minimiza" tras abrir/controlar Spotify usa contexto.
+                app = self.atlas_ultima_aplicacion
+
+            if app:
+                return self._atlas_controlar_ventana(accion, app)
+            if referencia_activa or not residuo:
+                return self._atlas_controlar_ventana(accion, "")
+
+            # Cortafuegos: una orden de ventana reconocida nunca cae a Ollama.
+            # Si no entendimos el objetivo, pedimos repetir en vez de ejecutar
+            # sobre otra ventana o afirmar una acción ficticia.
+            self.responder(f"entendí que quiere {accion} una ventana, pero no reconocí cuál. Repita el nombre de la aplicación.", "confundida")
+            print(f"CONTROL ATLAS v3.5.2: acción bloqueada por objetivo ambiguo: {t!r}")
+            return True
+
+        # Cualquier deformación que todavía conserve un verbo exclusivo de
+        # ventanas queda encerrada aquí y no llega al modelo conversacional.
+        if re.search(r"\b(?:minimiz\w*|maximiz\w*|cerr\w*|cierr\w*|restaur\w*)\b", t):
+            self.responder("entendí una orden de ventana, pero la transcripción no fue suficientemente clara. Repítala indicando la aplicación.", "confundida")
+            print(f"CONTROL ATLAS v3.5.2: cortafuegos evitó fallback a Ollama: {t!r}")
+            return True
+
+        # Contexto corto de Spotify: "pausa" o "continúa" después de haberlo
+        # usado. La API existente sigue siendo la que ejecuta el reproductor.
+        if self._spotify_contexto_vigente():
+            if t in {"pausa", "pausalo", "pausala"}:
+                self.spotify_control_async("pausar"); return True
+            if t in {"continua", "reanuda", "sigue", "reproduce"}:
+                self.spotify_control_async("reanudar"); return True
+
+        # Un nombre de carpeta aislado tampoco se entrega a Ollama. Es una
+        # referencia operativa incompleta y se aclara localmente.
+        m_carpeta_sola = re.match(r"^(?:la\s+)?carpeta\s+(.+)$", t)
+        if m_carpeta_sola:
+            objetivo_solo = m_carpeta_sola.group(1).strip()
+            rutas_solo = self._atlas_resolver_carpeta_real(objetivo_solo)
+            if len(rutas_solo) == 1:
+                self.atlas_ultima_ruta_referida = rutas_solo[0]
+                self.responder(f"encontré la carpeta {rutas_solo[0].name}. ¿Quiere que la abra, la ubique o revise su contenido?", "confundida")
+            else:
+                self.responder("entendí el nombre de una carpeta, pero necesito saber si quiere abrirla, ubicarla o revisar su contenido.", "confundida")
+            print(f"CONTROL ATLAS v3.5.2: referencia de carpeta sin acción bloqueada: {t!r}")
+            return True
+
+        # Cortafuegos final del Explorador: si la frase claramente pretende
+        # ubicar/revisar/listar una carpeta pero quedó deformada, pedimos repetir
+        # en vez de permitir que Ollama invente rutas o contenidos.
+        if "carpeta" in t and (
+            re.search(r"\b(?:ubic\w*|localiz\w*|revis\w*|mostr\w*|muestr\w*|list\w*|contenid\w*|abr\w*|entr\w*|hag\w*|quiero)\b", t)
+        ):
+            self.responder("entendí una orden sobre una carpeta, pero no quedó suficientemente clara o no pude verificar una ruta real. Repita el nombre de la carpeta.", "confundida")
+            print(f"CONTROL ATLAS v3.5.2: consulta de carpeta bloqueada antes de Ollama: {t!r}")
+            return True
+
+        # v3.5.2: una orden de administración de archivos jamás llega a Ollama.
+        # Si quedó mal transcrita, se aclara localmente en vez de simular cambios.
+        if re.search(r"\b(?:renombr\w*|copi\w*|muev\w*|mov\w*|elimin\w*|borr\w*|organiz\w*|orden\w*|sobrescrib\w*)\b", t) and any(x in t for x in ["archivo","carpeta","word","excel","pdf","documento"]):
+            self.responder("entendí una orden para administrar archivos, pero no quedó suficientemente clara. Repítala indicando el elemento y el destino si corresponde.", "confundida")
+            print(f"CONTROL ATLAS v3.5.2: administración bloqueada antes de Ollama: {t!r}")
+            return True
+
+        return False
+
+    # ======================================================
+    # ORQUESTADOR DE INTENCIONES / RECORDATORIOS v3.5.2
+    # ======================================================
+
+    @staticmethod
+    def _orq_mes_numero(nombre):
+        meses = {
+            "enero":1, "febrero":2, "marzo":3, "abril":4, "mayo":5, "junio":6,
+            "julio":7, "agosto":8, "septiembre":9, "setiembre":9,
+            "octubre":10, "noviembre":11, "diciembre":12,
+        }
+        return meses.get(normalizar(nombre or ""), 0)
+
+    @staticmethod
+    def _orq_fecha_espanol(dt):
+        dias = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+        meses = ["", "enero", "febrero", "marzo", "abril", "mayo", "junio",
+                 "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+        return f"{dias[dt.weekday()]} {dt.day} de {meses[dt.month]} de {dt.year}"
+
+    def _orq_es_consulta_fecha(self, texto):
+        t = normalizar(texto or "")
+        if any(x in t for x in [
+            "que fecha es hoy", "que dia es hoy", "cual es la fecha de hoy",
+            "en que fecha estamos", "en que dia estamos", "fecha de hoy",
+        ]):
+            return True
+        # Recupera deformaciones de Whisper como "que fechas oye" sin hacer
+        # fuzzy matching global a cualquier frase.
+        if "fecha" in t or "fechas" in t or ("dia" in t and "hoy" in t):
+            objetivo = "que fecha es hoy"
+            if difflib.SequenceMatcher(None, t, objetivo).ratio() >= 0.68:
+                return True
+        return False
+
+    def _orq_es_ayuda_beta(self, texto):
+        t = normalizar(texto or "")
+        return any(x in t for x in [
+            "que puedes hacer", "que puede hacer beta", "que sabes hacer",
+            "todas tus funciones", "guia con todas tus funciones",
+            "guia de tus funciones", "funciones de beta", "capacidades de beta",
+            "dame una guia de beta", "dime tus funciones",
+        ])
+
+    def _orq_capacidades_reales(self):
+        """Registro explícito de capacidades instaladas.
+
+        Esta lista es la fuente de verdad de la ayuda de Beta. No se genera con
+        Ollama ni con RAG, por lo que no puede prometer funciones inexistentes.
+        """
+        return [
+            "controlar ventanas y aplicaciones de Atlas",
+            "abrir y navegar carpetas reales y verificar su contenido",
+            "crear y administrar archivos con confirmación en operaciones sensibles",
+            "consultar CPU, RAM, disco, red y GPU sin inventar sensores",
+            "controlar Spotify",
+            "abrir Google y YouTube y realizar búsquedas reales",
+            "guardar, consultar, reprogramar y cancelar recordatorios persistentes",
+            "informar fecha, hora y clima",
+            "trabajar en modo estudio con documentos, tareas y exportación a Word",
+        ]
+
+    def _orq_responder_ayuda_beta(self):
+        capacidades=self._orq_capacidades_reales()
+        texto="; ".join(capacidades)
+        self.responder(
+            "puedo " + texto + ". No afirmo que ejecuté una acción local si el módulo correspondiente no la confirmó.",
+            "normal",
+        )
+        return True
+
+    def _orq_es_web(self, texto):
+        t = normalizar(texto or "")
+        youtube = any(x in t for x in ["youtube", "yutube", "yutu", "you tube"])
+        google = any(x in t for x in ["google", "chrome", "navegador", "internet"])
+        accion = any(x in t for x in ["abre", "abrir", "busca", "buscar", "buscame", "encuentra", "ve a", "entra a"])
+        return accion and (youtube or google)
+
+    def _orq_extraer_busqueda_final(self, texto):
+        t = normalizar(texto or "")
+        partes = re.split(r"\b(?:busca|buscar|buscame|encuentra)\b", t)
+        if len(partes) < 2:
+            return ""
+        q = partes[-1].strip(" ,.-")
+        q = re.sub(r"^(?:en\s+)?(?:google|chrome|internet|youtube|yutube|yutu)\s+(?:y\s+)?", "", q).strip()
+        q = re.sub(r"^(?:videos?|resultados?)\s+(?:relacionados?\s+con|sobre|de)\s+", "", q).strip()
+        q = re.sub(r"^(?:relacionado|relacionados|relacionada|relacionadas)\s+con\s+", "", q).strip()
+        return q
+
+    def _orq_manejar_web(self, original):
+        t = normalizar(original or "")
+        es_youtube = any(x in t for x in ["youtube", "yutube", "yutu", "you tube"])
+        if es_youtube:
+            # Si hay una orden explícita de búsqueda, tomamos la ÚLTIMA
+            # cláusula de búsqueda. Esto evita consultas contaminadas como
+            # "abre Google y busca YouTube y busca videos...".
+            if re.search(r"\b(?:busca|buscar|buscame|encuentra)\b", t):
+                consulta = self._orq_extraer_busqueda_final(original)
+                if consulta:
+                    self.buscar_en_youtube(consulta)
+                    return True
+            orden = self.extraer_orden_youtube(original)
+            if orden:
+                consulta, reproducir, solo_abrir = orden
+                if solo_abrir:
+                    self.abrir_youtube_inicio()
+                elif reproducir:
+                    self.reproducir_youtube_async(consulta)
+                else:
+                    self.buscar_en_youtube(consulta)
+                return True
+            self.abrir_youtube_inicio()
+            return True
+
+        # Google/Chrome. "abre Google" abre el sitio; "abre Chrome" abre
+        # solamente la aplicación. Con una consulta se abren resultados reales.
+        consulta = self._orq_extraer_busqueda_final(original)
+        if consulta:
+            self.buscar_en_chrome(consulta, modo_imagenes=False)
+        elif "google chrome" in t or ("chrome" in t and "google" not in t):
+            self.abrir_chrome()
+        else:
+            self.abrir_url_en_chrome("https://www.google.com/")
+            self.responder("abriendo Google.", "feliz")
+        return True
+
+    def _recordatorios_conexion(self):
+        return sqlite3.connect(BASE_DATOS, timeout=15)
+
+    def _recordatorios_inicializar_db(self):
+        try:
+            with self._recordatorios_conexion() as con:
+                con.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS recordatorios_beta (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        creado_en TEXT NOT NULL,
+                        aviso_en TEXT NOT NULL,
+                        texto TEXT NOT NULL,
+                        evento_en TEXT DEFAULT '',
+                        estado TEXT NOT NULL DEFAULT 'pendiente',
+                        avisado_en TEXT DEFAULT ''
+                    )
+                    """
+                )
+                con.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_recordatorios_beta_aviso "
+                    "ON recordatorios_beta(estado, aviso_en)"
+                )
+                con.commit()
+        except Exception as error:
+            print("RECORDATORIOS v3.5.2: no pude inicializar SQLite:", error)
+
+    def _recordatorios_extraer_fechas(self, texto):
+        t = normalizar(texto or "")
+        patron = re.compile(
+            r"(?:el\s+)?(?:dia\s+)?(\d{1,2})\s+de\s+"
+            r"(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)"
+            r"(?:\s+de\s+(\d{4}))?"
+        )
+        ahora = datetime.now()
+        encontrados=[]
+        for m in patron.finditer(t):
+            dia=int(m.group(1)); mes=self._orq_mes_numero(m.group(2)); anio=int(m.group(3) or ahora.year)
+            try:
+                dt=datetime(anio,mes,dia)
+            except Exception:
+                continue
+            if not m.group(3) and dt.date() < ahora.date() and (ahora.date()-dt.date()).days > 2:
+                try: dt=dt.replace(year=anio+1)
+                except Exception: pass
+            encontrados.append((m,dt))
+        if not encontrados:
+            # Fechas relativas frecuentes para recordatorios naturales.
+            if "pasado manana" in t:
+                dt=ahora + timedelta(days=2); m=re.search(r"pasado\s+manana", t)
+                encontrados.append((m, dt.replace(hour=0,minute=0,second=0,microsecond=0)))
+            elif "manana" in t:
+                dt=ahora + timedelta(days=1); m=re.search(r"manana", t)
+                encontrados.append((m, dt.replace(hour=0,minute=0,second=0,microsecond=0)))
+            elif re.search(r"\bhoy\b", t):
+                m=re.search(r"\bhoy\b", t); encontrados.append((m, ahora.replace(hour=0,minute=0,second=0,microsecond=0)))
+        return encontrados
+
+    def _recordatorios_extraer_hora(self, texto):
+        t=normalizar(texto or "")
+        m=re.search(r"(?:a\s+las?|a\s+la)\s+(\d{1,2})(?::(\d{2}))?\s*(?:horas?)?(?:\s+de\s+la\s+(manana|tarde|noche))?", t)
+        if not m:
+            return None
+        h=int(m.group(1)); mi=int(m.group(2) or 0); tramo=m.group(3) or ""
+        if tramo in {"tarde","noche"} and h < 12: h += 12
+        if tramo == "manana" and h == 12: h=0
+        if 0 <= h <= 23 and 0 <= mi <= 59:
+            return h,mi
+        return None
+
+    def _recordatorios_guardar(self, aviso_dt, texto, evento_dt=None):
+        try:
+            with self._recordatorios_conexion() as con:
+                cur=con.execute(
+                    "INSERT INTO recordatorios_beta(creado_en,aviso_en,texto,evento_en,estado,avisado_en) VALUES(?,?,?,?,?,?)",
+                    (datetime.now().isoformat(timespec="seconds"), aviso_dt.isoformat(timespec="minutes"),
+                     str(texto).strip(), evento_dt.isoformat(timespec="minutes") if evento_dt else "", "pendiente", "")
+                )
+                con.commit(); return int(cur.lastrowid)
+        except Exception as error:
+            print("RECORDATORIOS v3.5.2: error guardando:", error)
+            return 0
+
+    def _recordatorios_listar(self, fecha=None):
+        try:
+            with self._recordatorios_conexion() as con:
+                con.row_factory=sqlite3.Row
+                if fecha:
+                    pref=fecha.strftime("%Y-%m-%d")+"%"
+                    rows=con.execute(
+                        "SELECT * FROM recordatorios_beta WHERE estado='pendiente' AND aviso_en LIKE ? ORDER BY aviso_en", (pref,)
+                    ).fetchall()
+                else:
+                    rows=con.execute(
+                        "SELECT * FROM recordatorios_beta WHERE estado='pendiente' ORDER BY aviso_en LIMIT 12"
+                    ).fetchall()
+            return [dict(r) for r in rows]
+        except Exception as error:
+            print("RECORDATORIOS v3.5.2: error listando:", error); return []
+
+    def _recordatorios_filtrar_dia(self, rows, dia):
+        salida=[]
+        for r in rows or []:
+            try:
+                if datetime.fromisoformat(str(r.get("aviso_en") or "")).day == int(dia):
+                    salida.append(r)
+            except Exception:
+                continue
+        return salida
+
+    def _recordatorios_actualizar_aviso(self, rid, nuevo_dt):
+        try:
+            with self._recordatorios_conexion() as con:
+                con.execute(
+                    "UPDATE recordatorios_beta SET aviso_en=?, estado='pendiente', avisado_en='' WHERE id=?",
+                    (nuevo_dt.isoformat(timespec="minutes"), int(rid)),
+                )
+                con.commit()
+            return True
+        except Exception as error:
+            print("RECORDATORIOS v3.5.2: error reprogramando:", error)
+            return False
+
+    def _recordatorios_vigilar(self):
+        try:
+            if not self.recordatorio_alerta_activa:
+                ahora=datetime.now()
+                with self._recordatorios_conexion() as con:
+                    con.row_factory=sqlite3.Row
+                    row=con.execute(
+                        "SELECT * FROM recordatorios_beta WHERE estado='pendiente' AND aviso_en<=? ORDER BY aviso_en LIMIT 1",
+                        (ahora.isoformat(timespec="minutes"),)
+                    ).fetchone()
+                    if row and not self.hablando and not self.procesando:
+                        con.execute(
+                            "UPDATE recordatorios_beta SET estado='avisado', avisado_en=? WHERE id=?",
+                            (ahora.isoformat(timespec="seconds"), int(row['id']))
+                        ); con.commit()
+                        self.recordatorio_alerta_activa=True
+                        self.responder("recordatorio: " + str(row['texto']), "sorpresa")
+                        self.recordatorio_alerta_activa=False
+                        print(f"RECORDATORIOS v3.5.2: aviso emitido id={row['id']}")
+        except Exception as error:
+            print("RECORDATORIOS v3.5.2: error vigilando:", error)
+        finally:
+            try: self.root.after(30000, self._recordatorios_vigilar)
+            except Exception: pass
+
+    def _orq_es_recordatorio(self, texto):
+        t=normalizar(texto or "")
+        marcas=[
+            "recuerdame", "recordatorio", "avisame", "me avises", "me recuerdes",
+            "que tienes que recordarme", "que me tienes que recordar", "quien me tiene que recordar",
+            "que tengo que recordar", "que debo recordar", "mis recordatorios",
+            "que recordatorios", "calendario", "agenda",
+        ]
+        return any(x in t for x in marcas)
+
+    def _orq_texto_recordatorio(self, original, fechas):
+        t=normalizar(original or "")
+        if len(fechas) >= 2:
+            m1,d1=fechas[0]; m2,d2=fechas[1]
+            entre=t[m1.end():m2.start()]
+            entre=re.sub(r"^[, ]*(?:que\s+)?", "", entre).strip()
+            entre=re.sub(r"(?:el\s+)?(?:dia\s+)?$", "", entre).strip()
+            despues=t[m2.end():].strip(" ,.-")
+            partes=[x for x in [entre, despues] if x]
+            detalle=" ".join(partes).strip()
+            fecha_evt=f"{d2.day} de {['','enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][d2.month]}"
+            return (f"el {fecha_evt} {detalle}".strip(), d2)
+        m,d=fechas[0]
+        despues=t[m.end():].strip(" ,.-")
+        return (despues or f"recordatorio programado para {self._orq_fecha_espanol(d)}", d)
+
+    def _orq_manejar_recordatorio(self, original):
+        t=normalizar(original or "")
+        fechas=self._recordatorios_extraer_fechas(original)
+
+        # Consultar recordatorios, con o sin fecha concreta.
+        if any(x in t for x in [
+            "que tienes que recordarme", "que me tienes que recordar", "quien me tiene que recordar",
+            "que tengo que recordar", "que debo recordar", "mis recordatorios", "que recordatorios"
+        ]):
+            fecha=fechas[0][1] if fechas else None
+            rows=self._recordatorios_listar(fecha)
+            # Whisper puede conservar solamente "día 16" y omitir el mes.
+            # En una consulta de recordatorios es seguro filtrar los pendientes
+            # por número de día; no se crea ni modifica nada.
+            if not fecha:
+                m_dia=re.search(r"\bdia\s+(\d{1,2})\b", t)
+                if m_dia:
+                    rows=self._recordatorios_filtrar_dia(self._recordatorios_listar(), int(m_dia.group(1)))
+            if not rows:
+                self.responder("no tengo recordatorios pendientes" + (" para esa fecha." if fecha else "."), "normal")
+                return True
+            partes=[]
+            for r in rows[:5]:
+                try: dt=datetime.fromisoformat(r['aviso_en']); cuando=f"{dt.day:02d}-{dt.month:02d}-{dt.year} a las {dt:%H:%M}"
+                except Exception: cuando=r['aviso_en']
+                partes.append(f"{cuando}: {r['texto']}")
+            self.responder("tengo " + str(len(rows)) + " recordatorio" + ("s" if len(rows)!=1 else "") + ": " + "; ".join(partes) + ".", "normal")
+            return True
+
+        if any(x in t for x in ["cambia el recordatorio", "reprograma el recordatorio", "mueve el recordatorio"]):
+            hora_nueva=self._recordatorios_extraer_hora(original)
+            if not hora_nueva:
+                self.responder("entendí que quiere cambiar un recordatorio, pero me falta la nueva hora.", "confundida")
+                return True
+            candidatos=self._recordatorios_listar(fechas[0][1] if fechas else None)
+            if not fechas:
+                m_dia=re.search(r"\bdia\s+(\d{1,2})\b", t)
+                if m_dia:
+                    candidatos=self._recordatorios_filtrar_dia(self._recordatorios_listar(), int(m_dia.group(1)))
+            if len(candidatos) != 1:
+                self.responder(
+                    "necesito que indique con más precisión cuál recordatorio desea cambiar." if candidatos else
+                    "no encontré un recordatorio pendiente que coincida.",
+                    "confundida",
+                )
+                return True
+            r=candidatos[0]
+            try:
+                actual=datetime.fromisoformat(r['aviso_en'])
+                nuevo=actual.replace(hour=hora_nueva[0], minute=hora_nueva[1])
+            except Exception:
+                self.responder("no pude interpretar la fecha de ese recordatorio.", "molesta")
+                return True
+            if self._recordatorios_actualizar_aviso(r['id'], nuevo):
+                self.responder(f"recordatorio reprogramado para {self._orq_fecha_espanol(nuevo)} a las {nuevo:%H:%M}.", "feliz")
+            else:
+                self.responder("no pude reprogramar ese recordatorio.", "molesta")
+            return True
+
+        if any(x in t for x in ["cancela el recordatorio", "elimina el recordatorio", "borra el recordatorio"]):
+            criterio=re.sub(r".*?(?:recordatorio)\s*(?:de|del|sobre)?\s*", "", t).strip()
+            try:
+                with self._recordatorios_conexion() as con:
+                    con.row_factory=sqlite3.Row
+                    if fechas:
+                        pref=fechas[0][1].strftime("%Y-%m-%d") + "%"
+                        rows=con.execute("SELECT * FROM recordatorios_beta WHERE estado='pendiente' AND aviso_en LIKE ? ORDER BY aviso_en", (pref,)).fetchall()
+                    elif re.search(r"\bdia\s+(\d{1,2})\b", t):
+                        todos=con.execute("SELECT * FROM recordatorios_beta WHERE estado='pendiente' ORDER BY aviso_en").fetchall()
+                        dia=int(re.search(r"\bdia\s+(\d{1,2})\b", t).group(1))
+                        rows=[r for r in todos if datetime.fromisoformat(r['aviso_en']).day == dia]
+                    elif criterio:
+                        rows=con.execute("SELECT * FROM recordatorios_beta WHERE estado='pendiente' AND lower(texto) LIKE ? ORDER BY aviso_en", (f"%{criterio}%",)).fetchall()
+                    else:
+                        rows=con.execute("SELECT * FROM recordatorios_beta WHERE estado='pendiente' ORDER BY aviso_en").fetchall()
+                    if len(rows)==1:
+                        con.execute("UPDATE recordatorios_beta SET estado='cancelado' WHERE id=?", (int(rows[0]['id']),)); con.commit()
+                        self.responder("recordatorio cancelado.", "normal")
+                    elif len(rows)>1:
+                        self.responder("encontré varios recordatorios coincidentes. Indique con más detalle cuál desea cancelar.", "confundida")
+                    else:
+                        self.responder("no encontré un recordatorio pendiente que coincida.", "confundida")
+                return True
+            except Exception as error:
+                print("RECORDATORIOS v3.5.2: error cancelando:", error)
+                self.responder("no pude cancelar ese recordatorio.", "molesta"); return True
+
+        if not fechas:
+            self.responder("entendí que quiere crear un recordatorio, pero me falta una fecha concreta.", "confundida")
+            return True
+
+        # Si hay dos fechas, la primera es el día de aviso y la segunda el evento.
+        aviso_base=fechas[0][1]
+        hora=self._recordatorios_extraer_hora(original)
+        evento_dt=None
+        if len(fechas)>=2:
+            texto_recordatorio, evento_base=self._orq_texto_recordatorio(original, fechas)
+            evento_hora=hora or (9,0)
+            evento_dt=evento_base.replace(hour=evento_hora[0], minute=evento_hora[1])
+            # Si no se especificó hora para AVISO, usamos las 09:00 y lo decimos.
+            aviso_dt=aviso_base.replace(hour=9, minute=0)
+        else:
+            texto_recordatorio, evento_base=self._orq_texto_recordatorio(original, fechas)
+            h,mi=hora or (9,0)
+            aviso_dt=aviso_base.replace(hour=h, minute=mi)
+            evento_dt=evento_base.replace(hour=h, minute=mi) if "calendario" in t or "agenda" in t else None
+
+        rid=self._recordatorios_guardar(aviso_dt, texto_recordatorio, evento_dt)
+        if not rid:
+            self.responder("no pude guardar el recordatorio.", "molesta"); return True
+        cuando=self._orq_fecha_espanol(aviso_dt) + f" a las {aviso_dt:%H:%M}"
+        if "calendario" in t or "agenda" in t:
+            self.responder(f"guardé el evento en la agenda local de Beta y programé el aviso para {cuando}. No estoy afirmando que lo haya insertado en un calendario externo.", "feliz")
+        else:
+            self.responder(f"recordatorio guardado para {cuando}.", "feliz")
+        print(f"RECORDATORIOS v3.5.2: guardado id={rid} aviso={aviso_dt.isoformat(timespec='minutes')}")
+        return True
+
+    def _orq_normalizar_hardware_contextual(self, texto):
+        """Normaliza deformaciones SOLO cuando la frase ya habla de hardware/temperatura."""
+        t=normalizar(texto or "")
+        if not any(x in t for x in ["temperatura", "uso", "estado", "cpu", "gpu", "procesador", "computador", "atlas"]):
+            return t
+        # Casos reales observados en Atlas para CPU. No se aplican a conversación general.
+        cpu_patrones=[
+            r"\bce\s+pe\s+u\b", r"\bse\s+pe\s+u\b", r"\bse\s+ve\s+un\b",
+            r"\bse\s+un\b", r"\bni\s+se\s+pew\b", r"\bse\s+pew\b",
+            r"\bcipiu\b", r"\bpp\b",
+        ]
+        for p in cpu_patrones:
+            t=re.sub(p, "cpu", t)
+        gpu_patrones=[r"\bge\s+pe\s+u\b", r"\bg\s+p\s+u\b"]
+        for p in gpu_patrones:
+            t=re.sub(p, "gpu", t)
+        return re.sub(r"\s+", " ", t).strip()
+
+    def _orq_manejar_temperatura_hardware(self, texto):
+        t=self._orq_normalizar_hardware_contextual(texto)
+        if "temperatura" not in t:
+            return False
+        if any(x in t for x in ["gpu", "tarjeta grafica", "grafica"]):
+            return self._atlas_estado_sistema_async("gpu")
+        if any(x in t for x in ["cpu", "procesador", "microprocesador"]):
+            return self._atlas_estado_sistema_async("cpu")
+        if any(x in t for x in ["computador", "pc", "equipo", "atlas"]):
+            return self._atlas_estado_sistema_async("resumen")
+        return False
+
+    def _orq_temperatura_ambigua(self, texto):
+        t=self._orq_normalizar_hardware_contextual(texto)
+        if "temperatura" not in t:
+            return False
+        # Señales meteorológicas explícitas: se dejan continuar al módulo clima.
+        if any(x in t for x in [
+            "clima", "ambiente", "ambiental", "afuera", "exterior",
+            "como esta el tiempo", "que tiempo hace", "pronostico",
+        ]):
+            return False
+        if re.search(r"\btemperatura\s+en\s+", t):
+            return False
+        # Una pregunta genérica de temperatura puede seguir significando clima.
+        if t in {"temperatura", "dime la temperatura", "que temperatura hace", "cual es la temperatura"}:
+            return False
+        # Si el usuario dijo "temperatura del/de la/de mi ..." y no pudimos
+        # identificar CPU/GPU/PC, es más seguro preguntar que devolver el clima.
+        return bool(re.search(r"\btemperatura\s+(?:del|de la|de mi|de este|de esta)\b", t))
+
+    def _orquestar_intencion_previa(self, original):
+        t=normalizar(original or "")
+        if not t:
+            return False
+
+        # 1) Tareas persistentes: nunca pasan por memoria inteligente ni RAG.
+        if self._orq_es_recordatorio(t):
+            self.orquestador_ultima_intencion="recordatorio"
+            print("ORQUESTADOR v3.5.2: intención=recordatorio")
+            return self._orq_manejar_recordatorio(original)
+
+        # 2) Navegación web real antes del Explorador de archivos.
+        if self._orq_es_web(t):
+            self.orquestador_ultima_intencion="web"
+            print("ORQUESTADOR v3.5.2: intención=web")
+            return self._orq_manejar_web(original)
+
+        # 3) Fecha/hora son utilidades locales; no consultan libros.
+        if self._orq_es_consulta_fecha(t):
+            self.orquestador_ultima_intencion="fecha"
+            ahora=datetime.now()
+            self.responder(f"hoy es {self._orq_fecha_espanol(ahora)}.", "normal")
+            print("ORQUESTADOR v3.5.2: intención=fecha")
+            return True
+        if self._es_consulta_hora(t):
+            self.orquestador_ultima_intencion="hora"
+            self.responder(f"son las {time.strftime('%H:%M')}.", "normal")
+            print("ORQUESTADOR v3.5.2: intención=hora")
+            return True
+
+        # 4) Hardware tiene precedencia ABSOLUTA sobre clima cuando se nombra
+        # CPU/GPU/PC, incluso con deformaciones fonéticas observadas en Atlas.
+        if "temperatura" in t and self._orq_manejar_temperatura_hardware(t):
+            self.orquestador_ultima_intencion="hardware"
+            print("ORQUESTADOR v3.5.2: intención=hardware")
+            return True
+        if self._orq_temperatura_ambigua(t):
+            self.orquestador_ultima_intencion="aclaracion_temperatura"
+            self.responder("¿se refiere a la temperatura del computador o a la temperatura ambiente?", "confundida")
+            print("ORQUESTADOR v3.5.2: intención=aclaracion_temperatura")
+            return True
+
+        # 5) Ayuda sobre Beta se genera desde capacidades reales, no desde libros.
+        if self._orq_es_ayuda_beta(t):
+            self.orquestador_ultima_intencion="ayuda_beta"
+            print("ORQUESTADOR v3.5.2: intención=ayuda_beta")
+            return self._orq_responder_ayuda_beta()
+
+        return False
 
     # ======================================================
     # ACCIONES WINDOWS
@@ -19677,6 +22525,69 @@ Recuerdos relevantes:
 
         threading.Thread(target=trabajo, daemon=True).start()
 
+    def spotify_volumen_async(self, delta):
+        """Ajusta el volumen real del reproductor Spotify en pasos relativos."""
+        if not self.spotify_client_id or not (self.spotify_refresh_token or self.spotify_access_token):
+            self.responder("primero debe conectar Spotify desde el menú de Beta.", "confundida")
+            return
+
+        def trabajo():
+            try:
+                dispositivo = self._spotify_asegurar_dispositivo()
+                if not dispositivo:
+                    raise RuntimeError("no encontré un dispositivo Spotify disponible.")
+                device_id = dispositivo.get("id")
+                actual = dispositivo.get("volume_percent")
+                if actual is None:
+                    player = self._spotify_api("GET", "/me/player") or {}
+                    actual = (player.get("device") or {}).get("volume_percent")
+                if actual is None:
+                    raise RuntimeError("Spotify no informó el volumen actual.")
+                nuevo = max(0, min(100, int(actual) + int(delta)))
+                self._spotify_api("PUT", "/me/player/volume", params={"volume_percent": nuevo, "device_id": device_id})
+                def confirmar():
+                    self._spotify_marcar_contexto()
+                    self.responder(f"volumen de Spotify en {nuevo}%.", "normal")
+                self.root.after(0, confirmar)
+            except Exception as error:
+                detalle = self._spotify_error_amigable(error)
+                print("SPOTIFY: error ajustando volumen:", error)
+                self.root.after(0, lambda d=detalle: self.responder(d, "confundida"))
+
+        threading.Thread(target=trabajo, daemon=True).start()
+
+    def spotify_volumen_fijar_async(self, nivel):
+        """Fija el volumen real de Spotify a un porcentaje absoluto."""
+        try:
+            nivel = int(nivel)
+        except Exception:
+            self.responder("necesito un porcentaje de volumen válido.", "confundida")
+            return
+        if not 0 <= nivel <= 100:
+            self.responder("el volumen debe estar entre 0 y 100 por ciento.", "confundida")
+            return
+        if not self.spotify_client_id or not (self.spotify_refresh_token or self.spotify_access_token):
+            self.responder("primero debe conectar Spotify desde el menú de Beta.", "confundida")
+            return
+
+        def trabajo():
+            try:
+                dispositivo = self._spotify_asegurar_dispositivo()
+                if not dispositivo:
+                    raise RuntimeError("no encontré un dispositivo Spotify disponible.")
+                device_id = dispositivo.get("id")
+                self._spotify_api("PUT", "/me/player/volume", params={"volume_percent": nivel, "device_id": device_id})
+                def confirmar():
+                    self._spotify_marcar_contexto()
+                    self.responder(f"volumen de Spotify en {nivel}%.", "normal")
+                self.root.after(0, confirmar)
+            except Exception as error:
+                detalle = self._spotify_error_amigable(error)
+                print("SPOTIFY: error fijando volumen:", error)
+                self.root.after(0, lambda d=detalle: self.responder(d, "confundida"))
+
+        threading.Thread(target=trabajo, daemon=True).start()
+
     def spotify_preferencias_async(self):
         if not self.spotify_client_id or not (
             self.spotify_refresh_token or self.spotify_access_token
@@ -21494,13 +24405,13 @@ $voz.Speak($texto)
         """Fija la mirada al frente mientras Beta pronuncia una respuesta."""
         if not getattr(self, "mirada_frontal_voz", False):
             self.mirada_frontal_voz = True
-            print("MIRADA v3.3.3: frontal durante la respuesta hablada.")
+            print("MIRADA v3.5.2: frontal durante la respuesta hablada.")
 
     def desactivar_mirada_frontal_voz(self):
         """Devuelve el control de las pupilas al seguimiento del puntero."""
         if getattr(self, "mirada_frontal_voz", False):
             self.mirada_frontal_voz = False
-            print("MIRADA v3.3.3: seguimiento del puntero restaurado.")
+            print("MIRADA v3.5.2: seguimiento del puntero restaurado.")
 
     def actualizar_pupilas(self):
         if not self.ojos_cerrados:
@@ -21558,7 +24469,7 @@ $voz.Speak($texto)
             objetivo_offset_x = dx * escala
             objetivo_offset_y = dy * escala
 
-        # v3.3.3: transición suave al centrar la mirada y al volver al cursor.
+        # v3.5.2: transición suave al centrar la mirada y al volver al cursor.
         offsets = getattr(self, "mirada_offsets", None)
         if not isinstance(offsets, dict):
             offsets = {"izquierda": [0.0, 0.0], "derecha": [0.0, 0.0]}
