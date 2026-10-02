@@ -38,10 +38,10 @@ import urllib.request
 from datetime import datetime, timedelta
 
 
-BETA_VERSION = "3.5.2"
+BETA_VERSION = "3.5.3"
 
 # ==========================================================
-# BETA v3.5.2 - CONTROL DE ATLAS + MIRADA CONTEXTUAL + AULA WORKSPACE
+# BETA v3.5.3 - CONTROL DE ATLAS + MIRADA CONTEXTUAL + AULA WORKSPACE
 # Mascota virtual + memoria + comandos aprendidos + clima
 # + Ollama/Qwen3 Instruct + memoria evolutiva + personalidad adaptativa
 # + voz híbrida: Vosk para activación y Faster-Whisper para dictado
@@ -97,28 +97,28 @@ BETA_VERSION = "3.5.2"
 # v3.0.0: aula interactiva propia activable por voz con "Beta, activa modo estudio"
 # v3.0.1: si un fragmento de respuesta tiene ASR dudoso, cancela la corrección pendiente
 # v3.1.0: Aula Workspace integra Clase/Pizarra + Proyecto/Chat + Trabajo/Borrador
-# v3.5.2: Control de Atlas: ventanas/aplicaciones, navegación contextual de carpetas/archivos
+# v3.5.3: Control de Atlas: ventanas/aplicaciones, navegación contextual de carpetas/archivos
 # + estado real de CPU/RAM/discos/red; nunca confirma una acción local que no se ejecutó
 # + contexto de ventana/carpeta/archivo y resolución de coincidencias sin inventar rutas
 # + base de seguridad para acciones destructivas y futuras automatizaciones Office
-# v3.5.2 robustez Atlas: normalización fonética contextual de Word/Spotify/Steam/IPP
+# v3.5.3 robustez Atlas: normalización fonética contextual de Word/Spotify/Steam/IPP
 # + cortafuegos para que órdenes de ventana ambiguas nunca caigan a Ollama
 # + selección de ventanas priorizando el proceso real y no títulos accidentales
 # + volumen Spotify absoluto/relativo, CPU por núcleo coherente e IP de la ruta activa
-# v3.5.2 precisión Atlas: recupera abres/potifai, porcentajes hablados y estado de Internet con ruido ASR
-# v3.5.2: mirada contextual: Beta centra los ojos al frente durante toda respuesta hablada
+# v3.5.3 precisión Atlas: recupera abres/potifai, porcentajes hablados y estado de Internet con ruido ASR
+# v3.5.3: mirada contextual: Beta centra los ojos al frente durante toda respuesta hablada
 # + al terminar la voz vuelve suavemente al seguimiento normal del puntero
 # + el estado se mantiene durante streaming completo y también en respaldo de voz Windows
-# v3.5.2 ubicaciones confiables: IPP=D:\\IPP y Beta=A:\\Beta tienen prioridad sobre búsqueda global
-# v3.5.2 explorador verificable: ubicar/listar carpetas usa disco real y nunca Ollama
-# v3.5.2 nombres equivalentes: Primer/1er, Segundo/2do, etc. + cortafuegos contextual de carpetas
-# v3.5.2 contexto de navegación: vuelve a IPP, búsqueda segura de carpetas hermanas y consultas con raíz explícita
+# v3.5.3 ubicaciones confiables: IPP=D:\\IPP y Beta=A:\\Beta tienen prioridad sobre búsqueda global
+# v3.5.3 explorador verificable: ubicar/listar carpetas usa disco real y nunca Ollama
+# v3.5.3 nombres equivalentes: Primer/1er, Segundo/2do, etc. + cortafuegos contextual de carpetas
+# v3.5.3 contexto de navegación: vuelve a IPP, búsqueda segura de carpetas hermanas y consultas con raíz explícita
 # + búsqueda segura por contexto/Escritorio/Documentos/OneDrive; omite .m2/.vscode/cachés por defecto
 # + interpreta calificadores como "en el disco A" y controla ventanas de carpetas por su ruta real
-# v3.5.2: orquestador de intenciones separa web, recordatorios, sistema, archivos, estudio y conversación
+# v3.5.3: orquestador de intenciones separa web, recordatorios, sistema, archivos, estudio y conversación
 # + Google/YouTube reales antes del Explorador; recordatorios persistentes en SQLite; fecha/hora local sin RAG
 # + memoria, contexto operativo y recordatorios quedan desacoplados; órdenes operativas no llegan a Ollama
-# v3.5.2: estabilización: orquestador antes de clima/RAG, hardware fonético, recordatorios consultables/reprogramables
+# v3.5.3: estabilización: orquestador antes de clima/RAG, hardware fonético, recordatorios consultables/reprogramables
 # v3.2.1: analiza localmente preguntas/instrucciones/estructura antes de depender de Ollama
 # + fallback documental verificable cuando Ollama falla o agota el tiempo
 # + separa consultas sobre Beta/Workspace de preguntas sobre los documentos
@@ -3365,7 +3365,7 @@ class BetaApp:
         self.root = root
         self.memoria = MemoriaBeta()
 
-        # Beta v3.5.2: contexto operativo real de Atlas. No se usa como memoria
+        # Beta v3.5.3: contexto operativo real de Atlas. No se usa como memoria
         # personal: solo conserva referencias efímeras de la sesión para órdenes
         # como "ahora abre...", "minimízala" o "vuelve a la carpeta anterior".
         self.atlas_carpeta_actual = None
@@ -3378,20 +3378,25 @@ class BetaApp:
         self.atlas_tipo_opciones_pendientes = ""
         self.atlas_opciones_hasta = 0.0
         self.atlas_aclaracion_pendiente = None
-        # v3.5.2: ubicaciones confiables de Atlas. Estas rutas son control operativo,
+        # v3.5.3: ubicaciones confiables de Atlas. Estas rutas son control operativo,
         # no memoria personal ni contenido de conversación.
         self.atlas_ubicaciones_confiables = self._atlas_cargar_ubicaciones_confiables()
         self.atlas_ultima_ruta_explorador = None
         self.atlas_ultima_ruta_referida = None
-        # v3.5.2: confirmaciones efímeras para operaciones con archivos.
+        # v3.5.3: confirmaciones efímeras para operaciones con archivos.
         # Nunca se guardan como memoria personal.
         self.atlas_confirmacion_pendiente = None
         self.atlas_confirmacion_hasta = 0.0
 
-        # v3.5.2: recordatorios persistentes y orquestador de intenciones.
+        # v3.5.3: recordatorios persistentes y orquestador de intenciones.
         # El recordatorio vive en SQLite, separado de memoria personal y del
         # contexto operativo de ventanas/carpetas.
         self.orquestador_ultima_intencion = ""
+        # v3.5.3: seguimiento corto de una aclaración explícita sobre
+        # temperatura. Permite contestar "del computador" / "ambiente"
+        # sin repetir el wake word, pero solo durante una ventana breve.
+        self.orq_aclaracion_temperatura_pendiente = None
+        self.orq_aclaracion_temperatura_hasta = 0.0
         self.recordatorio_alerta_activa = False
         self._recordatorios_inicializar_db()
 
@@ -3818,7 +3823,7 @@ class BetaApp:
         self.radio_pupila = 6
         self.radio_brillo_pupila = 2
 
-        # v3.5.2 - Mirada contextual.
+        # v3.5.3 - Mirada contextual.
         # En reposo Beta sigue el puntero; mientras una respuesta está sonando
         # mantiene las pupilas centradas al frente. Los offsets se interpolan
         # para evitar saltos bruscos al entrar o salir del modo frontal.
@@ -5838,7 +5843,7 @@ class BetaApp:
         self._crear_ventana_modo_estudio()
         self._aula_actualizar_encabezado()
         self._aula_refrescar_ejercicio()
-        print("MODO ESTUDIO v3.5.2: Aula Workspace activa.")
+        print("MODO ESTUDIO v3.5.3: Aula Workspace activa.")
         if anunciar:
             self.responder(
                 "modo estudio activado. Abrí el aula de Beta. Las explicaciones, ejemplos y ejercicios quedarán visibles en la pizarra mientras seguimos conversando.",
@@ -5873,7 +5878,7 @@ class BetaApp:
         self.aula_chat_entrada = None
         self.aula_archivos_tree = None
         self.aula_trabajo = None
-        print("MODO ESTUDIO v3.5.2: Aula Workspace cerrada.")
+        print("MODO ESTUDIO v3.5.3: Aula Workspace cerrada.")
         if anunciar:
             self.responder(
                 "modo estudio finalizado. Conservaré el progreso y el tema de Python para retomarlos después.",
@@ -5996,7 +6001,7 @@ class BetaApp:
                 pass
             self.tutor_python_respuesta_timer = None
         self.tutor_python_respuesta_buffer = []
-        print(f"AULA WORKSPACE v3.5.2: respuesta de ejercicio escrita='{respuesta}'")
+        print(f"AULA WORKSPACE v3.5.3: respuesta de ejercicio escrita='{respuesta}'")
         self._aula_mostrar_respuesta_usuario("[Respuesta escrita] " + respuesta)
         try:
             self.memoria.guardar_conversacion("Señor", respuesta)
@@ -6215,7 +6220,7 @@ class BetaApp:
                 filetypes=[("Documento Word", "*.docx")],
             )
         except Exception as error:
-            print("EXPORTADOR WORD v3.5.2: no pude abrir Guardar como:", error)
+            print("EXPORTADOR WORD v3.5.3: no pude abrir Guardar como:", error)
             return None
         if not elegido:
             return None
@@ -6362,7 +6367,7 @@ class BetaApp:
             self.proyecto_trabajo_estructurado = datos
             self._proyecto_guardar_trabajo_estructurado()
             self.proyecto_ultimo_word = str(salida)
-            print(f"EXPORTADOR WORD v3.5.2: generado {salida}")
+            print(f"EXPORTADOR WORD v3.5.3: generado {salida}")
             return True, f"Generé el Word final en la ubicación que eligió: {salida}", salida
         except Exception as error:
             try:
@@ -6370,7 +6375,7 @@ class BetaApp:
                     salida.unlink()
             except Exception:
                 pass
-            print("EXPORTADOR WORD v3.5.2: error:", error)
+            print("EXPORTADOR WORD v3.5.3: error:", error)
             return False, f"No pude generar el documento Word: {error}", None
 
     def _proyecto_manifest_nuevo(self, nombre, ruta):
@@ -6431,7 +6436,7 @@ class BetaApp:
             try:
                 datos = json.loads(ruta.read_text(encoding="utf-8"))
             except Exception as error:
-                print("CONSTRUCTOR v3.5.2: trabajo.json inválido; reconstruyendo:", error)
+                print("CONSTRUCTOR v3.5.3: trabajo.json inválido; reconstruyendo:", error)
         if not isinstance(datos, dict):
             datos = self._proyecto_trabajo_base()
             legacy = self._proyecto_borrador_ruta(proyecto["ruta"])
@@ -6509,7 +6514,7 @@ class BetaApp:
             ruta.write_text(json.dumps(datos, ensure_ascii=False, indent=2), encoding="utf-8")
             return True
         except Exception as error:
-            print("CONSTRUCTOR v3.5.2: no pude guardar trabajo.json:", error)
+            print("CONSTRUCTOR v3.5.3: no pude guardar trabajo.json:", error)
             return False
 
     def _proyecto_ultima_respuesta_fuentes(self):
@@ -6685,7 +6690,7 @@ class BetaApp:
         self._proyecto_guardar_trabajo_estructurado()
         self._proyecto_renderizar_borrador(guardar_md=True)
         self._proyecto_refrescar_estado_trabajo_ui()
-        print(f"CONSTRUCTOR v3.5.2: respuesta agregada a {destino}.")
+        print(f"CONSTRUCTOR v3.5.3: respuesta agregada a {destino}.")
         return True, f"Agregué la respuesta a {destino}."
 
     def _proyecto_renderizar_borrador(self, guardar_md=False):
@@ -6729,7 +6734,7 @@ class BetaApp:
             try:
                 self._proyecto_borrador_ruta(self.proyecto_estudio_actual["ruta"]).write_text(texto, encoding="utf-8")
             except Exception as error:
-                print("CONSTRUCTOR v3.5.2: no pude actualizar borrador.md:", error)
+                print("CONSTRUCTOR v3.5.3: no pude actualizar borrador.md:", error)
         return texto
 
     def _proyecto_progreso_trabajo(self):
@@ -6813,7 +6818,7 @@ class BetaApp:
         if not t:
             return "", []
 
-        # v3.5.2: Introducción/Conclusión/Bibliografía se guardan como secciones reales, no como chat general.
+        # v3.5.3: Introducción/Conclusión/Bibliografía se guardan como secciones reales, no como chat general.
         secciones = self._proyecto_secciones_mencionadas(consulta)
         if len(secciones) == 2 and set(secciones) == {"conclusion", "bibliografia"} and any(x in t for x in ("haz lo mismo", "redacta", "genera", "prepara")):
             con, f1 = self._proyecto_redactar_seccion_local("conclusion")
@@ -7800,7 +7805,7 @@ class BetaApp:
         self._aula_chat_insertar("Señor", consulta)
         self._proyecto_registrar_chat("Señor", consulta)
 
-        # v3.5.2: detectar primero si el Señor está trabajando una sección general.
+        # v3.5.3: detectar primero si el Señor está trabajando una sección general.
         self._proyecto_actualizar_foco_seccion_desde_consulta(consulta)
 
         # Acciones del Constructor se resuelven antes de consultar documentos/IA.
@@ -7810,7 +7815,7 @@ class BetaApp:
             self._proyecto_registrar_chat("Beta", respuesta_constructor, fuentes_constructor)
             self._aula_chat_insertar("Beta", respuesta_constructor, fuentes_constructor)
             self.responder(respuesta_constructor, "normal", tipo_contexto="proyecto")
-            print(f"CONSTRUCTOR v3.5.2: acción local resuelta; foco={self.proyecto_seccion_foco or self.proyecto_pregunta_foco}")
+            print(f"CONSTRUCTOR v3.5.3: acción local resuelta; foco={self.proyecto_seccion_foco or self.proyecto_pregunta_foco}")
             return
 
         # v3.2.1: las preguntas sobre el funcionamiento de Beta no se buscan en el PDF.
@@ -7820,7 +7825,7 @@ class BetaApp:
             self._proyecto_registrar_chat("Beta", respuesta_meta, [])
             self._aula_chat_insertar("Beta", respuesta_meta, [])
             self.responder(respuesta_meta, "normal", tipo_contexto="proyecto")
-            print("AULA WORKSPACE v3.5.2: consulta meta respondida localmente.")
+            print("AULA WORKSPACE v3.5.3: consulta meta respondida localmente.")
             return
 
         # v3.2.1: preguntas estructurales del trabajo no dependen de Ollama.
@@ -7833,7 +7838,7 @@ class BetaApp:
             resumen_voz_fn = getattr(self, "_proyecto_resumen_voz", None)
             voz = resumen_voz_fn(respuesta_local, consulta) if callable(resumen_voz_fn) else respuesta_local
             self.responder(voz, "normal", tipo_contexto="proyecto")
-            print(f"AULA WORKSPACE v3.5.2: análisis local resuelto; fuentes={fuentes_locales}")
+            print(f"AULA WORKSPACE v3.5.3: análisis local resuelto; fuentes={fuentes_locales}")
             return
 
         if self._proyecto_es_pedir_redaccion(consulta):
@@ -7847,7 +7852,7 @@ class BetaApp:
                     self._aula_chat_insertar("Beta", redactada, fuentes_sec)
                     voz = f"Señor, preparé la {foco_sec}. La dejé completa en el chat para que la revise antes de agregarla al trabajo."
                     self.responder(voz, "normal", tipo_contexto="proyecto")
-                    print(f"AULA WORKSPACE v3.5.2: borrador local de sección={foco_sec} listo.")
+                    print(f"AULA WORKSPACE v3.5.3: borrador local de sección={foco_sec} listo.")
                     return
 
         if self._proyecto_es_pedir_explicacion(consulta) or self._proyecto_es_pedir_redaccion(consulta):
@@ -7867,7 +7872,7 @@ class BetaApp:
                     resumen_voz_fn = getattr(self, "_proyecto_resumen_voz", None)
                     voz = resumen_voz_fn(guiada, consulta) if callable(resumen_voz_fn) else guiada
                     self.responder(voz, "normal", tipo_contexto="proyecto")
-                    print(f"AULA WORKSPACE v3.5.2: seguimiento guiado local pregunta={self.proyecto_pregunta_foco} fuentes={fuentes_guiada}")
+                    print(f"AULA WORKSPACE v3.5.3: seguimiento guiado local pregunta={self.proyecto_pregunta_foco} fuentes={fuentes_guiada}")
                     return
 
         self.proyecto_consulta_en_curso = True
@@ -7936,10 +7941,10 @@ class BetaApp:
                             for ref in fuentes_guiada:
                                 if ref not in fuentes_labels:
                                     fuentes_labels.append(ref)
-                            print("AULA WORKSPACE v3.5.2: fallback guiado por pregunta activa tras fallo/timeout de Ollama.")
+                            print("AULA WORKSPACE v3.5.3: fallback guiado por pregunta activa tras fallo/timeout de Ollama.")
                         else:
                             respuesta = self._proyecto_fallback_documental(consulta, fuentes)
-                            print("AULA WORKSPACE v3.5.2: fallback documental activado tras fallo/timeout de Ollama.")
+                            print("AULA WORKSPACE v3.5.3: fallback documental activado tras fallo/timeout de Ollama.")
                     else:
                         self.proyecto_ultimo_error = ""
             except Exception as error:
@@ -7984,7 +7989,7 @@ class BetaApp:
             self.aula_chat_entrada.delete("1.0", "end")
         except Exception:
             pass
-        print(f"AULA WORKSPACE v3.5.2: consulta escrita='{consulta}'")
+        print(f"AULA WORKSPACE v3.5.3: consulta escrita='{consulta}'")
         self.consultar_proyecto_estudio_async(consulta, desde_voz=False)
 
     def _aula_cargar_borrador(self):
@@ -8015,10 +8020,10 @@ class BetaApp:
             ruta = self._proyecto_borrador_ruta(proyecto["ruta"])
             ruta.write_text(contenido, encoding="utf-8")
             if not silencioso:
-                print(f"CONSTRUCTOR v3.5.2: borrador manual guardado en {ruta}.")
+                print(f"CONSTRUCTOR v3.5.3: borrador manual guardado en {ruta}.")
             return True
         except Exception as error:
-            print("CONSTRUCTOR v3.5.2: no pude guardar borrador:", error)
+            print("CONSTRUCTOR v3.5.3: no pude guardar borrador:", error)
             return False
 
     def aula_editar_datos_entrega(self):
@@ -8064,7 +8069,7 @@ class BetaApp:
                 datos["metadatos"][clave] = var.get().strip()
             self.proyecto_trabajo_estructurado = datos
             self._proyecto_guardar_trabajo_estructurado()
-            print("EXPORTADOR WORD v3.5.2: datos de entrega actualizados.")
+            print("EXPORTADOR WORD v3.5.3: datos de entrega actualizados.")
             win.destroy()
 
         botones = ttk.Frame(marco)
@@ -14840,7 +14845,7 @@ Recuerdos relevantes:
                 if re.fullmatch(r"(?:el |la )?(?:1|2|3|4|5|6|uno|dos|tres|cuatro|cinco|seis|primero|primera|segundo|segunda|tercero|tercera|cuarto|cuarta|quinto|quinta|sexto|sexta)|(?:cancela|ninguna|ninguno|dejalo)", t):
                     return True
 
-        # v3.5.2: una confirmación explícita de una operación sensible habilita
+        # v3.5.3: una confirmación explícita de una operación sensible habilita
         # una sola respuesta corta sin repetir el wake word. La biometría sigue
         # siendo obligatoria en la capa de audio.
         if getattr(self, "atlas_confirmacion_pendiente", None):
@@ -14848,6 +14853,13 @@ Recuerdos relevantes:
             if limite and ahora > limite:
                 self.atlas_confirmacion_pendiente = None
             elif re.fullmatch(r"(?:si|sí|confirmo|confirma|de acuerdo|hazlo|adelante|acepto|no|cancela|cancelar|dejalo|déjalo)", t):
+                return True
+
+        # v3.5.3: si Beta acaba de preguntar "computador o ambiente", una
+        # respuesta corta relacionada es una continuación explícita. Sigue
+        # pasando por biometría, pero no exige repetir "Beta".
+        if self._orq_aclaracion_temperatura_activa():
+            if self._orq_es_respuesta_aclaracion_temperatura(t):
                 return True
 
         wake = self._wake_en_inicio(t, incluir_ambiguos=True)
@@ -15532,6 +15544,11 @@ Recuerdos relevantes:
         if self.modo_escucha == "conversacion" and ahora <= self.modo_conversacion_hasta:
             return True
 
+        # v3.5.3: una aclaración de temperatura es una continuación breve que
+        # merece Whisper aunque no repita el wake word.
+        if self._orq_aclaracion_temperatura_activa():
+            return True
+
         if self.pregunta_curiosa_pendiente and ahora <= self.pregunta_curiosa_hasta:
             return True
 
@@ -16080,7 +16097,7 @@ Recuerdos relevantes:
         if t_operativo.startswith(comandos):
             return False
 
-        # v3.5.2: navegación/gestión de carpetas y archivos es contexto operativo,
+        # v3.5.3: navegación/gestión de carpetas y archivos es contexto operativo,
         # incluso si la frase contiene "quiero". Evita recuerdos falsos como
         # "El Señor quiere hacer la carpeta Primer Semestre" por errores de ASR.
         if any(obj in t_operativo for obj in ("carpeta", "archivo", "documento")) and any(
@@ -16092,7 +16109,7 @@ Recuerdos relevantes:
         ):
             return False
 
-        # v3.5.2: un recordatorio/agenda es una tarea programada, no memoria
+        # v3.5.3: un recordatorio/agenda es una tarea programada, no memoria
         # personal. Evita que frases como "necesito que me avises..." terminen
         # además como recuerdos o pendientes inferidos por Qwen.
         if any(x in t_operativo for x in (
@@ -16819,11 +16836,18 @@ Recuerdos relevantes:
             if wake_atlas is None and self._atlas_resolver_opcion_pendiente(texto_original):
                 return
 
-        # CONTROL ATLAS v3.5.2: una confirmación sensible pendiente acepta
+        # CONTROL ATLAS v3.5.3: una confirmación sensible pendiente acepta
         # únicamente sí/no sin wake word. No se mezcla con conversación general.
         if getattr(self, "atlas_confirmacion_pendiente", None):
             wake_conf = self._wake_en_inicio(texto_normal, incluir_ambiguos=False)
             if wake_conf is None and self._atlas_resolver_confirmacion_pendiente(texto_original):
+                return
+
+        # v3.5.3: respuesta a "¿computador o ambiente?". La pregunta fue
+        # formulada explícitamente por Beta, por lo que aceptamos una única
+        # continuación natural con voz autorizada y sin repetir el wake word.
+        if self._orq_aclaracion_temperatura_activa():
+            if self._orq_resolver_aclaracion_temperatura(texto_original):
                 return
 
         # CONVERSACIÓN EXPLÍCITA: solo aquí se aceptan frases sin decir Beta.
@@ -17555,7 +17579,7 @@ Recuerdos relevantes:
             self.fallos_consecutivos = 0
             return
 
-        # Beta v3.5.2: ORQUESTADOR DE INTENCIONES PRIMARIO.
+        # Beta v3.5.3: ORQUESTADOR DE INTENCIONES PRIMARIO.
         # Debe ejecutarse ANTES de fuentes, RAG y clima. Así una frase como
         # "temperatura del CPU", "abre YouTube" o "recuérdame..." nunca
         # puede ser secuestrada por el contexto académico o meteorológico.
@@ -17932,7 +17956,7 @@ Recuerdos relevantes:
             self.responder("sigo sin entender esa petición.", "molesta")
 
     # ======================================================
-    # CONTROL DE ATLAS v3.5.2
+    # CONTROL DE ATLAS v3.5.3
     # ======================================================
 
     def _atlas_quitar_wake(self, texto):
@@ -17954,7 +17978,7 @@ Recuerdos relevantes:
     def _atlas_normalizar_orden_operativa(self, texto):
         """Normaliza solo el pequeño vocabulario de control de Atlas.
 
-        v3.5.2: esta capa es deliberadamente contextual. No modifica el texto
+        v3.5.3: esta capa es deliberadamente contextual. No modifica el texto
         general de la conversación ni alimenta a Ollama; únicamente ayuda al
         enrutador local a recuperar deformaciones frecuentes de Vosk/Whisper.
         """
@@ -18377,7 +18401,7 @@ Recuerdos relevantes:
     def _atlas_ventanas_de_app(self, app):
         """Devuelve ventanas de una aplicación priorizando el proceso real.
 
-        v3.5.2 evita elegir una ventana solo porque el título contiene una
+        v3.5.3 evita elegir una ventana solo porque el título contiene una
         palabra parecida. Word/Spotify/etc. primero deben coincidir por proceso;
         el título queda como respaldo para aplicaciones UWP o casos sin psutil.
         """
@@ -18481,7 +18505,7 @@ Recuerdos relevantes:
                 self.responder(f"cerrando {nombre}; si hay cambios sin guardar, la aplicación pedirá confirmación.", "normal")
             else:
                 self.responder(f"{nombre} {verbo}.", "normal")
-            print(f"CONTROL ATLAS v3.5.2: ventana {accion} hwnd={hwnd} titulo={objetivo.get('titulo','')!r}")
+            print(f"CONTROL ATLAS v3.5.3: ventana {accion} hwnd={hwnd} titulo={objetivo.get('titulo','')!r}")
         except Exception as error:
             print("CONTROL ATLAS: error controlando ventana:", error)
             self.responder("no pude realizar esa acción sobre la ventana.", "molesta")
@@ -18584,7 +18608,7 @@ Recuerdos relevantes:
                 return False
             self.atlas_ultima_aplicacion = app
             self.responder(f"abriendo {nombre}.", "feliz")
-            print(f"CONTROL ATLAS v3.5.2: aplicación abierta={app}")
+            print(f"CONTROL ATLAS v3.5.3: aplicación abierta={app}")
         except Exception as error:
             print(f"CONTROL ATLAS: no pude abrir {app}:", error)
             self.responder(f"no pude encontrar o abrir {nombre} en Atlas.", "molesta")
@@ -18618,7 +18642,7 @@ Recuerdos relevantes:
     def _atlas_raices_busqueda(self):
         """Raíces seguras para búsquedas ordinarias.
 
-        v3.5.2 deja de recorrer ``Path.home()`` y la raíz de A: por defecto.
+        v3.5.3 deja de recorrer ``Path.home()`` y la raíz de A: por defecto.
         Eso evita falsos positivos dentro de .m2, .vscode, caches y repositorios.
         """
         raices = []
@@ -18661,7 +18685,7 @@ Recuerdos relevantes:
         # Primero hijos directos de la carpeta contextual: la conversación tiene
         # prioridad sobre búsquedas globales.
         raices = self._atlas_raices_busqueda()
-        # v3.5.2: si estamos dentro de una subcarpeta de una ubicación
+        # v3.5.3: si estamos dentro de una subcarpeta de una ubicación
         # confiable (por ejemplo D:\IPP\1er Semestre), una carpeta hermana
         # como "Segundo Semestre" se busca también en su padre inmediato.
         # Esto solo se aplica a CARPETAS y nunca habilita una búsqueda global.
@@ -18799,17 +18823,17 @@ Recuerdos relevantes:
         if not rutas:
             limpio, _ = self._atlas_separar_nombre_y_ubicacion(nombre)
             self.responder(f"no encontré una carpeta real llamada {limpio} en el contexto y ubicaciones seguras.", "confundida")
-            print(f"CONTROL ATLAS v3.5.2: ubicación no encontrada para {limpio!r}; sin fallback a Ollama.")
+            print(f"CONTROL ATLAS v3.5.3: ubicación no encontrada para {limpio!r}; sin fallback a Ollama.")
             return True
         if len(rutas) == 1:
             p = rutas[0]
             self.atlas_ultima_ruta_referida = p
             self.responder(f"la carpeta {p.name} está en {p}.", "normal")
-            print(f"CONTROL ATLAS v3.5.2: ubicación verificada={p}")
+            print(f"CONTROL ATLAS v3.5.3: ubicación verificada={p}")
             return True
         detalles = "; ".join(f"{i}, {p}" for i, p in enumerate(rutas[:6], 1))
         self.responder(f"encontré varias carpetas reales con ese nombre: {detalles}. Indique una ubicación más específica.", "confundida")
-        print(f"CONTROL ATLAS v3.5.2: múltiples ubicaciones verificadas={rutas[:6]}")
+        print(f"CONTROL ATLAS v3.5.3: múltiples ubicaciones verificadas={rutas[:6]}")
         return True
 
     def _atlas_listar_contenido_carpeta(self, nombre):
@@ -18821,7 +18845,7 @@ Recuerdos relevantes:
         if not rutas:
             limpio, _ = self._atlas_separar_nombre_y_ubicacion(nombre)
             self.responder(f"no encontré una carpeta real llamada {limpio} para revisar su contenido.", "confundida")
-            print(f"CONTROL ATLAS v3.5.2: contenido no disponible; carpeta inexistente {limpio!r}.")
+            print(f"CONTROL ATLAS v3.5.3: contenido no disponible; carpeta inexistente {limpio!r}.")
             return True
         if len(rutas) > 1:
             detalles = "; ".join(f"{i}, {p}" for i, p in enumerate(rutas[:6], 1))
@@ -18832,7 +18856,7 @@ Recuerdos relevantes:
         try:
             hijos = sorted(list(ruta.iterdir()), key=lambda p: (not p.is_dir(), normalizar(p.name)))
         except Exception as error:
-            print(f"CONTROL ATLAS v3.5.2: no pude leer {ruta}: {error}")
+            print(f"CONTROL ATLAS v3.5.3: no pude leer {ruta}: {error}")
             self.responder(f"encontré {ruta.name}, pero Windows no me permitió leer su contenido.", "molesta")
             return True
 
@@ -18847,7 +18871,7 @@ Recuerdos relevantes:
 
         if not hijos:
             self.responder(f"la carpeta {ruta.name} está vacía.", "normal")
-            print(f"CONTROL ATLAS v3.5.2: contenido verificado {ruta}: vacío")
+            print(f"CONTROL ATLAS v3.5.3: contenido verificado {ruta}: vacío")
             return True
 
         partes = [f"en {ruta.name} encontré {len(carpetas)} carpeta{'s' if len(carpetas) != 1 else ''} y {len(archivos)} archivo{'s' if len(archivos) != 1 else ''}"]
@@ -18862,7 +18886,7 @@ Recuerdos relevantes:
                 muestra += f", y {len(archivos)-8} más"
             partes.append("archivos: " + muestra)
         self.responder(". ".join(partes) + ".", "normal")
-        print(f"CONTROL ATLAS v3.5.2: contenido verificado={ruta} carpetas={len(carpetas)} archivos={len(archivos)}")
+        print(f"CONTROL ATLAS v3.5.3: contenido verificado={ruta} carpetas={len(carpetas)} archivos={len(archivos)}")
         return True
 
     def _atlas_abrir_ruta(self, ruta, tipo=""):
@@ -18883,7 +18907,7 @@ Recuerdos relevantes:
             else:
                 self.atlas_ultimo_archivo = p
                 self.responder(f"abriendo {p.name}.", "feliz")
-            print(f"CONTROL ATLAS v3.5.2: ruta abierta={p}")
+            print(f"CONTROL ATLAS v3.5.3: ruta abierta={p}")
         except Exception as error:
             print("CONTROL ATLAS: no pude abrir ruta:", error)
             self.responder("no pude abrir ese elemento.", "molesta")
@@ -18968,13 +18992,13 @@ Recuerdos relevantes:
 
         if not self._atlas_nombre_carpeta_valido(limpio):
             self.responder("necesito el nombre exacto de la carpeta que quiere abrir.", "confundida")
-            print(f"CONTROL ATLAS v3.5.2: búsqueda de carpeta bloqueada por nombre incompleto: {nombre!r}")
+            print(f"CONTROL ATLAS v3.5.3: búsqueda de carpeta bloqueada por nombre incompleto: {nombre!r}")
             return True
 
         # 1) Una ubicación confiable gana siempre frente a búsquedas globales.
         confiable = self._atlas_ruta_confiable(limpio)
         if confiable and confiable.exists() and not scope:
-            print(f"CONTROL ATLAS v3.5.2: ubicación confiable {limpio} -> {confiable}")
+            print(f"CONTROL ATLAS v3.5.3: ubicación confiable {limpio} -> {confiable}")
             return self._atlas_abrir_ruta(confiable, "carpeta")
 
         # 2) Si el Señor nombró una unidad/Escritorio/Documentos, respetamos ese
@@ -19004,7 +19028,7 @@ Recuerdos relevantes:
                 )
             else:
                 self.responder(f"no encontré una carpeta llamada {limpio} en las ubicaciones seguras que revisé.", "confundida")
-            print(f"CONTROL ATLAS v3.5.2: carpeta no encontrada={limpio!r}; sin fallback a Ollama.")
+            print(f"CONTROL ATLAS v3.5.3: carpeta no encontrada={limpio!r}; sin fallback a Ollama.")
             return True
         return self._atlas_ofrecer_coincidencias(coincidencias, "carpeta")
 
@@ -19053,14 +19077,14 @@ Recuerdos relevantes:
             destino.mkdir(parents=False)
             self.atlas_carpeta_actual = Path(base)
             self.responder(f"carpeta {limpio} creada.", "feliz")
-            print(f"CONTROL ATLAS v3.5.2: carpeta creada={destino}")
+            print(f"CONTROL ATLAS v3.5.3: carpeta creada={destino}")
         except Exception as error:
             print("CONTROL ATLAS: no pude crear carpeta:", error)
             self.responder("no pude crear esa carpeta.", "molesta")
         return True
 
     # ======================================================
-    # CONTROL DE ARCHIVOS SEGURO v3.5.2
+    # CONTROL DE ARCHIVOS SEGURO v3.5.3
     # ======================================================
 
     def _atlas_base_operacion_archivos(self):
@@ -19163,7 +19187,7 @@ Recuerdos relevantes:
         self.atlas_confirmacion_pendiente = {"accion": accion, "datos": datos}
         self.atlas_confirmacion_hasta = time.time() + 30.0
         self.responder(mensaje + " ¿Confirma?", "confundida")
-        print(f"CONTROL ATLAS v3.5.2: confirmación requerida accion={accion}")
+        print(f"CONTROL ATLAS v3.5.3: confirmación requerida accion={accion}")
         return True
 
     def _atlas_resolver_confirmacion_pendiente(self, texto):
@@ -19234,7 +19258,7 @@ Recuerdos relevantes:
         destino = Path(destino)
         ok, error = self._atlas_crear_word_vacio(destino) if tipo == "word" else self._atlas_crear_excel_vacio(destino)
         if not ok or not destino.exists():
-            print(f"CONTROL ATLAS v3.5.2: no pude crear {tipo}: {error}")
+            print(f"CONTROL ATLAS v3.5.3: no pude crear {tipo}: {error}")
             self.responder(f"no pude crear el archivo {tipo}.", "molesta")
             return True
         self.atlas_ultimo_archivo = destino
@@ -19244,7 +19268,7 @@ Recuerdos relevantes:
             self.responder(f"creé y abrí {destino.name}.", "feliz")
         except Exception:
             self.responder(f"creé {destino.name}, pero no pude abrirlo automáticamente.", "normal")
-        print(f"CONTROL ATLAS v3.5.2: documento creado={destino}")
+        print(f"CONTROL ATLAS v3.5.3: documento creado={destino}")
         return True
 
     def _atlas_renombrar(self, referencia, nuevo_nombre, tipo="cualquiera"):
@@ -19270,9 +19294,9 @@ Recuerdos relevantes:
                 self.atlas_ultimo_archivo = destino
             self.atlas_ultima_ruta_referida = destino
             self.responder(f"renombré {origen.name} como {destino.name}.", "feliz")
-            print(f"CONTROL ATLAS v3.5.2: renombrado {origen} -> {destino}")
+            print(f"CONTROL ATLAS v3.5.3: renombrado {origen} -> {destino}")
         except Exception as error:
-            print("CONTROL ATLAS v3.5.2: error renombrando:", error)
+            print("CONTROL ATLAS v3.5.3: error renombrando:", error)
             self.responder("no pude renombrar ese elemento.", "molesta")
         return True
 
@@ -19309,9 +19333,9 @@ Recuerdos relevantes:
                 raise IOError("el destino no apareció tras la copia")
             self.atlas_ultima_ruta_referida = destino
             self.responder(f"copié {origen.name} en {destino.parent.name or destino.parent}.", "feliz")
-            print(f"CONTROL ATLAS v3.5.2: copia verificada {origen} -> {destino}")
+            print(f"CONTROL ATLAS v3.5.3: copia verificada {origen} -> {destino}")
         except Exception as error:
-            print("CONTROL ATLAS v3.5.2: error copiando:", error)
+            print("CONTROL ATLAS v3.5.3: error copiando:", error)
             self.responder("no pude completar la copia.", "molesta")
         return True
 
@@ -19473,7 +19497,7 @@ Recuerdos relevantes:
                 if not destino.exists(): raise IOError("movimiento no verificado")
                 self.atlas_ultima_ruta_referida=destino
                 self.responder(f"moví {origen.name} a {destino.parent.name or destino.parent}.", "feliz")
-                print(f"CONTROL ATLAS v3.5.2: movimiento verificado {origen} -> {destino}")
+                print(f"CONTROL ATLAS v3.5.3: movimiento verificado {origen} -> {destino}")
                 return True
             if accion == "eliminar":
                 origen=Path(datos["origen"])
@@ -19484,11 +19508,11 @@ Recuerdos relevantes:
                 ok,error=self._atlas_enviar_papelera(origen)
                 if ok and not origen.exists():
                     self.responder(f"envié {origen.name} a la Papelera de reciclaje.", "normal")
-                    print(f"CONTROL ATLAS v3.5.2: eliminación verificada papelera={origen}")
+                    print(f"CONTROL ATLAS v3.5.3: eliminación verificada papelera={origen}")
                 elif ok:
                     self.responder("Windows aceptó la operación, pero todavía veo el elemento; no puedo confirmar que se eliminó.", "confundida")
                 else:
-                    print("CONTROL ATLAS v3.5.2: error papelera:",error)
+                    print("CONTROL ATLAS v3.5.3: error papelera:",error)
                     self.responder("no pude enviar ese elemento a la Papelera de reciclaje.", "molesta")
                 return True
             if accion == "mover_lote":
@@ -19501,7 +19525,7 @@ Recuerdos relevantes:
                     destino=self._atlas_nombre_unico(destino_dir/origen.name)
                     shutil.move(str(origen),str(destino)); movidos+=1
                 self.responder(f"moví {movidos} archivos a {destino_dir.name or destino_dir}.", "feliz")
-                print(f"CONTROL ATLAS v3.5.2: movimiento por lote verificado destino={destino_dir} movidos={movidos}")
+                print(f"CONTROL ATLAS v3.5.3: movimiento por lote verificado destino={destino_dir} movidos={movidos}")
                 return True
             if accion == "organizar":
                 ruta=Path(datos["ruta"]); plan,_=self._atlas_plan_organizacion(ruta)
@@ -19512,10 +19536,10 @@ Recuerdos relevantes:
                     destino=self._atlas_nombre_unico(destino)
                     shutil.move(str(origen),str(destino)); movidos+=1
                 self.responder(f"organicé {movidos} archivos en {ruta.name or ruta}.", "feliz")
-                print(f"CONTROL ATLAS v3.5.2: organización verificada ruta={ruta} movidos={movidos}")
+                print(f"CONTROL ATLAS v3.5.3: organización verificada ruta={ruta} movidos={movidos}")
                 return True
         except Exception as error:
-            print(f"CONTROL ATLAS v3.5.2: operación confirmada falló accion={accion}:",error)
+            print(f"CONTROL ATLAS v3.5.3: operación confirmada falló accion={accion}:",error)
             self.responder("no pude completar la operación; no la daré por realizada.", "molesta")
             return True
         self.responder("la operación pendiente ya no es válida.", "confundida")
@@ -19728,6 +19752,12 @@ Recuerdos relevantes:
                     respuesta=(f"GPU {gpu['nombre']}: {gpu['uso']:.0f}% de uso, {gpu['mem_usada']:.0f} de {gpu['mem_total']:.0f} MB de memoria y {gpu['temperatura']:.0f} °C.")
                 else:
                     respuesta="no tengo un sensor de GPU accesible actualmente; no voy a inventar esos valores."
+            elif seccion == "temperaturas":
+                gpu=datos.get("gpu")
+                cpu_txt=(f"CPU {datos['cpu_temp']:.0f} °C" if datos.get("cpu_temp") is not None
+                         else "el sensor de temperatura del CPU no está disponible")
+                gpu_txt=(f"GPU {gpu['temperatura']:.0f} °C" if gpu else "sensor de temperatura GPU no disponible")
+                respuesta=f"Temperaturas de Atlas: {cpu_txt}; {gpu_txt}."
             else:
                 gpu=datos.get("gpu")
                 gpu_txt=f" GPU {gpu['uso']:.0f}% a {gpu['temperatura']:.0f} °C." if gpu else " GPU: sensor no disponible."
@@ -19740,7 +19770,7 @@ Recuerdos relevantes:
                     return
                 self.procesando=False; self.procesando_desde=0.0; self.procesando_tipo=""
                 self.responder(respuesta, "normal")
-                print("CONTROL ATLAS v3.5.2: estado real del sistema consultado.")
+                print("CONTROL ATLAS v3.5.3: estado real del sistema consultado.")
             self.root.after(0, terminar)
         threading.Thread(target=trabajo, daemon=True).start()
         return True
@@ -19854,7 +19884,7 @@ Recuerdos relevantes:
         if m:
             return self._atlas_crear_carpeta_contextual(m.group(1).strip())
 
-        # v3.5.2: orden explícita con raíz conocida + acción + hijo.
+        # v3.5.3: orden explícita con raíz conocida + acción + hijo.
         # Ej.: "en la carpeta IPP ubica la carpeta segundo semestre".
         # Se analiza estructuralmente y jamás se envía a Ollama.
         m_raiz_accion = re.match(
@@ -19873,7 +19903,7 @@ Recuerdos relevantes:
                     if accion_raiz in {"ubica", "localiza", "encuentra", "busca"}:
                         self.atlas_ultima_ruta_referida = hijo
                         self.responder(f"la carpeta {hijo.name} está en {hijo}.", "normal")
-                        print(f"CONTROL ATLAS v3.5.2: ubicación contextual verificada={hijo}")
+                        print(f"CONTROL ATLAS v3.5.3: ubicación contextual verificada={hijo}")
                         return True
                     if accion_raiz in {"muestra", "muestrame", "mostrame", "revisa", "lista"}:
                         return self._atlas_listar_contenido_carpeta(str(hijo))
@@ -19881,10 +19911,10 @@ Recuerdos relevantes:
                 if len(candidatos) > 1:
                     return self._atlas_ofrecer_coincidencias(candidatos, "carpeta")
                 self.responder(f"no encontré una subcarpeta real llamada {hijo_nombre} dentro de {Path(raiz).name}.", "confundida")
-                print(f"CONTROL ATLAS v3.5.2: hijo contextual no encontrado={hijo_nombre!r} raiz={raiz}")
+                print(f"CONTROL ATLAS v3.5.3: hijo contextual no encontrado={hijo_nombre!r} raiz={raiz}")
                 return True
 
-        # v3.5.2: frases naturales con una raíz conocida y una subcarpeta.
+        # v3.5.3: frases naturales con una raíz conocida y una subcarpeta.
         # Ej.: "en la carpeta IPP quiero que abras la carpeta primer semestre".
         # Si Whisper deforma "abras" como "hagas", solo ejecutamos cuando la
         # subcarpeta EXISTE realmente dentro de la ubicación confiable nombrada.
@@ -19919,7 +19949,7 @@ Recuerdos relevantes:
                                 return self._atlas_ofrecer_coincidencias(candidatos, "carpeta")
                             # Es claramente una orden de carpetas, pero no hay ruta real.
                             self.responder(f"no encontré una subcarpeta real llamada {objetivo_sub} dentro de {Path(raiz).name}.", "confundida")
-                            print(f"CONTROL ATLAS v3.5.2: subcarpeta contextual inexistente={objetivo_sub!r} raiz={raiz}")
+                            print(f"CONTROL ATLAS v3.5.3: subcarpeta contextual inexistente={objetivo_sub!r} raiz={raiz}")
                             return True
 
         # Consultas verificables del Explorador. Estas intenciones jamás
@@ -19981,7 +20011,7 @@ Recuerdos relevantes:
 
         app = self._atlas_detectar_app(t)
 
-        # Volumen de Spotify. v3.5.2 distingue valor absoluto de cambio
+        # Volumen de Spotify. v3.5.3 distingue valor absoluto de cambio
         # relativo y acepta porcentajes hablados/dictados de varias formas.
         spotify_relevante = (app == "spotify" or self.atlas_ultima_aplicacion == "spotify" or self._spotify_contexto_vigente())
         if "volumen" in t and spotify_relevante:
@@ -19999,7 +20029,7 @@ Recuerdos relevantes:
             # transcripción no permitió resolver la acción, jamás cae a Ollama
             # para que el modelo afirme un cambio que no ejecutó.
             self.responder("entendí una orden de volumen, pero no quedó suficientemente clara. Repita si quiere subir, bajar o fijar un porcentaje.", "confundida")
-            print(f"CONTROL ATLAS v3.5.2: orden de volumen bloqueada por ambigüedad: {t!r}")
+            print(f"CONTROL ATLAS v3.5.3: orden de volumen bloqueada por ambigüedad: {t!r}")
             return True
 
         # "Abre segundo semestre" / "abre IPP": si no es una aplicación
@@ -20062,14 +20092,14 @@ Recuerdos relevantes:
             # Si no entendimos el objetivo, pedimos repetir en vez de ejecutar
             # sobre otra ventana o afirmar una acción ficticia.
             self.responder(f"entendí que quiere {accion} una ventana, pero no reconocí cuál. Repita el nombre de la aplicación.", "confundida")
-            print(f"CONTROL ATLAS v3.5.2: acción bloqueada por objetivo ambiguo: {t!r}")
+            print(f"CONTROL ATLAS v3.5.3: acción bloqueada por objetivo ambiguo: {t!r}")
             return True
 
         # Cualquier deformación que todavía conserve un verbo exclusivo de
         # ventanas queda encerrada aquí y no llega al modelo conversacional.
         if re.search(r"\b(?:minimiz\w*|maximiz\w*|cerr\w*|cierr\w*|restaur\w*)\b", t):
             self.responder("entendí una orden de ventana, pero la transcripción no fue suficientemente clara. Repítala indicando la aplicación.", "confundida")
-            print(f"CONTROL ATLAS v3.5.2: cortafuegos evitó fallback a Ollama: {t!r}")
+            print(f"CONTROL ATLAS v3.5.3: cortafuegos evitó fallback a Ollama: {t!r}")
             return True
 
         # Contexto corto de Spotify: "pausa" o "continúa" después de haberlo
@@ -20091,7 +20121,7 @@ Recuerdos relevantes:
                 self.responder(f"encontré la carpeta {rutas_solo[0].name}. ¿Quiere que la abra, la ubique o revise su contenido?", "confundida")
             else:
                 self.responder("entendí el nombre de una carpeta, pero necesito saber si quiere abrirla, ubicarla o revisar su contenido.", "confundida")
-            print(f"CONTROL ATLAS v3.5.2: referencia de carpeta sin acción bloqueada: {t!r}")
+            print(f"CONTROL ATLAS v3.5.3: referencia de carpeta sin acción bloqueada: {t!r}")
             return True
 
         # Cortafuegos final del Explorador: si la frase claramente pretende
@@ -20101,20 +20131,20 @@ Recuerdos relevantes:
             re.search(r"\b(?:ubic\w*|localiz\w*|revis\w*|mostr\w*|muestr\w*|list\w*|contenid\w*|abr\w*|entr\w*|hag\w*|quiero)\b", t)
         ):
             self.responder("entendí una orden sobre una carpeta, pero no quedó suficientemente clara o no pude verificar una ruta real. Repita el nombre de la carpeta.", "confundida")
-            print(f"CONTROL ATLAS v3.5.2: consulta de carpeta bloqueada antes de Ollama: {t!r}")
+            print(f"CONTROL ATLAS v3.5.3: consulta de carpeta bloqueada antes de Ollama: {t!r}")
             return True
 
-        # v3.5.2: una orden de administración de archivos jamás llega a Ollama.
+        # v3.5.3: una orden de administración de archivos jamás llega a Ollama.
         # Si quedó mal transcrita, se aclara localmente en vez de simular cambios.
         if re.search(r"\b(?:renombr\w*|copi\w*|muev\w*|mov\w*|elimin\w*|borr\w*|organiz\w*|orden\w*|sobrescrib\w*)\b", t) and any(x in t for x in ["archivo","carpeta","word","excel","pdf","documento"]):
             self.responder("entendí una orden para administrar archivos, pero no quedó suficientemente clara. Repítala indicando el elemento y el destino si corresponde.", "confundida")
-            print(f"CONTROL ATLAS v3.5.2: administración bloqueada antes de Ollama: {t!r}")
+            print(f"CONTROL ATLAS v3.5.3: administración bloqueada antes de Ollama: {t!r}")
             return True
 
         return False
 
     # ======================================================
-    # ORQUESTADOR DE INTENCIONES / RECORDATORIOS v3.5.2
+    # ORQUESTADOR DE INTENCIONES / RECORDATORIOS v3.5.3
     # ======================================================
 
     @staticmethod
@@ -20264,7 +20294,7 @@ Recuerdos relevantes:
                 )
                 con.commit()
         except Exception as error:
-            print("RECORDATORIOS v3.5.2: no pude inicializar SQLite:", error)
+            print("RECORDATORIOS v3.5.3: no pude inicializar SQLite:", error)
 
     def _recordatorios_extraer_fechas(self, texto):
         t = normalizar(texto or "")
@@ -20319,7 +20349,7 @@ Recuerdos relevantes:
                 )
                 con.commit(); return int(cur.lastrowid)
         except Exception as error:
-            print("RECORDATORIOS v3.5.2: error guardando:", error)
+            print("RECORDATORIOS v3.5.3: error guardando:", error)
             return 0
 
     def _recordatorios_listar(self, fecha=None):
@@ -20337,7 +20367,7 @@ Recuerdos relevantes:
                     ).fetchall()
             return [dict(r) for r in rows]
         except Exception as error:
-            print("RECORDATORIOS v3.5.2: error listando:", error); return []
+            print("RECORDATORIOS v3.5.3: error listando:", error); return []
 
     def _recordatorios_filtrar_dia(self, rows, dia):
         salida=[]
@@ -20359,7 +20389,7 @@ Recuerdos relevantes:
                 con.commit()
             return True
         except Exception as error:
-            print("RECORDATORIOS v3.5.2: error reprogramando:", error)
+            print("RECORDATORIOS v3.5.3: error reprogramando:", error)
             return False
 
     def _recordatorios_vigilar(self):
@@ -20380,9 +20410,9 @@ Recuerdos relevantes:
                         self.recordatorio_alerta_activa=True
                         self.responder("recordatorio: " + str(row['texto']), "sorpresa")
                         self.recordatorio_alerta_activa=False
-                        print(f"RECORDATORIOS v3.5.2: aviso emitido id={row['id']}")
+                        print(f"RECORDATORIOS v3.5.3: aviso emitido id={row['id']}")
         except Exception as error:
-            print("RECORDATORIOS v3.5.2: error vigilando:", error)
+            print("RECORDATORIOS v3.5.3: error vigilando:", error)
         finally:
             try: self.root.after(30000, self._recordatorios_vigilar)
             except Exception: pass
@@ -20497,7 +20527,7 @@ Recuerdos relevantes:
                         self.responder("no encontré un recordatorio pendiente que coincida.", "confundida")
                 return True
             except Exception as error:
-                print("RECORDATORIOS v3.5.2: error cancelando:", error)
+                print("RECORDATORIOS v3.5.3: error cancelando:", error)
                 self.responder("no pude cancelar ese recordatorio.", "molesta"); return True
 
         if not fechas:
@@ -20528,7 +20558,7 @@ Recuerdos relevantes:
             self.responder(f"guardé el evento en la agenda local de Beta y programé el aviso para {cuando}. No estoy afirmando que lo haya insertado en un calendario externo.", "feliz")
         else:
             self.responder(f"recordatorio guardado para {cuando}.", "feliz")
-        print(f"RECORDATORIOS v3.5.2: guardado id={rid} aviso={aviso_dt.isoformat(timespec='minutes')}")
+        print(f"RECORDATORIOS v3.5.3: guardado id={rid} aviso={aviso_dt.isoformat(timespec='minutes')}")
         return True
 
     def _orq_normalizar_hardware_contextual(self, texto):
@@ -20538,7 +20568,8 @@ Recuerdos relevantes:
             return t
         # Casos reales observados en Atlas para CPU. No se aplican a conversación general.
         cpu_patrones=[
-            r"\bce\s+pe\s+u\b", r"\bse\s+pe\s+u\b", r"\bse\s+ve\s+un\b",
+            r"\bce\s+pe\s+u\b", r"\bse\s+pe\s+u\b", r"\bse\s+pe\s+un\b",
+            r"\bsepe\s+un\b", r"\bsepeu\b", r"\bcepeu\b", r"\bse\s+ve\s+un\b",
             r"\bse\s+un\b", r"\bni\s+se\s+pew\b", r"\bse\s+pew\b",
             r"\bcipiu\b", r"\bpp\b",
         ]
@@ -20573,12 +20604,103 @@ Recuerdos relevantes:
             return False
         if re.search(r"\btemperatura\s+en\s+", t):
             return False
+        # Pronósticos temporales siguen perteneciendo a clima.
+        if any(x in t for x in ["manana", "dia siguiente", "proximo dia"]):
+            return False
         # Una pregunta genérica de temperatura puede seguir significando clima.
         if t in {"temperatura", "dime la temperatura", "que temperatura hace", "cual es la temperatura"}:
             return False
+        # "temperatura del sensor" no contiene suficiente información para
+        # decidir entre un sensor del PC y el ambiente; jamás asumimos clima.
+        if any(x in t for x in ["sensor", "sensores", "sensor termico", "sensor termica"]):
+            return True
         # Si el usuario dijo "temperatura del/de la/de mi ..." y no pudimos
         # identificar CPU/GPU/PC, es más seguro preguntar que devolver el clima.
         return bool(re.search(r"\btemperatura\s+(?:del|de la|de mi|de este|de esta)\b", t))
+
+    def _orq_aclaracion_temperatura_activa(self):
+        pendiente=getattr(self, "orq_aclaracion_temperatura_pendiente", None)
+        hasta=float(getattr(self, "orq_aclaracion_temperatura_hasta", 0.0) or 0.0)
+        if not pendiente:
+            return False
+        if hasta and time.time() > hasta:
+            self.orq_aclaracion_temperatura_pendiente=None
+            self.orq_aclaracion_temperatura_hasta=0.0
+            print("ORQUESTADOR v3.5.3: aclaración de temperatura expirada.")
+            return False
+        return True
+
+    def _orq_iniciar_aclaracion_temperatura(self, consulta):
+        self.orq_aclaracion_temperatura_pendiente={
+            "consulta": normalizar(consulta or ""),
+            "creada": time.time(),
+        }
+        self.orq_aclaracion_temperatura_hasta=time.time()+20.0
+        self.orquestador_ultima_intencion="aclaracion_temperatura"
+        self.responder(
+            "¿se refiere a la temperatura del computador o a la temperatura ambiente?",
+            "confundida",
+        )
+        print("ORQUESTADOR v3.5.3: intención=aclaracion_temperatura pendiente=20s")
+        return True
+
+    def _orq_cancelar_aclaracion_temperatura(self):
+        self.orq_aclaracion_temperatura_pendiente=None
+        self.orq_aclaracion_temperatura_hasta=0.0
+
+    def _orq_es_respuesta_aclaracion_temperatura(self, texto):
+        t=normalizar(texto or "")
+        t=re.sub(r"^(?:beta|veta|meta|metas|petra)\s+", "", t).strip()
+        if not t:
+            return False
+        claves=[
+            "computador", "pc", "equipo", "atlas", "cpu", "procesador",
+            "microprocesador", "gpu", "grafica", "tarjeta grafica",
+            "ambiente", "ambiental", "afuera", "exterior", "clima",
+            "cancela", "cancelar", "ninguno", "ninguna", "dejalo",
+        ]
+        return any(x in t for x in claves)
+
+    def _orq_resolver_aclaracion_temperatura(self, texto):
+        if not self._orq_aclaracion_temperatura_activa():
+            return False
+        t=normalizar(texto or "")
+        t=re.sub(r"^(?:beta|veta|meta|metas|petra)\s+", "", t).strip()
+        if not self._orq_es_respuesta_aclaracion_temperatura(t):
+            return False
+
+        if any(x in t for x in ["cancela", "cancelar", "ninguno", "ninguna", "dejalo"]):
+            self._orq_cancelar_aclaracion_temperatura()
+            self.responder("cancelado.", "normal")
+            print("ORQUESTADOR v3.5.3: aclaración de temperatura cancelada.")
+            return True
+
+        if any(x in t for x in ["ambiente", "ambiental", "afuera", "exterior", "clima"]):
+            self._orq_cancelar_aclaracion_temperatura()
+            self.orquestador_ultima_intencion="clima"
+            print("ORQUESTADOR v3.5.3: aclaración resuelta=ambiente")
+            self.consultar_clima_async()
+            return True
+
+        if any(x in t for x in ["gpu", "tarjeta grafica", "grafica"]):
+            self._orq_cancelar_aclaracion_temperatura()
+            self.orquestador_ultima_intencion="hardware"
+            print("ORQUESTADOR v3.5.3: aclaración resuelta=gpu")
+            return self._atlas_estado_sistema_async("gpu")
+
+        if any(x in t for x in ["cpu", "procesador", "microprocesador"]):
+            self._orq_cancelar_aclaracion_temperatura()
+            self.orquestador_ultima_intencion="hardware"
+            print("ORQUESTADOR v3.5.3: aclaración resuelta=cpu")
+            return self._atlas_estado_sistema_async("cpu")
+
+        if any(x in t for x in ["computador", "pc", "equipo", "atlas"]):
+            self._orq_cancelar_aclaracion_temperatura()
+            self.orquestador_ultima_intencion="hardware"
+            print("ORQUESTADOR v3.5.3: aclaración resuelta=computador")
+            return self._atlas_estado_sistema_async("temperaturas")
+
+        return False
 
     def _orquestar_intencion_previa(self, original):
         t=normalizar(original or "")
@@ -20588,13 +20710,13 @@ Recuerdos relevantes:
         # 1) Tareas persistentes: nunca pasan por memoria inteligente ni RAG.
         if self._orq_es_recordatorio(t):
             self.orquestador_ultima_intencion="recordatorio"
-            print("ORQUESTADOR v3.5.2: intención=recordatorio")
+            print("ORQUESTADOR v3.5.3: intención=recordatorio")
             return self._orq_manejar_recordatorio(original)
 
         # 2) Navegación web real antes del Explorador de archivos.
         if self._orq_es_web(t):
             self.orquestador_ultima_intencion="web"
-            print("ORQUESTADOR v3.5.2: intención=web")
+            print("ORQUESTADOR v3.5.3: intención=web")
             return self._orq_manejar_web(original)
 
         # 3) Fecha/hora son utilidades locales; no consultan libros.
@@ -20602,30 +20724,27 @@ Recuerdos relevantes:
             self.orquestador_ultima_intencion="fecha"
             ahora=datetime.now()
             self.responder(f"hoy es {self._orq_fecha_espanol(ahora)}.", "normal")
-            print("ORQUESTADOR v3.5.2: intención=fecha")
+            print("ORQUESTADOR v3.5.3: intención=fecha")
             return True
         if self._es_consulta_hora(t):
             self.orquestador_ultima_intencion="hora"
             self.responder(f"son las {time.strftime('%H:%M')}.", "normal")
-            print("ORQUESTADOR v3.5.2: intención=hora")
+            print("ORQUESTADOR v3.5.3: intención=hora")
             return True
 
         # 4) Hardware tiene precedencia ABSOLUTA sobre clima cuando se nombra
         # CPU/GPU/PC, incluso con deformaciones fonéticas observadas en Atlas.
         if "temperatura" in t and self._orq_manejar_temperatura_hardware(t):
             self.orquestador_ultima_intencion="hardware"
-            print("ORQUESTADOR v3.5.2: intención=hardware")
+            print("ORQUESTADOR v3.5.3: intención=hardware")
             return True
         if self._orq_temperatura_ambigua(t):
-            self.orquestador_ultima_intencion="aclaracion_temperatura"
-            self.responder("¿se refiere a la temperatura del computador o a la temperatura ambiente?", "confundida")
-            print("ORQUESTADOR v3.5.2: intención=aclaracion_temperatura")
-            return True
+            return self._orq_iniciar_aclaracion_temperatura(t)
 
         # 5) Ayuda sobre Beta se genera desde capacidades reales, no desde libros.
         if self._orq_es_ayuda_beta(t):
             self.orquestador_ultima_intencion="ayuda_beta"
-            print("ORQUESTADOR v3.5.2: intención=ayuda_beta")
+            print("ORQUESTADOR v3.5.3: intención=ayuda_beta")
             return self._orq_responder_ayuda_beta()
 
         return False
@@ -24405,13 +24524,13 @@ $voz.Speak($texto)
         """Fija la mirada al frente mientras Beta pronuncia una respuesta."""
         if not getattr(self, "mirada_frontal_voz", False):
             self.mirada_frontal_voz = True
-            print("MIRADA v3.5.2: frontal durante la respuesta hablada.")
+            print("MIRADA v3.5.3: frontal durante la respuesta hablada.")
 
     def desactivar_mirada_frontal_voz(self):
         """Devuelve el control de las pupilas al seguimiento del puntero."""
         if getattr(self, "mirada_frontal_voz", False):
             self.mirada_frontal_voz = False
-            print("MIRADA v3.5.2: seguimiento del puntero restaurado.")
+            print("MIRADA v3.5.3: seguimiento del puntero restaurado.")
 
     def actualizar_pupilas(self):
         if not self.ojos_cerrados:
@@ -24469,7 +24588,7 @@ $voz.Speak($texto)
             objetivo_offset_x = dx * escala
             objetivo_offset_y = dy * escala
 
-        # v3.5.2: transición suave al centrar la mirada y al volver al cursor.
+        # v3.5.3: transición suave al centrar la mirada y al volver al cursor.
         offsets = getattr(self, "mirada_offsets", None)
         if not isinstance(offsets, dict):
             offsets = {"izquierda": [0.0, 0.0], "derecha": [0.0, 0.0]}
