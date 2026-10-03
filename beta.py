@@ -38,10 +38,10 @@ import urllib.request
 from datetime import datetime, timedelta
 
 
-BETA_VERSION = "3.5.3"
+BETA_VERSION = "3.6.0"
 
 # ==========================================================
-# BETA v3.5.3 - CONTROL DE ATLAS + MIRADA CONTEXTUAL + AULA WORKSPACE
+# BETA v3.6.0 RC6 - CONTROL ATLAS FASE 2 + MIRADA CONTEXTUAL + AULA WORKSPACE
 # Mascota virtual + memoria + comandos aprendidos + clima
 # + Ollama/Qwen3 Instruct + memoria evolutiva + personalidad adaptativa
 # + voz híbrida: Vosk para activación y Faster-Whisper para dictado
@@ -118,6 +118,9 @@ BETA_VERSION = "3.5.3"
 # v3.5.3: orquestador de intenciones separa web, recordatorios, sistema, archivos, estudio y conversación
 # + Google/YouTube reales antes del Explorador; recordatorios persistentes en SQLite; fecha/hora local sin RAG
 # + memoria, contexto operativo y recordatorios quedan desacoplados; órdenes operativas no llegan a Ollama
+# v3.6.0: Control Atlas Fase 2 formaliza administración real de archivos y carpetas
+# + registro persistente de acciones verificadas, protección de la instalación Beta y lenguaje natural ampliado
+# + crear/copiar/mover/renombrar/eliminar/organizar nunca confirma éxito sin verificar el sistema de archivos
 # v3.5.3: estabilización: orquestador antes de clima/RAG, hardware fonético, recordatorios consultables/reprogramables
 # v3.2.1: analiza localmente preguntas/instrucciones/estructura antes de depender de Ollama
 # + fallback documental verificable cuando Ollama falla o agota el tiempo
@@ -827,6 +830,31 @@ class MemoriaBeta:
                     fecha TEXT NOT NULL,
                     UNIQUE(alias_normalizado, contexto)
                 )
+                """
+            )
+
+            # v3.6.0: auditoría local de Control Atlas. Registra únicamente
+            # operaciones reales sobre archivos/carpetas y su resultado. No es
+            # memoria personal y no se envía a Ollama.
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS atlas_acciones (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    fecha TEXT NOT NULL,
+                    accion TEXT NOT NULL,
+                    origen TEXT DEFAULT '',
+                    destino TEXT DEFAULT '',
+                    resultado TEXT NOT NULL,
+                    detalle TEXT DEFAULT '',
+                    reversible INTEGER DEFAULT 0,
+                    revertida INTEGER DEFAULT 0
+                )
+                """
+            )
+            con.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_atlas_acciones_fecha
+                ON atlas_acciones(id DESC)
                 """
             )
 
@@ -1819,6 +1847,49 @@ class MemoriaBeta:
             return (mejor[0], mejor[1], mejor[3])
 
         return None
+
+    # -------------------- auditoría Control Atlas v3.6.0 --------------------
+
+    def registrar_accion_atlas(
+        self, accion, origen="", destino="", resultado="ok",
+        detalle="", reversible=False
+    ):
+        fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with self.conectar() as con:
+            cur = con.execute(
+                """
+                INSERT INTO atlas_acciones
+                (fecha, accion, origen, destino, resultado, detalle, reversible, revertida)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+                """,
+                (
+                    fecha,
+                    str(accion or "").strip().upper(),
+                    str(origen or ""),
+                    str(destino or ""),
+                    str(resultado or "ok").strip().lower(),
+                    str(detalle or "")[:1200],
+                    1 if reversible else 0,
+                ),
+            )
+            return int(cur.lastrowid or 0)
+
+    def listar_acciones_atlas(self, limite=20):
+        with self.conectar() as con:
+            return con.execute(
+                """
+                SELECT id, fecha, accion, origen, destino, resultado,
+                       detalle, reversible, revertida
+                FROM atlas_acciones
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (max(1, min(200, int(limite or 20))),),
+            ).fetchall()
+
+    def ultima_accion_atlas(self):
+        filas = self.listar_acciones_atlas(1)
+        return filas[0] if filas else None
 
     # -------------------- voces autorizadas --------------------
 
@@ -3145,7 +3216,7 @@ class GestorRespaldosBeta:
                 "recuerdos", "conversaciones", "resumenes_conversacion",
                 "voces_autorizadas", "biblioteca_documentos",
                 "biblioteca_fragmentos", "aprendizaje_academico",
-                "aprendizaje_eventos",
+                "aprendizaje_eventos", "atlas_acciones",
             ]
             for tabla in tablas:
                 try:
@@ -14845,6 +14916,17 @@ Recuerdos relevantes:
                 if re.fullmatch(r"(?:el |la )?(?:1|2|3|4|5|6|uno|dos|tres|cuatro|cinco|seis|primero|primera|segundo|segunda|tercero|tercera|cuarto|cuarta|quinto|quinta|sexto|sexta)|(?:cancela|ninguna|ninguno|dejalo)", t):
                     return True
 
+        # v3.6.0 RC3: Beta acaba de preguntar dónde crear una carpeta.
+        # Permitimos UNA respuesta breve sin repetir el wake word, manteniendo
+        # la biometría obligatoria. La ventana expira sola.
+        aclaracion_atlas = getattr(self, "atlas_aclaracion_pendiente", None)
+        if aclaracion_atlas and aclaracion_atlas.get("tipo") == "crear_carpeta_destino":
+            limite = float(aclaracion_atlas.get("hasta", 0.0) or 0.0)
+            if limite and ahora > limite:
+                self.atlas_aclaracion_pendiente = None
+            elif 1 <= len(t.split()) <= 10:
+                return True
+
         # v3.5.3: una confirmación explícita de una operación sensible habilita
         # una sola respuesta corta sin repetir el wake word. La biometría sigue
         # siendo obligatoria en la capa de audio.
@@ -15549,6 +15631,20 @@ Recuerdos relevantes:
         if self._orq_aclaracion_temperatura_activa():
             return True
 
+        # v3.6.0 RC5: cualquier continuación que pueda terminar en una
+        # modificación real del disco debe pasar por Whisper, aunque no repita
+        # el wake word. Vosk conserva el rol de filtro/activador.
+        aclaracion_atlas = getattr(self, "atlas_aclaracion_pendiente", None)
+        if aclaracion_atlas and aclaracion_atlas.get("tipo") == "crear_carpeta_destino":
+            limite = float(aclaracion_atlas.get("hasta", 0.0) or 0.0)
+            if not limite or ahora <= limite:
+                return True
+
+        if getattr(self, "atlas_confirmacion_pendiente", None):
+            limite = float(getattr(self, "atlas_confirmacion_hasta", 0.0) or 0.0)
+            if not limite or ahora <= limite:
+                return True
+
         if self.pregunta_curiosa_pendiente and ahora <= self.pregunta_curiosa_hasta:
             return True
 
@@ -15661,6 +15757,14 @@ Recuerdos relevantes:
         Whisper. Si Vosk no reconoce claramente la intención, Whisper sigue
         siendo el respaldo preciso.
         """
+        # v3.6.0 RC5: una respuesta a una aclaración/confirmación de Atlas puede
+        # modificar archivos. Nunca se resuelve por el modo rápido de Vosk.
+        aclaracion_atlas = getattr(self, "atlas_aclaracion_pendiente", None)
+        if aclaracion_atlas and aclaracion_atlas.get("tipo") == "crear_carpeta_destino":
+            return False
+        if getattr(self, "atlas_confirmacion_pendiente", None):
+            return False
+
         # Spotify puede llegar como "espotifai"/"spotifai" por su pronunciación.
         t = self._spotify_normalizar_aliases(texto_vosk)
         palabras = set(t.split())
@@ -15833,6 +15937,10 @@ Recuerdos relevantes:
                                 print("VOZ AUTORIZADA:", nombre_hablante)
 
                         texto_final = texto_vosk
+                        # v3.6.0 RC2: acompañamos cada texto con la fuente ASR.
+                        # Las acciones que modifican archivos no pueden ejecutarse
+                        # desde un Vosk de respaldo mientras Whisper aún carga.
+                        fuente_asr = "vosk"
 
                         # "meta/metas" son alias demasiado ambiguos para saltarse
                         # Whisper en modo estricto. Si Vosk oyó uno de ellos,
@@ -15843,11 +15951,13 @@ Recuerdos relevantes:
                             rapido_vosk = False
 
                         if rapido_vosk:
+                            fuente_asr = "vosk_rapido"
                             print("MODO RÁPIDO: comando directo; se omite Whisper.")
 
                         # Vosk decide si la frase es candidata. Solo entonces usamos
                         # Whisper, evitando consumir CPU con conversaciones ambientales.
                         if USAR_WHISPER and self.debe_mejorar_con_whisper(texto_vosk) and not rapido_vosk:
+                            fuente_asr = "vosk_fallback"
                             if self.whisper_cargando and not self.whisper_listo:
                                 print(
                                     f"WHISPER: cargando; esperaré hasta {WHISPER_ESPERA_ARRANQUE_SEGUNDOS} s "
@@ -15875,6 +15985,7 @@ Recuerdos relevantes:
                                 )
 
                                 if texto_whisper:
+                                    fuente_asr = "whisper"
                                     print("WHISPER ENTENDIÓ:", texto_whisper)
                                     if self.transcripcion_asr_sospechosa(texto_vosk, texto_whisper):
                                         vosk_norm_tutor = normalizar(texto_vosk)
@@ -15952,7 +16063,8 @@ Recuerdos relevantes:
                             self.vaciar_cola_audio_pendiente()
 
                         print("BETA ENTENDIÓ FINALMENTE:", texto_final)
-                        self._encolar_texto_reconocido(texto_final)
+                        print("ASR FUENTE:", fuente_asr)
+                        self._encolar_texto_reconocido(texto_final, fuente_asr=fuente_asr)
 
         except Exception as error:
             print("ERROR MICRÓFONO:", error)
@@ -16691,12 +16803,17 @@ Recuerdos relevantes:
     # ENTREGA ORDENADA ASR -> CEREBRO v2.9.12
     # ======================================================
 
-    def _encolar_texto_reconocido(self, texto):
+    def _encolar_texto_reconocido(self, texto, fuente_asr="manual"):
         texto = (texto or "").strip()
         if not texto:
             return
         self.asr_secuencia_texto += 1
-        item = (self.asr_secuencia_texto, texto, time.time())
+        item = (
+            self.asr_secuencia_texto,
+            texto,
+            time.time(),
+            (fuente_asr or "manual").strip().lower(),
+        )
         try:
             self.cola_textos_reconocidos.put_nowait(item)
         except queue.Full:
@@ -16714,9 +16831,18 @@ Recuerdos relevantes:
         procesados = 0
         try:
             while procesados < 8:
-                secuencia, texto, ts = self.cola_textos_reconocidos.get_nowait()
-                print(f"ASR->CEREBRO: procesando #{secuencia}: {texto}")
-                self.procesar_voz(texto)
+                item = self.cola_textos_reconocidos.get_nowait()
+                if len(item) >= 4:
+                    secuencia, texto, ts, fuente_asr = item[:4]
+                else:
+                    # Compatibilidad con cualquier entrada antigua de la cola.
+                    secuencia, texto, ts = item[:3]
+                    fuente_asr = "manual"
+                print(
+                    f"ASR->CEREBRO: procesando #{secuencia}: {texto} "
+                    f"[fuente={fuente_asr}]"
+                )
+                self.procesar_voz(texto, fuente_asr=fuente_asr)
                 procesados += 1
         except queue.Empty:
             pass
@@ -16731,8 +16857,9 @@ Recuerdos relevantes:
     # PROCESAR VOZ / CEREBRO
     # ======================================================
 
-    def procesar_voz(self, texto):
+    def procesar_voz(self, texto, fuente_asr="manual"):
         texto_original = (texto or "").strip()
+        fuente_asr = (fuente_asr or "manual").strip().lower()
         texto_normal = normalizar(texto_original)
         if texto_original:
             self.penultimo_texto_asr_aceptado = self.ultimo_texto_asr_aceptado
@@ -16836,12 +16963,50 @@ Recuerdos relevantes:
             if wake_atlas is None and self._atlas_resolver_opcion_pendiente(texto_original):
                 return
 
+        # CONTROL ATLAS v3.6.0 RC6: continuación natural a la pregunta
+        # "¿dónde quiere crear la carpeta ...?". Se acepta una sola respuesta
+        # breve sin wake word porque Beta formuló explícitamente la pregunta.
+        aclaracion_atlas = getattr(self, "atlas_aclaracion_pendiente", None)
+        if aclaracion_atlas and aclaracion_atlas.get("tipo") == "crear_carpeta_destino":
+            wake_destino = self._wake_en_inicio(
+                texto_normal, incluir_ambiguos=False
+            )
+            if wake_destino is None:
+                if not self._atlas_fuente_asr_confiable_para_escritura(fuente_asr):
+                    print(
+                        "CONTROL ATLAS v3.6.0 RC6: destino no ejecutado; "
+                        f"fuente ASR no apta para escritura={fuente_asr}."
+                    )
+                    self.responder(
+                        "Por seguridad necesito confirmar esa ubicación con Whisper "
+                        "antes de crear la carpeta. Repita dónde quiere crearla.",
+                        "confundida",
+                    )
+                    return
+                if self._atlas_manejar_aclaracion(texto_original):
+                    return
+
         # CONTROL ATLAS v3.5.3: una confirmación sensible pendiente acepta
         # únicamente sí/no sin wake word. No se mezcla con conversación general.
         if getattr(self, "atlas_confirmacion_pendiente", None):
             wake_conf = self._wake_en_inicio(texto_normal, incluir_ambiguos=False)
-            if wake_conf is None and self._atlas_resolver_confirmacion_pendiente(texto_original):
-                return
+            if wake_conf is None:
+                if (
+                    not self._atlas_fuente_asr_confiable_para_escritura(fuente_asr)
+                    and self._atlas_confirmacion_afirmativa(texto_original)
+                ):
+                    print(
+                        "CONTROL ATLAS v3.6.0 RC6: confirmación afirmativa "
+                        f"bloqueada; fuente ASR={fuente_asr}."
+                    )
+                    self.responder(
+                        "Por seguridad necesito confirmar ese sí con Whisper antes "
+                        "de modificar archivos. Repita la confirmación.",
+                        "confundida",
+                    )
+                    return
+                if self._atlas_resolver_confirmacion_pendiente(texto_original):
+                    return
 
         # v3.5.3: respuesta a "¿computador o ambiente?". La pregunta fue
         # formulada explícitamente por Beta, por lo que aceptamos una única
@@ -16865,7 +17030,7 @@ Recuerdos relevantes:
                 f"({restante:.1f} s restantes)."
             )
             self.renovar_modo_conversacion()
-            self.procesar_orden(texto_original)
+            self.procesar_orden(texto_original, fuente_asr=fuente_asr)
             return
 
         # "Beta" sola abre una ventana MUY corta para la siguiente orden. Esta
@@ -16873,7 +17038,7 @@ Recuerdos relevantes:
         if self.esperando_orden:
             if ahora <= self.tiempo_limite_orden:
                 self.esperando_orden = False
-                self.procesar_orden(texto_original)
+                self.procesar_orden(texto_original, fuente_asr=fuente_asr)
                 return
             self.esperando_orden = False
             self.tiempo_limite_orden = 0.0
@@ -16911,7 +17076,7 @@ Recuerdos relevantes:
         orden = " ".join(palabras[indice + 1:]).strip()
 
         if orden:
-            self.procesar_orden(orden)
+            self.procesar_orden(orden, fuente_asr=fuente_asr)
         else:
             self.esperando_orden = True
             self.tiempo_limite_orden = time.time() + TIEMPO_ORDEN_TRAS_WAKE
@@ -16922,8 +17087,9 @@ Recuerdos relevantes:
             )
             self.responder("dígame.", "escuchando")
 
-    def procesar_orden(self, comando):
+    def procesar_orden(self, comando, fuente_asr="manual"):
         comando = (comando or "").strip()
+        fuente_asr = (fuente_asr or "manual").strip().lower()
         if not comando:
             return
 
@@ -16949,7 +17115,14 @@ Recuerdos relevantes:
         self.ultima_frase_inicio = time.perf_counter()
 
         # No agregamos demora artificial antes de enrutar la orden.
-        self.root.after(0, lambda: self.ejecutar_comando(comando))
+        # v3.6.0 RC4: la fuente ASR viaja junto al comando hasta el
+        # cortafuegos de Control Atlas.
+        self.root.after(
+            0,
+            lambda c=comando, f=fuente_asr: self.ejecutar_comando(
+                c, fuente_asr=f
+            ),
+        )
 
     def _es_consulta_hora(self, texto):
         """Devuelve True solo si `hora` aparece como palabra independiente.
@@ -16964,8 +17137,9 @@ Recuerdos relevantes:
             return False
         return not any(p in palabras for p in {"temperatura", "clima", "tiempo"})
 
-    def ejecutar_comando(self, comando):
+    def ejecutar_comando(self, comando, fuente_asr="manual"):
         original = comando.strip()
+        fuente_asr = (fuente_asr or "manual").strip().lower()
         contexto_python_previo = bool(
             self.tutor_python_tema_actual or self._contexto_python_activo()
         )
@@ -17725,6 +17899,10 @@ Recuerdos relevantes:
 
         # Control de Atlas queda después del orquestador: solo recibe órdenes
         # que realmente pertenecen a ventanas, aplicaciones, archivos o carpetas.
+        # v3.6.0 RC2: una escritura nunca se ejecuta desde Vosk provisional
+        # mientras Whisper todavía está cargando.
+        if self._atlas_bloquear_por_asr_inseguro(original, fuente_asr):
+            return
         if self._atlas_manejar_comando(original):
             return
 
@@ -19063,29 +19241,121 @@ Recuerdos relevantes:
         self.responder("no tengo una carpeta anterior en el contexto actual.", "confundida")
         return True
 
-    def _atlas_crear_carpeta_contextual(self, nombre):
-        limpio = re.sub(r'[<>:"/\\|?*]', "", (nombre or "")).strip(" .")
+    def _atlas_preparar_creacion_carpeta(self, nombre, destino_ref):
+        """Valida nombre/destino y pide confirmación antes de crear.
+
+        RC6 repite el nombre final y la ruta exacta para que un error ASR como
+        'Redes' -> 'Redis' pueda detenerse antes de tocar el disco.
+        """
+        limpio = self._atlas_nombre_windows_seguro(nombre or "")
         if not limpio:
             self.responder("necesito un nombre válido para la carpeta.", "confundida")
             return True
-        base = self._atlas_ruta_explorador_activa() or self.atlas_carpeta_actual or obtener_escritorio()
+
+        base = self._atlas_destino_carpeta(destino_ref)
+        if not base:
+            self.responder(
+                "no pude verificar la carpeta de destino; no creé nada.",
+                "confundida",
+            )
+            return True
+
+        base = Path(base)
+        destino = base / limpio
+
+        if self._atlas_es_ruta_protegida(destino):
+            self.responder(
+                "esa ubicación está protegida. No modificaré la instalación "
+                "de Beta ni una raíz protegida.",
+                "molesta",
+            )
+            self._atlas_registrar_accion(
+                "CREAR_CARPETA", "", destino, "bloqueada",
+                "Destino protegido por Control Atlas."
+            )
+            return True
+
+        if destino.exists():
+            self.responder(
+                f"la carpeta {limpio} ya existe en {base}.",
+                "confundida",
+            )
+            self._atlas_registrar_accion(
+                "CREAR_CARPETA", "", destino, "sin_cambios",
+                "La carpeta ya existía."
+            )
+            return True
+
+        return self._atlas_solicitar_confirmacion(
+            "crear_carpeta",
+            {
+                "nombre": limpio,
+                "base": str(base),
+                "destino": str(destino),
+            },
+            f"entendí que quiere crear la carpeta {limpio} en {base}.",
+        )
+
+    def _atlas_crear_carpeta_contextual(self, nombre, destino_ref=""):
+        limpio = self._atlas_nombre_windows_seguro(nombre or "")
+        if not limpio:
+            self.responder("necesito un nombre válido para la carpeta.", "confundida")
+            return True
+
+        if (destino_ref or "").strip():
+            base = self._atlas_destino_carpeta(destino_ref)
+            if not base:
+                self.responder("no pude verificar la carpeta de destino; no creé nada.", "confundida")
+                return True
+            base = Path(base)
+        else:
+            base = self._atlas_base_operacion_archivos()
+
         destino = Path(base) / limpio
+        if self._atlas_es_ruta_protegida(destino):
+            self.responder(
+                "esa ubicación está protegida. No modificaré la instalación de Beta ni una raíz protegida.",
+                "molesta",
+            )
+            self._atlas_registrar_accion(
+                "CREAR_CARPETA", "", destino, "bloqueada",
+                "Destino protegido por Control Atlas."
+            )
+            return True
+
         try:
             if destino.exists():
-                self.responder(f"la carpeta {limpio} ya existe en {Path(base).name or str(base)}.", "confundida")
+                self.responder(
+                    f"la carpeta {limpio} ya existe en {Path(base).name or str(base)}.",
+                    "confundida",
+                )
+                self._atlas_registrar_accion(
+                    "CREAR_CARPETA", "", destino, "sin_cambios", "La carpeta ya existía."
+                )
                 return True
+
             destino.mkdir(parents=False)
-            self.atlas_carpeta_actual = Path(base)
+            if not destino.exists() or not destino.is_dir():
+                raise IOError("la carpeta no apareció tras crearla")
+
+            # Crear en un destino nombrado no cambia silenciosamente el
+            # contexto del Explorador. Solo mantenemos como contexto la base
+            # cuando la operación fue explícitamente contextual.
+            if not (destino_ref or "").strip():
+                self.atlas_carpeta_actual = Path(base)
+            self.atlas_ultima_ruta_referida = destino
+            self._atlas_registrar_accion(
+                "CREAR_CARPETA", "", destino, "ok", "Creación verificada.", reversible=True
+            )
             self.responder(f"carpeta {limpio} creada.", "feliz")
-            print(f"CONTROL ATLAS v3.5.3: carpeta creada={destino}")
+            print(f"CONTROL ATLAS v3.6.0: carpeta creada y verificada={destino}")
         except Exception as error:
-            print("CONTROL ATLAS: no pude crear carpeta:", error)
+            print("CONTROL ATLAS v3.6.0: no pude crear carpeta:", error)
+            self._atlas_registrar_accion(
+                "CREAR_CARPETA", "", destino, "error", str(error)
+            )
             self.responder("no pude crear esa carpeta.", "molesta")
         return True
-
-    # ======================================================
-    # CONTROL DE ARCHIVOS SEGURO v3.5.3
-    # ======================================================
 
     def _atlas_base_operacion_archivos(self):
         """Carpeta real sobre la que operan crear/renombrar/copiar/mover.
@@ -19100,6 +19370,102 @@ Recuerdos relevantes:
         if self.atlas_carpeta_actual and Path(self.atlas_carpeta_actual).exists():
             return Path(self.atlas_carpeta_actual)
         return Path(obtener_escritorio())
+
+
+    def _atlas_registrar_accion(
+        self, accion, origen="", destino="", resultado="ok",
+        detalle="", reversible=False
+    ):
+        try:
+            accion_id = self.memoria.registrar_accion_atlas(
+                accion=accion,
+                origen=str(origen or ""),
+                destino=str(destino or ""),
+                resultado=resultado,
+                detalle=detalle,
+                reversible=reversible,
+            )
+            print(
+                f"CONTROL ATLAS v3.6.0: registro id={accion_id} "
+                f"accion={accion} resultado={resultado}"
+            )
+            return accion_id
+        except Exception as error:
+            # El fallo del registro nunca debe convertir una operación fallida
+            # en exitosa ni bloquear por sí solo una acción ya verificada.
+            print("CONTROL ATLAS v3.6.0: no pude registrar auditoría:", error)
+            return 0
+
+    def _atlas_ruta_temporal_reemplazo(self, destino, etiqueta="backup"):
+        destino = Path(destino)
+        for _ in range(20):
+            candidato = destino.with_name(
+                f".{destino.name}.beta-{etiqueta}-{secrets.token_hex(4)}"
+            )
+            if not candidato.exists():
+                return candidato
+        return destino.with_name(
+            f".{destino.name}.beta-{etiqueta}-{int(time.time())}"
+        )
+
+    @staticmethod
+    def _atlas_quitar_elemento_sin_confirmacion(ruta):
+        ruta = Path(ruta)
+        if not ruta.exists():
+            return
+        if ruta.is_dir():
+            shutil.rmtree(ruta)
+        else:
+            ruta.unlink()
+
+    def _atlas_restaurar_reemplazo(self, respaldo, destino):
+        respaldo = Path(respaldo) if respaldo else None
+        destino = Path(destino)
+        if not respaldo or not respaldo.exists():
+            return False
+        try:
+            if destino.exists():
+                self._atlas_quitar_elemento_sin_confirmacion(destino)
+            shutil.move(str(respaldo), str(destino))
+            return destino.exists()
+        except Exception as error:
+            print("CONTROL ATLAS v3.6.0: no pude restaurar reemplazo:", error)
+            return False
+
+    def _atlas_responder_historial_acciones(self, limite=5):
+        try:
+            filas = self.memoria.listar_acciones_atlas(limite)
+        except Exception as error:
+            print("CONTROL ATLAS v3.6.0: historial no disponible:", error)
+            self.responder("no pude consultar el registro de acciones de Atlas.", "confundida")
+            return True
+        if not filas:
+            self.responder("todavía no tengo acciones de archivos registradas.", "normal")
+            return True
+
+        frases = []
+        for _id, fecha, accion, origen, destino, resultado, detalle, reversible, revertida in filas:
+            if resultado != "ok":
+                continue
+            hora = (fecha or "")[11:16] if len(fecha or "") >= 16 else ""
+            accion_txt = (accion or "acción").replace("_", " ").lower()
+            if origen and destino:
+                descripcion = f"{accion_txt} {Path(origen).name} hacia {Path(destino).name}"
+            elif destino:
+                descripcion = f"{accion_txt} {Path(destino).name}"
+            elif origen:
+                descripcion = f"{accion_txt} {Path(origen).name}"
+            else:
+                descripcion = accion_txt
+            frases.append(f"{hora}: {descripcion}" if hora else descripcion)
+            if len(frases) >= 3:
+                break
+
+        if not frases:
+            self.responder("el registro existe, pero no hay acciones completadas recientemente.", "normal")
+        else:
+            self.responder("las últimas acciones verificadas fueron: " + "; ".join(frases) + ".", "normal")
+        return True
 
     def _atlas_nombre_windows_seguro(self, nombre, extension=""):
         nombre = (nombre or "").strip().strip('"').strip("'")
@@ -19175,19 +19541,32 @@ Recuerdos relevantes:
 
     def _atlas_destino_carpeta(self, referencia):
         r = normalizar(referencia or "").strip()
-        if r in {"aqui","aqui mismo","esta carpeta","carpeta actual"}:
+        if r in {"aqui", "aqui mismo", "esta carpeta", "carpeta actual"}:
             return self._atlas_base_operacion_archivos()
+
         confiable = self._atlas_ruta_confiable(referencia)
         if confiable and Path(confiable).exists() and Path(confiable).is_dir():
             return Path(confiable)
+
         p = self._atlas_elemento_contextual(referencia, "carpeta")
-        return Path(p) if p and Path(p).is_dir() else None
+        if p and Path(p).is_dir():
+            return Path(p)
+
+        # Para destinos modificables aceptamos una carpeta fuera del hijo
+        # directo solamente cuando el resolvedor seguro encuentra UNA única
+        # ruta real. Varias coincidencias nunca se eligen automáticamente.
+        try:
+            rutas = self._atlas_resolver_carpeta_real(referencia)
+        except Exception:
+            rutas = []
+        rutas = [Path(x) for x in rutas if Path(x).exists() and Path(x).is_dir()]
+        return rutas[0] if len(rutas) == 1 else None
 
     def _atlas_solicitar_confirmacion(self, accion, datos, mensaje):
         self.atlas_confirmacion_pendiente = {"accion": accion, "datos": datos}
         self.atlas_confirmacion_hasta = time.time() + 30.0
         self.responder(mensaje + " ¿Confirma?", "confundida")
-        print(f"CONTROL ATLAS v3.5.3: confirmación requerida accion={accion}")
+        print(f"CONTROL ATLAS v3.6.0: confirmación requerida accion={accion}")
         return True
 
     def _atlas_resolver_confirmacion_pendiente(self, texto):
@@ -19238,15 +19617,32 @@ Recuerdos relevantes:
         except Exception as error:
             return False, str(error)
 
-    def _atlas_crear_documento(self, tipo, nombre):
+    def _atlas_crear_documento(self, tipo, nombre, destino_ref=""):
         ext = ".docx" if tipo == "word" else ".xlsx"
         predeterminado = "Documento Word" if tipo == "word" else "Libro Excel"
         seguro = self._atlas_nombre_windows_seguro(nombre or predeterminado, ext)
         if not seguro:
             self.responder("necesito un nombre válido para el archivo.", "confundida")
             return True
-        base = self._atlas_base_operacion_archivos()
-        destino = base / seguro
+
+        if (destino_ref or "").strip():
+            base = self._atlas_destino_carpeta(destino_ref)
+            if not base:
+                self.responder("no pude verificar la carpeta de destino; no creé el documento.", "confundida")
+                return True
+            base = Path(base)
+        else:
+            base = self._atlas_base_operacion_archivos()
+
+        destino = Path(base) / seguro
+        if self._atlas_es_ruta_protegida(destino):
+            self.responder("esa ubicación está protegida y no crearé archivos allí.", "molesta")
+            self._atlas_registrar_accion(
+                "CREAR_DOCUMENTO", "", destino, "bloqueada",
+                "Destino protegido por Control Atlas."
+            )
+            return True
+
         if destino.exists():
             return self._atlas_solicitar_confirmacion(
                 "sobrescribir_documento", {"tipo": tipo, "destino": str(destino)},
@@ -19256,19 +19652,41 @@ Recuerdos relevantes:
 
     def _atlas_materializar_documento(self, tipo, destino):
         destino = Path(destino)
-        ok, error = self._atlas_crear_word_vacio(destino) if tipo == "word" else self._atlas_crear_excel_vacio(destino)
+        if self._atlas_es_ruta_protegida(destino):
+            self.responder("ese destino está protegido y no crearé archivos allí.", "molesta")
+            self._atlas_registrar_accion(
+                "CREAR_DOCUMENTO", "", destino, "bloqueada", "Destino protegido."
+            )
+            return True
+
+        ok, error = (
+            self._atlas_crear_word_vacio(destino)
+            if tipo == "word"
+            else self._atlas_crear_excel_vacio(destino)
+        )
         if not ok or not destino.exists():
-            print(f"CONTROL ATLAS v3.5.3: no pude crear {tipo}: {error}")
+            print(f"CONTROL ATLAS v3.6.0: no pude crear {tipo}: {error}")
+            self._atlas_registrar_accion(
+                "CREAR_DOCUMENTO", "", destino, "error", str(error or "creación no verificada")
+            )
             self.responder(f"no pude crear el archivo {tipo}.", "molesta")
             return True
+
         self.atlas_ultimo_archivo = destino
         self.atlas_ultima_ruta_referida = destino
+        self._atlas_registrar_accion(
+            "CREAR_DOCUMENTO", "", destino, "ok",
+            f"Documento {tipo} creado y verificado.", reversible=True
+        )
         try:
             os.startfile(str(destino))
             self.responder(f"creé y abrí {destino.name}.", "feliz")
         except Exception:
-            self.responder(f"creé {destino.name}, pero no pude abrirlo automáticamente.", "normal")
-        print(f"CONTROL ATLAS v3.5.3: documento creado={destino}")
+            self.responder(
+                f"creé {destino.name}, pero no pude abrirlo automáticamente.",
+                "normal",
+            )
+        print(f"CONTROL ATLAS v3.6.0: documento creado y verificado={destino}")
         return True
 
     def _atlas_renombrar(self, referencia, nuevo_nombre, tipo="cualquiera"):
@@ -19276,27 +19694,59 @@ Recuerdos relevantes:
         if not origen:
             self.responder("no pude identificar un único elemento real para renombrar.", "confundida")
             return True
+
         origen = Path(origen)
+        if self._atlas_es_ruta_protegida(origen):
+            self.responder("ese elemento está dentro de una ubicación protegida y no lo renombraré.", "molesta")
+            self._atlas_registrar_accion(
+                "RENOMBRAR", origen, "", "bloqueada", "Origen protegido."
+            )
+            return True
+
         ext = origen.suffix if origen.is_file() else ""
-        seguro = self._atlas_nombre_windows_seguro(nuevo_nombre, ext if origen.is_file() else "")
+        seguro = self._atlas_nombre_windows_seguro(
+            nuevo_nombre, ext if origen.is_file() else ""
+        )
         if not seguro:
             self.responder("el nuevo nombre no es válido.", "confundida")
             return True
+
         destino = origen.with_name(seguro)
+        if self._atlas_es_ruta_protegida(destino):
+            self.responder("el destino está protegido y no realizaré el cambio.", "molesta")
+            self._atlas_registrar_accion(
+                "RENOMBRAR", origen, destino, "bloqueada", "Destino protegido."
+            )
+            return True
         if destino.exists() and destino != origen:
             self.responder(f"ya existe {destino.name}. No lo sobrescribí.", "confundida")
+            self._atlas_registrar_accion(
+                "RENOMBRAR", origen, destino, "sin_cambios", "El destino ya existía."
+            )
             return True
+
         try:
+            origen_original = Path(origen)
             origen.rename(destino)
-            if self.atlas_carpeta_actual and Path(self.atlas_carpeta_actual) == origen:
+            if not destino.exists() or origen_original.exists():
+                raise IOError("el renombrado no pudo verificarse")
+
+            if self.atlas_carpeta_actual and Path(self.atlas_carpeta_actual) == origen_original:
                 self.atlas_carpeta_actual = destino
-            if self.atlas_ultimo_archivo and Path(self.atlas_ultimo_archivo) == origen:
+            if self.atlas_ultimo_archivo and Path(self.atlas_ultimo_archivo) == origen_original:
                 self.atlas_ultimo_archivo = destino
             self.atlas_ultima_ruta_referida = destino
-            self.responder(f"renombré {origen.name} como {destino.name}.", "feliz")
-            print(f"CONTROL ATLAS v3.5.3: renombrado {origen} -> {destino}")
+            self._atlas_registrar_accion(
+                "RENOMBRAR", origen_original, destino, "ok",
+                "Renombrado verificado.", reversible=True
+            )
+            self.responder(f"renombré {origen_original.name} como {destino.name}.", "feliz")
+            print(f"CONTROL ATLAS v3.6.0: renombrado verificado {origen_original} -> {destino}")
         except Exception as error:
-            print("CONTROL ATLAS v3.5.3: error renombrando:", error)
+            print("CONTROL ATLAS v3.6.0: error renombrando:", error)
+            self._atlas_registrar_accion(
+                "RENOMBRAR", origen, destino, "error", str(error)
+            )
             self.responder("no pude renombrar ese elemento.", "molesta")
         return True
 
@@ -19306,37 +19756,118 @@ Recuerdos relevantes:
         if not origen or not destino_dir:
             self.responder("no pude verificar el origen o la carpeta de destino.", "confundida")
             return True
+
         origen, destino_dir = Path(origen), Path(destino_dir)
         destino = destino_dir / origen.name
+        if self._atlas_es_ruta_protegida(destino):
+            self.responder("la carpeta de destino está protegida y no copiaré archivos allí.", "molesta")
+            self._atlas_registrar_accion(
+                "COPIAR", origen, destino, "bloqueada", "Destino protegido."
+            )
+            return True
+
         try:
-            origen_r, destino_dir_r, destino_r = origen.resolve(), destino_dir.resolve(), destino.resolve()
-            if origen_r == destino_r or (origen.is_dir() and (destino_dir_r == origen_r or origen_r in destino_dir_r.parents)):
-                self.responder("no copiaré una carpeta dentro de sí misma ni sobre el mismo origen.", "confundida")
+            origen_r = origen.resolve()
+            destino_dir_r = destino_dir.resolve()
+            destino_r = destino.resolve()
+            if origen_r == destino_r or (
+                origen.is_dir()
+                and (destino_dir_r == origen_r or origen_r in destino_dir_r.parents)
+            ):
+                self.responder(
+                    "no copiaré una carpeta dentro de sí misma ni sobre el mismo origen.",
+                    "confundida",
+                )
                 return True
         except Exception:
             pass
+
         if destino.exists():
             return self._atlas_solicitar_confirmacion(
-                "copiar_sobrescribir", {"origen": str(origen), "destino": str(destino)},
-                f"{destino.name} ya existe en {destino_dir.name}; copiarlo reemplazaría contenido existente."
+                "copiar_sobrescribir",
+                {"origen": str(origen), "destino": str(destino)},
+                f"{destino.name} ya existe en {destino_dir.name}; copiarlo reemplazaría contenido existente.",
             )
         return self._atlas_ejecutar_copia(origen, destino)
 
-    def _atlas_ejecutar_copia(self, origen, destino):
+    def _atlas_ejecutar_copia(self, origen, destino, sobrescribir=False):
+        origen, destino = Path(origen), Path(destino)
+        if self._atlas_es_ruta_protegida(destino):
+            self.responder("el destino está protegido y no copiaré allí.", "molesta")
+            self._atlas_registrar_accion(
+                "COPIAR", origen, destino, "bloqueada", "Destino protegido."
+            )
+            return True
+
+        respaldo = None
         try:
-            origen, destino = Path(origen), Path(destino)
+            if destino.exists():
+                if not sobrescribir:
+                    self.responder(
+                        f"{destino.name} ya existe. No lo sobrescribí.",
+                        "confundida",
+                    )
+                    return True
+                respaldo = self._atlas_ruta_temporal_reemplazo(destino)
+                shutil.move(str(destino), str(respaldo))
+                if not respaldo.exists():
+                    raise IOError("no pude apartar el destino existente de forma segura")
+
             if origen.is_dir():
                 shutil.copytree(origen, destino)
             else:
-                shutil.copy2(origen, destino)
+                # Copiamos primero a un archivo temporal del mismo directorio y
+                # luego lo hacemos visible. Así una interrupción no deja un
+                # archivo final truncado.
+                temporal = self._atlas_ruta_temporal_reemplazo(destino, "nuevo")
+                try:
+                    shutil.copy2(origen, temporal)
+                    if not temporal.exists():
+                        raise IOError("la copia temporal no pudo verificarse")
+                    os.replace(temporal, destino)
+                finally:
+                    try:
+                        if temporal.exists():
+                            temporal.unlink()
+                    except Exception:
+                        pass
+
             if not destino.exists():
                 raise IOError("el destino no apareció tras la copia")
+
+            # Solo después de verificar la copia eliminamos el respaldo anterior.
+            if respaldo and respaldo.exists():
+                self._atlas_quitar_elemento_sin_confirmacion(respaldo)
+
             self.atlas_ultima_ruta_referida = destino
-            self.responder(f"copié {origen.name} en {destino.parent.name or destino.parent}.", "feliz")
-            print(f"CONTROL ATLAS v3.5.3: copia verificada {origen} -> {destino}")
+            self._atlas_registrar_accion(
+                "COPIAR", origen, destino, "ok",
+                "Copia verificada" + (" con reemplazo seguro." if sobrescribir else "."),
+                reversible=True,
+            )
+            self.responder(
+                f"copié {origen.name} en {destino.parent.name or destino.parent}.",
+                "feliz",
+            )
+            print(f"CONTROL ATLAS v3.6.0: copia verificada {origen} -> {destino}")
         except Exception as error:
-            print("CONTROL ATLAS v3.5.3: error copiando:", error)
-            self.responder("no pude completar la copia.", "molesta")
+            # Si apartamos un destino existente, intentamos devolverlo exactamente
+            # a su lugar antes de informar el fallo.
+            restaurado = True
+            if respaldo:
+                restaurado = self._atlas_restaurar_reemplazo(respaldo, destino)
+            print("CONTROL ATLAS v3.6.0: error copiando:", error)
+            detalle = str(error)
+            if respaldo and not restaurado:
+                detalle += " | ADVERTENCIA: no pude restaurar automáticamente el destino anterior."
+            self._atlas_registrar_accion(
+                "COPIAR", origen, destino, "error", detalle
+            )
+            self.responder(
+                "no pude completar la copia."
+                + ("" if restaurado else " Además, no pude restaurar automáticamente el destino anterior."),
+                "molesta",
+            )
         return True
 
     def _atlas_mover(self, referencia, destino_ref, tipo="cualquiera"):
@@ -19345,22 +19876,44 @@ Recuerdos relevantes:
         if not origen or not destino_dir:
             self.responder("no pude verificar el origen o la carpeta de destino.", "confundida")
             return True
+
         origen, destino_dir = Path(origen), Path(destino_dir)
+        destino = destino_dir / origen.name
         if self._atlas_es_ruta_protegida(origen):
             self.responder("esa ubicación está protegida y no la moveré.", "molesta")
+            self._atlas_registrar_accion(
+                "MOVER", origen, destino, "bloqueada", "Origen protegido."
+            )
             return True
-        destino = destino_dir / origen.name
+        if self._atlas_es_ruta_protegida(destino):
+            self.responder("la carpeta de destino está protegida y no moveré archivos allí.", "molesta")
+            self._atlas_registrar_accion(
+                "MOVER", origen, destino, "bloqueada", "Destino protegido."
+            )
+            return True
+
         try:
-            origen_r, destino_dir_r, destino_r = origen.resolve(), destino_dir.resolve(), destino.resolve()
-            if origen_r == destino_r or (origen.is_dir() and (destino_dir_r == origen_r or origen_r in destino_dir_r.parents)):
-                self.responder("no moveré una carpeta dentro de sí misma ni al mismo lugar.", "confundida")
+            origen_r = origen.resolve()
+            destino_dir_r = destino_dir.resolve()
+            destino_r = destino.resolve()
+            if origen_r == destino_r or (
+                origen.is_dir()
+                and (destino_dir_r == origen_r or origen_r in destino_dir_r.parents)
+            ):
+                self.responder(
+                    "no moveré una carpeta dentro de sí misma ni al mismo lugar.",
+                    "confundida",
+                )
                 return True
         except Exception:
             pass
+
         msg = f"voy a mover {origen.name} a {destino_dir}."
         if destino.exists():
             msg += " Allí ya existe un elemento con el mismo nombre y podría reemplazarse."
-        return self._atlas_solicitar_confirmacion("mover", {"origen": str(origen), "destino": str(destino)}, msg)
+        return self._atlas_solicitar_confirmacion(
+            "mover", {"origen": str(origen), "destino": str(destino)}, msg
+        )
 
     def _atlas_enviar_papelera(self, ruta):
         if os.name != "nt":
@@ -19389,6 +19942,9 @@ Recuerdos relevantes:
         origen = Path(origen)
         if self._atlas_es_ruta_protegida(origen):
             self.responder("esa ubicación está protegida y no la eliminaré.", "molesta")
+            self._atlas_registrar_accion(
+                "ELIMINAR", origen, "", "bloqueada", "Origen protegido."
+            )
             return True
         return self._atlas_solicitar_confirmacion(
             "eliminar", {"origen": str(origen)},
@@ -19428,38 +19984,59 @@ Recuerdos relevantes:
         return plan, conteo
 
     def _atlas_mover_lote_tipo(self, tipo_nombre, destino_ref):
-        grupos={
-            "pdf": {".pdf"}, "word": {".doc", ".docx"}, "excel": {".xls", ".xlsx", ".xlsm", ".csv"},
+        grupos = {
+            "pdf": {".pdf"},
+            "word": {".doc", ".docx"},
+            "excel": {".xls", ".xlsx", ".xlsm", ".csv"},
             "imagenes": {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".heic"},
         }
-        clave=normalizar(tipo_nombre or "").strip()
-        if clave in {"imagen","imagenes","fotos"}: clave="imagenes"
-        exts=grupos.get(clave)
-        destino=self._atlas_destino_carpeta(destino_ref)
-        base=self._atlas_base_operacion_archivos()
+        clave = normalizar(tipo_nombre or "").strip()
+        if clave in {"imagen", "imagenes", "fotos"}:
+            clave = "imagenes"
+        exts = grupos.get(clave)
+        destino = self._atlas_destino_carpeta(destino_ref)
+        base = self._atlas_base_operacion_archivos()
         if not exts or not destino:
             self.responder("no pude verificar el tipo de archivos o la carpeta de destino.", "confundida")
             return True
-        archivos=[]
+        destino = Path(destino)
+        if self._atlas_es_ruta_protegida(base) or self._atlas_es_ruta_protegida(destino):
+            self.responder("el origen o el destino está protegido; no moveré archivos por lote.", "molesta")
+            self._atlas_registrar_accion(
+                "MOVER_LOTE", base, destino, "bloqueada", "Origen o destino protegido."
+            )
+            return True
+
         try:
-            archivos=[p for p in base.iterdir() if p.is_file() and p.suffix.lower() in exts]
+            archivos = [
+                p for p in Path(base).iterdir()
+                if p.is_file() and p.suffix.lower() in exts
+            ]
         except Exception:
-            archivos=[]
+            archivos = []
         if not archivos:
-            self.responder(f"no encontré archivos {clave} en {base.name or base}.", "normal")
+            self.responder(f"no encontré archivos {clave} en {Path(base).name or base}.", "normal")
             return True
         return self._atlas_solicitar_confirmacion(
-            "mover_lote", {"archivos":[str(p) for p in archivos], "destino":str(destino)},
-            f"encontré {len(archivos)} archivos {clave}. Los moveré a {Path(destino).name or destino}."
+            "mover_lote",
+            {"archivos": [str(p) for p in archivos], "destino": str(destino)},
+            f"encontré {len(archivos)} archivos {clave}. Los moveré a {destino.name or destino}.",
         )
 
     def _atlas_organizar_carpeta_actual(self):
-        ruta=self._atlas_base_operacion_archivos()
-        plan, conteo=self._atlas_plan_organizacion(ruta)
+        ruta = self._atlas_base_operacion_archivos()
+        if self._atlas_es_ruta_protegida(ruta):
+            self.responder("esa carpeta está protegida y no la organizaré automáticamente.", "molesta")
+            self._atlas_registrar_accion(
+                "ORGANIZAR", ruta, "", "bloqueada", "Carpeta protegida."
+            )
+            return True
+
+        plan, conteo = self._atlas_plan_organizacion(ruta)
         if not plan:
             self.responder("no encontré archivos que necesiten organización en esta carpeta.", "normal")
             return True
-        resumen=", ".join(f"{v} {k}" for k,v in sorted(conteo.items()))
+        resumen = ", ".join(f"{v} {k}" for k, v in sorted(conteo.items()))
         return self._atlas_solicitar_confirmacion(
             "organizar", {"ruta": str(ruta)},
             f"encontré {len(plan)} archivos: {resumen}. Los organizaré en subcarpetas por tipo."
@@ -19467,82 +20044,331 @@ Recuerdos relevantes:
 
     def _atlas_ejecutar_operacion_confirmada(self, accion, datos):
         try:
+            if accion == "crear_carpeta":
+                nombre = self._atlas_nombre_windows_seguro(datos.get("nombre", ""))
+                base = Path(datos.get("base", ""))
+                destino = Path(datos.get("destino", ""))
+
+                if not nombre or not str(base) or not str(destino):
+                    self.responder(
+                        "la creación pendiente ya no contiene un nombre o destino válido; no hice cambios.",
+                        "confundida",
+                    )
+                    return True
+
+                # No confiamos ciegamente en los datos guardados: reconstruimos
+                # y verificamos de nuevo antes de tocar el disco.
+                destino_esperado = base / nombre
+                try:
+                    if destino.resolve() != destino_esperado.resolve():
+                        raise ValueError("el destino pendiente no coincide con el nombre confirmado")
+                except FileNotFoundError:
+                    if str(destino) != str(destino_esperado):
+                        raise ValueError("el destino pendiente no coincide con el nombre confirmado")
+
+                if not base.exists() or not base.is_dir():
+                    self.responder(
+                        "la carpeta de destino ya no existe; no creé nada.",
+                        "confundida",
+                    )
+                    self._atlas_registrar_accion(
+                        "CREAR_CARPETA", "", destino, "sin_cambios",
+                        "La carpeta base dejó de existir antes de confirmar."
+                    )
+                    return True
+
+                if self._atlas_es_ruta_protegida(destino):
+                    self.responder(
+                        "esa ubicación está protegida; no crearé la carpeta.",
+                        "molesta",
+                    )
+                    self._atlas_registrar_accion(
+                        "CREAR_CARPETA", "", destino, "bloqueada",
+                        "Destino protegido al momento de confirmar."
+                    )
+                    return True
+
+                if destino.exists():
+                    self.responder(
+                        f"la carpeta {nombre} ya existe; no hice cambios.",
+                        "confundida",
+                    )
+                    self._atlas_registrar_accion(
+                        "CREAR_CARPETA", "", destino, "sin_cambios",
+                        "La carpeta apareció antes de confirmar."
+                    )
+                    return True
+
+                destino.mkdir(parents=False)
+                if not destino.exists() or not destino.is_dir():
+                    raise IOError("la carpeta no apareció tras crearla")
+
+                self.atlas_ultima_ruta_referida = destino
+                self._atlas_registrar_accion(
+                    "CREAR_CARPETA", "", destino, "ok",
+                    "Creación confirmada y verificada.", reversible=True
+                )
+                self.responder(f"carpeta {nombre} creada.", "feliz")
+                print(
+                    f"CONTROL ATLAS v3.6.0 RC6: carpeta creada "
+                    f"tras confirmación y verificada={destino}"
+                )
+                return True
+
             if accion == "sobrescribir_documento":
-                destino=Path(datos["destino"]); tipo=datos["tipo"]
+                destino = Path(datos["destino"])
+                tipo = datos["tipo"]
                 if self._atlas_es_ruta_protegida(destino):
-                    self.responder("ese destino está protegido y no lo sobrescribiré.", "molesta"); return True
-                if destino.exists():
-                    if destino.is_dir():
-                        self.responder("el destino es una carpeta; no puedo sobrescribirla con un documento.", "molesta"); return True
-                    destino.unlink()
-                return self._atlas_materializar_documento(tipo, destino)
+                    self.responder("ese destino está protegido y no lo sobrescribiré.", "molesta")
+                    self._atlas_registrar_accion(
+                        "SOBRESCRIBIR_DOCUMENTO", "", destino, "bloqueada", "Destino protegido."
+                    )
+                    return True
+                if destino.exists() and destino.is_dir():
+                    self.responder(
+                        "el destino es una carpeta; no puedo sobrescribirla con un documento.",
+                        "molesta",
+                    )
+                    return True
+
+                temporal = self._atlas_ruta_temporal_reemplazo(destino, "nuevo")
+                try:
+                    ok, error = (
+                        self._atlas_crear_word_vacio(temporal)
+                        if tipo == "word"
+                        else self._atlas_crear_excel_vacio(temporal)
+                    )
+                    if not ok or not temporal.exists():
+                        raise IOError(str(error or "no pude crear el documento temporal"))
+                    os.replace(temporal, destino)
+                    if not destino.exists():
+                        raise IOError("el reemplazo del documento no pudo verificarse")
+                finally:
+                    try:
+                        if temporal.exists():
+                            temporal.unlink()
+                    except Exception:
+                        pass
+
+                self.atlas_ultimo_archivo = destino
+                self.atlas_ultima_ruta_referida = destino
+                self._atlas_registrar_accion(
+                    "SOBRESCRIBIR_DOCUMENTO", "", destino, "ok",
+                    f"Documento {tipo} reemplazado de forma atómica y verificada.",
+                    reversible=False,
+                )
+                try:
+                    os.startfile(str(destino))
+                    self.responder(f"reemplacé y abrí {destino.name}.", "feliz")
+                except Exception:
+                    self.responder(f"reemplacé {destino.name}.", "feliz")
+                return True
+
             if accion == "copiar_sobrescribir":
-                origen, destino=Path(datos["origen"]),Path(datos["destino"])
+                origen, destino = Path(datos["origen"]), Path(datos["destino"])
                 if self._atlas_es_ruta_protegida(destino):
-                    self.responder("el destino está protegido y no lo sobrescribiré.", "molesta"); return True
-                if destino.exists():
-                    if destino.is_dir(): shutil.rmtree(destino)
-                    else: destino.unlink()
-                return self._atlas_ejecutar_copia(origen,destino)
+                    self.responder("el destino está protegido y no lo sobrescribiré.", "molesta")
+                    self._atlas_registrar_accion(
+                        "COPIAR", origen, destino, "bloqueada", "Destino protegido."
+                    )
+                    return True
+                return self._atlas_ejecutar_copia(origen, destino, sobrescribir=True)
+
             if accion == "mover":
-                origen, destino=Path(datos["origen"]),Path(datos["destino"])
+                origen, destino = Path(datos["origen"]), Path(datos["destino"])
                 if not origen.exists():
-                    self.responder("el origen ya no existe; no moví nada.", "confundida"); return True
-                if destino.exists():
-                    if self._atlas_es_ruta_protegida(destino):
-                        self.responder("el destino existente está protegido; no moví nada.", "molesta"); return True
-                    if destino.is_dir(): shutil.rmtree(destino)
-                    else: destino.unlink()
-                shutil.move(str(origen),str(destino))
-                if not destino.exists(): raise IOError("movimiento no verificado")
-                self.atlas_ultima_ruta_referida=destino
-                self.responder(f"moví {origen.name} a {destino.parent.name or destino.parent}.", "feliz")
-                print(f"CONTROL ATLAS v3.5.3: movimiento verificado {origen} -> {destino}")
-                return True
+                    self.responder("el origen ya no existe; no moví nada.", "confundida")
+                    self._atlas_registrar_accion(
+                        "MOVER", origen, destino, "sin_cambios", "El origen dejó de existir."
+                    )
+                    return True
+                if self._atlas_es_ruta_protegida(origen) or self._atlas_es_ruta_protegida(destino):
+                    self.responder("el origen o el destino está protegido; no moví nada.", "molesta")
+                    self._atlas_registrar_accion(
+                        "MOVER", origen, destino, "bloqueada", "Origen o destino protegido."
+                    )
+                    return True
+
+                respaldo = None
+                try:
+                    if destino.exists():
+                        respaldo = self._atlas_ruta_temporal_reemplazo(destino)
+                        shutil.move(str(destino), str(respaldo))
+                        if not respaldo.exists():
+                            raise IOError("no pude apartar el destino existente")
+
+                    shutil.move(str(origen), str(destino))
+                    if not destino.exists() or origen.exists():
+                        raise IOError("movimiento no verificado")
+
+                    if respaldo and respaldo.exists():
+                        self._atlas_quitar_elemento_sin_confirmacion(respaldo)
+
+                    self.atlas_ultima_ruta_referida = destino
+                    self._atlas_registrar_accion(
+                        "MOVER", origen, destino, "ok",
+                        "Movimiento verificado"
+                        + (" con reemplazo seguro." if respaldo else "."),
+                        reversible=True,
+                    )
+                    self.responder(
+                        f"moví {origen.name} a {destino.parent.name or destino.parent}.",
+                        "feliz",
+                    )
+                    print(
+                        f"CONTROL ATLAS v3.6.0: movimiento verificado "
+                        f"{origen} -> {destino}"
+                    )
+                    return True
+                except Exception:
+                    # Si el origen alcanzó el destino, intentamos regresarlo a
+                    # su ubicación original antes de restaurar el elemento que
+                    # ya existía en el destino.
+                    try:
+                        if not origen.exists() and destino.exists():
+                            shutil.move(str(destino), str(origen))
+                    except Exception:
+                        pass
+                    if respaldo:
+                        self._atlas_restaurar_reemplazo(respaldo, destino)
+                    raise
+
             if accion == "eliminar":
-                origen=Path(datos["origen"])
+                origen = Path(datos["origen"])
                 if not origen.exists():
-                    self.responder("el elemento ya no existe; no eliminé nada.", "normal"); return True
+                    self.responder("el elemento ya no existe; no eliminé nada.", "normal")
+                    self._atlas_registrar_accion(
+                        "ELIMINAR", origen, "", "sin_cambios", "El elemento ya no existía."
+                    )
+                    return True
                 if self._atlas_es_ruta_protegida(origen):
-                    self.responder("esa ubicación está protegida y no la eliminaré.", "molesta"); return True
-                ok,error=self._atlas_enviar_papelera(origen)
+                    self.responder("esa ubicación está protegida y no la eliminaré.", "molesta")
+                    self._atlas_registrar_accion(
+                        "ELIMINAR", origen, "", "bloqueada", "Origen protegido."
+                    )
+                    return True
+                ok, error = self._atlas_enviar_papelera(origen)
                 if ok and not origen.exists():
-                    self.responder(f"envié {origen.name} a la Papelera de reciclaje.", "normal")
-                    print(f"CONTROL ATLAS v3.5.3: eliminación verificada papelera={origen}")
+                    self._atlas_registrar_accion(
+                        "ELIMINAR", origen, "", "ok",
+                        "Enviado a la Papelera de reciclaje y ausencia verificada.",
+                        reversible=False,
+                    )
+                    self.responder(
+                        f"envié {origen.name} a la Papelera de reciclaje.",
+                        "normal",
+                    )
+                    print(f"CONTROL ATLAS v3.6.0: eliminación verificada papelera={origen}")
                 elif ok:
-                    self.responder("Windows aceptó la operación, pero todavía veo el elemento; no puedo confirmar que se eliminó.", "confundida")
+                    self._atlas_registrar_accion(
+                        "ELIMINAR", origen, "", "no_verificada",
+                        "Windows aceptó la operación pero el elemento sigue visible."
+                    )
+                    self.responder(
+                        "Windows aceptó la operación, pero todavía veo el elemento; "
+                        "no puedo confirmar que se eliminó.",
+                        "confundida",
+                    )
                 else:
-                    print("CONTROL ATLAS v3.5.3: error papelera:",error)
-                    self.responder("no pude enviar ese elemento a la Papelera de reciclaje.", "molesta")
+                    print("CONTROL ATLAS v3.6.0: error papelera:", error)
+                    self._atlas_registrar_accion(
+                        "ELIMINAR", origen, "", "error", str(error)
+                    )
+                    self.responder(
+                        "no pude enviar ese elemento a la Papelera de reciclaje.",
+                        "molesta",
+                    )
                 return True
+
             if accion == "mover_lote":
-                destino_dir=Path(datos["destino"]); movidos=0
-                destino_dir.mkdir(parents=False,exist_ok=True)
-                for item in datos.get("archivos",[]):
-                    origen=Path(item)
+                destino_dir = Path(datos["destino"])
+                archivos = [Path(x) for x in datos.get("archivos", [])]
+                if self._atlas_es_ruta_protegida(destino_dir):
+                    self.responder("el destino está protegido; no moví archivos.", "molesta")
+                    self._atlas_registrar_accion(
+                        "MOVER_LOTE", "", destino_dir, "bloqueada", "Destino protegido."
+                    )
+                    return True
+
+                destino_dir.mkdir(parents=False, exist_ok=True)
+                movidos = 0
+                for origen in archivos:
                     if not origen.exists() or not origen.is_file():
                         continue
-                    destino=self._atlas_nombre_unico(destino_dir/origen.name)
-                    shutil.move(str(origen),str(destino)); movidos+=1
+                    if self._atlas_es_ruta_protegida(origen):
+                        continue
+                    destino = self._atlas_nombre_unico(destino_dir / origen.name)
+                    shutil.move(str(origen), str(destino))
+                    if destino.exists() and not origen.exists():
+                        movidos += 1
+
+                resultado = "ok" if movidos else "sin_cambios"
+                self._atlas_registrar_accion(
+                    "MOVER_LOTE", "", destino_dir, resultado,
+                    f"Archivos movidos y verificados: {movidos}.", reversible=False
+                )
                 self.responder(f"moví {movidos} archivos a {destino_dir.name or destino_dir}.", "feliz")
-                print(f"CONTROL ATLAS v3.5.3: movimiento por lote verificado destino={destino_dir} movidos={movidos}")
+                print(
+                    f"CONTROL ATLAS v3.6.0: movimiento por lote verificado "
+                    f"destino={destino_dir} movidos={movidos}"
+                )
                 return True
+
             if accion == "organizar":
-                ruta=Path(datos["ruta"]); plan,_=self._atlas_plan_organizacion(ruta)
-                movidos=0
-                for origen,destino in plan:
-                    if not origen.exists(): continue
+                ruta = Path(datos["ruta"])
+                if self._atlas_es_ruta_protegida(ruta):
+                    self.responder("esa carpeta está protegida y no la organizaré.", "molesta")
+                    self._atlas_registrar_accion(
+                        "ORGANIZAR", ruta, "", "bloqueada", "Carpeta protegida."
+                    )
+                    return True
+
+                plan, _ = self._atlas_plan_organizacion(ruta)
+                movidos = 0
+                for origen, destino in plan:
+                    if not origen.exists():
+                        continue
+                    if self._atlas_es_ruta_protegida(origen) or self._atlas_es_ruta_protegida(destino):
+                        continue
                     destino.parent.mkdir(exist_ok=True)
-                    destino=self._atlas_nombre_unico(destino)
-                    shutil.move(str(origen),str(destino)); movidos+=1
+                    destino = self._atlas_nombre_unico(destino)
+                    shutil.move(str(origen), str(destino))
+                    if destino.exists() and not origen.exists():
+                        movidos += 1
+
+                resultado = "ok" if movidos else "sin_cambios"
+                self._atlas_registrar_accion(
+                    "ORGANIZAR", ruta, "", resultado,
+                    f"Archivos organizados y verificados: {movidos}.", reversible=False
+                )
                 self.responder(f"organicé {movidos} archivos en {ruta.name or ruta}.", "feliz")
-                print(f"CONTROL ATLAS v3.5.3: organización verificada ruta={ruta} movidos={movidos}")
+                print(
+                    f"CONTROL ATLAS v3.6.0: organización verificada "
+                    f"ruta={ruta} movidos={movidos}"
+                )
                 return True
         except Exception as error:
-            print(f"CONTROL ATLAS v3.5.3: operación confirmada falló accion={accion}:",error)
-            self.responder("no pude completar la operación; no la daré por realizada.", "molesta")
+            print(
+                f"CONTROL ATLAS v3.6.0: operación confirmada falló "
+                f"accion={accion}:", error
+            )
+            try:
+                self._atlas_registrar_accion(
+                    str(accion or "OPERACION").upper(),
+                    datos.get("origen", ""),
+                    datos.get("destino", ""),
+                    "error",
+                    str(error),
+                )
+            except Exception:
+                pass
+            self.responder(
+                "no pude completar la operación; no la daré por realizada.",
+                "molesta",
+            )
             return True
-        self.responder("la operación pendiente ya no es válida.", "confundida")
+
+        self.responder("la operación pendiente ya no es válida; no hice cambios.", "confundida")
         return True
 
     def _atlas_cpu_modelo(self):
@@ -19775,22 +20601,175 @@ Recuerdos relevantes:
         threading.Thread(target=trabajo, daemon=True).start()
         return True
 
+    def _atlas_iniciar_aclaracion_destino_carpeta(self, nombre):
+        limpio = self._atlas_nombre_windows_seguro(nombre or "")
+        if not limpio:
+            self.responder(
+                "necesito primero un nombre válido para la carpeta.",
+                "confundida",
+            )
+            return True
+
+        self.atlas_aclaracion_pendiente = {
+            "tipo": "crear_carpeta_destino",
+            "nombre": limpio,
+            "hasta": time.time() + 30.0,
+        }
+        self.responder(
+            f"¿dónde quiere crear la carpeta {limpio}?",
+            "normal",
+        )
+        print(
+            "CONTROL ATLAS v3.6.0 RC6: "
+            f"aclaración de destino pendiente carpeta={limpio!r}"
+        )
+        return True
+
+    def _atlas_destino_desde_respuesta(self, texto):
+        """Resuelve una respuesta corta a la pregunta '¿dónde?'.
+
+        Solo devuelve rutas reales y verificables. Nunca inventa una ubicación.
+        """
+        t = self._atlas_normalizar_orden_operativa(
+            self._atlas_quitar_wake(texto)
+        )
+        t = re.sub(
+            r"^(?:en|dentro\s+de|a|hacia)\s+(?:la\s+)?(?:carpeta\s+)?",
+            "",
+            t,
+        ).strip()
+
+        if t in {"aqui", "aqui mismo", "esta carpeta", "carpeta actual", "actual"}:
+            base = self._atlas_base_operacion_archivos()
+            return Path(base) if base and Path(base).is_dir() else None
+
+        if t in {"escritorio", "el escritorio", "mi escritorio"}:
+            p = Path(obtener_escritorio())
+            return p if p.exists() and p.is_dir() else None
+
+        if t in {
+            "documentos", "mis documentos", "documento",
+            "la carpeta documentos",
+        }:
+            candidatos = [
+                Path.home() / "Documents",
+                Path.home() / "Documentos",
+                Path.home() / "OneDrive" / "Documents",
+                Path.home() / "OneDrive" / "Documentos",
+            ]
+            return next(
+                (p for p in candidatos if p.exists() and p.is_dir()),
+                None,
+            )
+
+        destino = self._atlas_destino_carpeta(t)
+        return Path(destino) if destino and Path(destino).is_dir() else None
+
     def _atlas_manejar_aclaracion(self, original):
         if not self.atlas_aclaracion_pendiente:
             return False
-        t=self._atlas_quitar_wake(original)
-        pendiente=self.atlas_aclaracion_pendiente
+
+        pendiente = self.atlas_aclaracion_pendiente
+        hasta = float(pendiente.get("hasta", 0.0) or 0.0)
+        if hasta and time.time() > hasta:
+            self.atlas_aclaracion_pendiente = None
+            return False
+
+        t = self._atlas_quitar_wake(original)
+
+        if any(x in t for x in ["cancela", "cancelar", "dejalo", "déjalo", "ninguna", "ninguno"]):
+            self.atlas_aclaracion_pendiente = None
+            self.responder("cancelado. No hice cambios.", "normal")
+            return True
+
+        if pendiente.get("tipo") == "crear_carpeta_destino":
+            nombre = pendiente.get("nombre", "")
+            destino = self._atlas_destino_desde_respuesta(original)
+            if not destino:
+                self.responder(
+                    "no pude verificar esa ubicación. Puede decir, por ejemplo, "
+                    "en IPP, en el escritorio, en Documentos o aquí.",
+                    "confundida",
+                )
+                return True
+
+            self.atlas_aclaracion_pendiente = None
+            return self._atlas_preparar_creacion_carpeta(
+                nombre,
+                str(destino),
+            )
+
         if any(x in t for x in ["minimiza", "minimizar", "solo minimiza"]):
             self.atlas_aclaracion_pendiente=None
             return self._atlas_controlar_ventana("minimizar", pendiente.get("app", ""))
         if any(x in t for x in ["cierra", "cerrar", "cierralo", "cierrala"]):
             self.atlas_aclaracion_pendiente=None
             return self._atlas_controlar_ventana("cerrar", pendiente.get("app", ""))
-        if any(x in t for x in ["cancela", "dejalo", "ninguna"]):
-            self.atlas_aclaracion_pendiente=None
-            self.responder("cancelado.", "normal")
-            return True
         return False
+
+    @staticmethod
+    def _atlas_fuente_asr_confiable_para_escritura(fuente_asr):
+        """Solo Whisper o una entrada manual explícita pueden modificar disco."""
+        fuente = (fuente_asr or "manual").strip().lower()
+        return fuente in {"whisper", "manual", "teclado", "ui"}
+
+    def _atlas_es_accion_escritura(self, texto):
+        """Detecta órdenes que podrían modificar archivos o carpetas."""
+        t = self._atlas_normalizar_orden_operativa(self._atlas_quitar_wake(texto))
+        if not t:
+            return False
+
+        inicios = (
+            "crea ", "crear ",
+            "copia ", "copiar ",
+            "mueve ", "mover ",
+            "renombra ", "renombrar ",
+            "cambia el nombre", "cambiar el nombre",
+            "elimina ", "eliminar ",
+            "borra ", "borrar ",
+            "manda ", "envia ", "enviar ",
+            "organiza ", "organizar ",
+            "ordena ", "ordenar ",
+            "separa ",
+        )
+        return t.startswith(inicios)
+
+    def _atlas_confirmacion_afirmativa(self, texto):
+        t = self._atlas_quitar_wake(texto)
+        return t in {
+            "si", "sí", "confirmo", "confirma",
+            "de acuerdo", "hazlo", "adelante", "acepto",
+        }
+
+    def _atlas_bloquear_por_asr_inseguro(self, texto, fuente_asr):
+        """Impide escrituras reales cuando Whisper no confirmó la frase.
+
+        Vosk sigue siendo útil como activador y respaldo para consultas, pero una
+        transcripción usada porque Whisper todavía estaba cargando no tiene
+        precisión suficiente para elegir nombres/rutas de una operación de disco.
+        """
+        es_escritura = self._atlas_es_accion_escritura(texto)
+        confirma_pendiente = bool(
+            getattr(self, "atlas_confirmacion_pendiente", None)
+            and self._atlas_confirmacion_afirmativa(texto)
+        )
+        if not (es_escritura or confirma_pendiente):
+            return False
+
+        if self._atlas_fuente_asr_confiable_para_escritura(fuente_asr):
+            return False
+
+        print(
+            "CONTROL ATLAS v3.6.0 RC6: operación bloqueada; "
+            "Whisper no confirmó la transcripción."
+        )
+        self.responder(
+            "Whisper todavía se está preparando. Por seguridad no ejecutaré "
+            "una modificación de archivos con una transcripción provisional. "
+            "Repita la orden cuando indique que Whisper está listo.",
+            "confundida",
+        )
+        return True
 
     def _atlas_manejar_comando(self, original):
         t = self._atlas_normalizar_orden_operativa(self._atlas_quitar_wake(original))
@@ -19841,7 +20820,55 @@ Recuerdos relevantes:
                 return self._atlas_abrir_ruta(self.atlas_carpeta_actual, "carpeta")
             self.responder("todavía no tengo una carpeta concreta en el contexto.", "confundida")
             return True
-        # Creación real de documentos Office en la carpeta contextual.
+        # Historial verificable de acciones de archivos.
+        if any(
+            frase in t
+            for frase in [
+                "ultimas acciones de atlas",
+                "ultimas acciones",
+                "que hiciste con los archivos",
+                "que cambios hiciste",
+                "registro de atlas",
+                "historial de atlas",
+            ]
+        ):
+            return self._atlas_responder_historial_acciones()
+
+        # Creación real de carpetas con destino explícito. Debe ir antes del
+        # patrón genérico para que "Redes en IPP" no se convierta en el nombre.
+        m = re.match(
+            r"^(?:crea|crear)\s+(?:una\s+)?carpeta"
+            r"(?:\s+(?:llamada|llamado))?\s+(.+?)\s+"
+            r"(?:en|dentro\s+de)\s+(?:la\s+)?(?:carpeta\s+)?(.+)$",
+            t,
+        )
+        if m:
+            return self._atlas_preparar_creacion_carpeta(
+                m.group(1).strip(), m.group(2).strip()
+            )
+
+        # Creación real de documentos Office. Admite destino explícito.
+        m = re.match(
+            r"^(?:crea|crear)\s+(?:un|una)?\s*(?:documento\s+)?word"
+            r"(?:\s+(?:llamado|llamada))?\s*(.+?)\s+"
+            r"(?:en|dentro\s+de)\s+(?:la\s+)?(?:carpeta\s+)?(.+)$",
+            t,
+        )
+        if m:
+            return self._atlas_crear_documento(
+                "word", m.group(1).strip(), m.group(2).strip()
+            )
+        m = re.match(
+            r"^(?:crea|crear)\s+(?:un|una)?\s*(?:archivo\s+)?excel"
+            r"(?:\s+(?:llamado|llamada))?\s*(.+?)\s+"
+            r"(?:en|dentro\s+de)\s+(?:la\s+)?(?:carpeta\s+)?(.+)$",
+            t,
+        )
+        if m:
+            return self._atlas_crear_documento(
+                "excel", m.group(1).strip(), m.group(2).strip()
+            )
+
         m = re.match(r"^(?:crea|crear)\s+(?:un|una)?\s*(?:documento\s+)?word(?:\s+(?:llamado|llamada))?\s*(.*)$", t)
         if m:
             return self._atlas_crear_documento("word", m.group(1).strip())
@@ -19850,6 +20877,36 @@ Recuerdos relevantes:
             return self._atlas_crear_documento("excel", m.group(1).strip())
 
         # Renombrado seguro: no sobrescribe destinos existentes.
+        m = re.match(
+            r"^(?:cambia|cambiar)\s+(?:el\s+)?nombre\s+(?:de\s+)?"
+            r"(?:esta|la)\s+carpeta\s+(?:a|por|como)\s+(.+)$",
+            t,
+        )
+        if m:
+            return self._atlas_renombrar(
+                "esta carpeta", m.group(1).strip(), "carpeta"
+            )
+
+        m = re.match(
+            r"^(?:cambia|cambiar)\s+(?:el\s+)?nombre\s+(?:de\s+)?"
+            r"(?:este|el)\s+archivo\s+(?:a|por|como)\s+(.+)$",
+            t,
+        )
+        if m:
+            return self._atlas_renombrar(
+                "este archivo", m.group(1).strip(), "archivo"
+            )
+
+        m = re.match(
+            r"^(?:cambia|cambiar)\s+(?:el\s+)?nombre\s+(?:de\s+)?"
+            r"(.+?)\s+(?:a|por|como)\s+(.+)$",
+            t,
+        )
+        if m:
+            return self._atlas_renombrar(
+                m.group(1).strip(), m.group(2).strip()
+            )
+
         m = re.match(r"^renombra\s+(esta carpeta|la carpeta|este archivo|el archivo)\s+(?:a|como)\s+(.+)$", t)
         if m:
             tipo_ref = "carpeta" if "carpeta" in m.group(1) else "archivo"
@@ -19871,6 +20928,9 @@ Recuerdos relevantes:
             return self._atlas_mover(m.group(1).strip(), m.group(2).strip())
 
         # Eliminación siempre a Papelera y siempre con confirmación.
+        m = re.match(r"^(?:manda|envia|enviar)\s+(.+?)\s+a\s+(?:la\s+)?papelera$", t)
+        if m:
+            return self._atlas_eliminar(m.group(1).strip())
         m = re.match(r"^(?:elimina|eliminar|borra|borrar)\s+(.+)$", t)
         if m:
             ref=m.group(1).strip()
@@ -19880,9 +20940,15 @@ Recuerdos relevantes:
         if re.fullmatch(r"(?:organiza|ordenar|ordena)\s+(?:esta|la)\s+carpeta", t) or re.fullmatch(r"separa\s+(?:los\s+)?word\s+de\s+(?:los\s+)?excel", t):
             return self._atlas_organizar_carpeta_actual()
 
-        m = re.match(r"^(?:crea|crear)\s+(?:una\s+)?carpeta\s+(?:llamada\s+)?(.+)$", t)
+        m = re.match(
+            r"^(?:crea|crear)\s+(?:una\s+)?carpeta"
+            r"(?:\s+(?:llamada|llamado))?\s+(.+)$",
+            t,
+        )
         if m:
-            return self._atlas_crear_carpeta_contextual(m.group(1).strip())
+            return self._atlas_iniciar_aclaracion_destino_carpeta(
+                m.group(1).strip()
+            )
 
         # v3.5.3: orden explícita con raíz conocida + acción + hijo.
         # Ej.: "en la carpeta IPP ubica la carpeta segundo semestre".
