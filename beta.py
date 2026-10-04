@@ -38,10 +38,10 @@ import urllib.request
 from datetime import datetime, timedelta
 
 
-BETA_VERSION = "3.6.0"
+BETA_VERSION = "3.7.1"
 
 # ==========================================================
-# BETA v3.6.0 RC6 - CONTROL ATLAS FASE 2 + MIRADA CONTEXTUAL + AULA WORKSPACE
+# BETA v3.7.1 ASR COMANDOS DIRECTOS RC2 + AGENDA v3.7.0 RC4 - CANDIDATA
 # Mascota virtual + memoria + comandos aprendidos + clima
 # + Ollama/Qwen3 Instruct + memoria evolutiva + personalidad adaptativa
 # + voz híbrida: Vosk para activación y Faster-Whisper para dictado
@@ -236,6 +236,38 @@ BETA_VERSION = "3.6.0"
 # ==========================================================
 
 BASE_DIR = Path(__file__).resolve().parent
+ICONO_BETA = BASE_DIR / "beta_icono.ico"
+
+# Agenda Beta sigue aislada del repositorio estable durante las pruebas.
+# Se espera como carpeta hermana de A:\Beta:
+# A:\Beta_Google_Pruebas
+AGENDA_BETA_DIR = BASE_DIR.parent / "Beta_Google_Pruebas"
+AGENDA_BETA_PYTHON = AGENDA_BETA_DIR / ".venv" / "Scripts" / "python.exe"
+AGENDA_BETA_APP = AGENDA_BETA_DIR / "agenda_beta_RC1_2.py"
+AGENDA_BETA_SERVICE = AGENDA_BETA_DIR / "agenda_beta_servicio_RC2.py"
+AGENDA_CONFIRMACION_SEGUNDOS = 45
+
+
+
+def aplicar_icono_beta(ventana, heredar=True):
+    """Aplica el icono oficial de Beta a una ventana Tkinter.
+
+    En Windows, `default=` hace que las ventanas Toplevel descendientes
+    hereden automáticamente el mismo icono mientras no definan otro.
+    """
+    try:
+        if not ICONO_BETA.exists():
+            print(f"IDENTIDAD VISUAL: icono no encontrado: {ICONO_BETA}")
+            return False
+        if heredar:
+            ventana.iconbitmap(default=str(ICONO_BETA))
+        else:
+            ventana.iconbitmap(str(ICONO_BETA))
+        return True
+    except Exception as exc:
+        print(f"IDENTIDAD VISUAL: no fue posible aplicar el icono: {exc}")
+        return False
+
 CARPETA_MODELO = BASE_DIR / "modelo-es"
 BASE_DATOS = BASE_DIR / "beta.db"
 # No se fija una letra de unidad: si la carpeta Beta se mueve de C: a A:,
@@ -3434,6 +3466,7 @@ class GestorRespaldosBeta:
 class BetaApp:
     def __init__(self, root):
         self.root = root
+        aplicar_icono_beta(self.root, heredar=True)
         self.memoria = MemoriaBeta()
 
         # Beta v3.5.3: contexto operativo real de Atlas. No se usa como memoria
@@ -3470,6 +3503,11 @@ class BetaApp:
         self.orq_aclaracion_temperatura_hasta = 0.0
         self.recordatorio_alerta_activa = False
         self._recordatorios_inicializar_db()
+
+        # v3.7.0 RC1: confirmación efímera antes de crear eventos reales
+        # en Agenda Beta / Google Calendar.
+        self.agenda_confirmacion_pendiente = None
+        self.agenda_confirmacion_hasta = 0.0
 
         # Respaldos v2.7.1. Se ejecutan en segundo plano y nunca bloquean
         # el arranque de voz, Spotify o la biblioteca.
@@ -11044,9 +11082,11 @@ Recuerdos relevantes:
         return original
 
     def _registrar_calidad_asr_tutor(self, vosk, whisper, fusionado):
-        """Marca audio dudoso para no convertir errores del ASR en notas bajas."""
+        """Marca audio dudoso solo cuando la Tutora Python espera una respuesta."""
         self.tutor_python_asr_calidad_ultima = "normal"
         self.tutor_python_asr_detalle_ultimo = {}
+        if not self.tutor_python_pendiente:
+            return
         pendiente = self.tutor_python_pendiente or {}
         if (pendiente.get("modo_evaluacion") or "conceptual") != "conceptual":
             return
@@ -14927,6 +14967,19 @@ Recuerdos relevantes:
             elif 1 <= len(t.split()) <= 10:
                 return True
 
+        # v3.7.0 RC1: Beta acaba de repetir un evento de Agenda y espera sí/no.
+        if getattr(self, "agenda_confirmacion_pendiente", None):
+            limite = float(getattr(self, "agenda_confirmacion_hasta", 0.0) or 0.0)
+            if limite and ahora > limite:
+                self.agenda_confirmacion_pendiente = None
+                self.agenda_confirmacion_hasta = 0.0
+            elif re.fullmatch(
+                r"(?:si|sí|confirmo|confirma|de acuerdo|correcto|hazlo|adelante|acepto|"
+                r"no|cancela|cancelar|dejalo|déjalo)",
+                t,
+            ):
+                return True
+
         # v3.5.3: una confirmación explícita de una operación sensible habilita
         # una sola respuesta corta sin repetir el wake word. La biometría sigue
         # siendo obligatoria en la capa de audio.
@@ -15631,6 +15684,18 @@ Recuerdos relevantes:
         if self._orq_aclaracion_temperatura_activa():
             return True
 
+        # v3.7.0 RC1: las órdenes de Agenda crean datos reales y pueden
+        # sincronizarse con Google Calendar. Siempre requieren Whisper.
+        if any(x in texto_normal for x in (
+            "agenda", "agendar", "calendario",
+        )):
+            return True
+
+        if getattr(self, "agenda_confirmacion_pendiente", None):
+            limite = float(getattr(self, "agenda_confirmacion_hasta", 0.0) or 0.0)
+            if not limite or ahora <= limite:
+                return True
+
         # v3.6.0 RC5: cualquier continuación que pueda terminar en una
         # modificación real del disco debe pasar por Whisper, aunque no repita
         # el wake word. Vosk conserva el rol de filtro/activador.
@@ -15768,6 +15833,46 @@ Recuerdos relevantes:
         # Spotify puede llegar como "espotifai"/"spotifai" por su pronunciación.
         t = self._spotify_normalizar_aliases(texto_vosk)
         palabras = set(t.split())
+
+        # v3.7.1 ASR RC2: abrir/mostrar la interfaz de Agenda es una acción
+        # local, no destructiva y sin escritura. Si Vosk reconoce exactamente
+        # uno de estos comandos cortos, conservarlo evita que Whisper convierta
+        # "abre agenda" en formas erróneas como "avryagenda". La biometría y
+        # el wake word ya fueron validados antes de llegar a este punto.
+        comandos_agenda_visual_rapidos = {
+            "beta abre agenda",
+            "beta abrir agenda",
+            "beta muestra agenda",
+            "beta mostrar agenda",
+            "beta abre calendario",
+            "beta abrir calendario",
+            "beta muestra calendario",
+        }
+        if t in comandos_agenda_visual_rapidos:
+            return True
+
+        # v3.7.1 ASR RC2: Microsoft Word presenta el mismo patrón observado con
+        # Agenda: Vosk reconoce bien órdenes cortas como "Beta abre Word", pero
+        # Whisper puede degradarlas a "Every Word" / "Better every word".
+        # Atlas ya posee una normalización fonética CONTEXTUAL para Word
+        # (worth/work/world/award -> word) que solo actúa dentro de una orden
+        # operativa. La reutilizamos aquí y aceptamos únicamente órdenes EXACTAS
+        # de apertura, sin nombres de archivo ni contenido adicional.
+        t_atlas = self._atlas_normalizar_orden_operativa(t)
+        comandos_word_rapidos = {
+            "beta abre word",
+            "beta abre el word",
+            "beta abre microsoft word",
+            "beta abre office word",
+        }
+        if t_atlas in comandos_word_rapidos:
+            return True
+
+        # Las órdenes que crean/modifican datos de Agenda siguen obligatoriamente
+        # por Whisper. "Beta agenda...", "agendar..." y cualquier otra frase
+        # con Agenda/Calendar NO entra al modo rápido.
+        if palabras & {"agenda", "agendar", "calendario"}:
+            return False
 
         # Consultas locales/directas que no necesitan análisis lingüístico complejo.
         if palabras & {"temperatura", "clima", "pronostico"}:
@@ -16955,6 +17060,14 @@ Recuerdos relevantes:
 
         if self.pregunta_curiosa_pendiente and ahora > self.pregunta_curiosa_hasta:
             self.cancelar_pregunta_curiosa("tiempo agotado")
+
+        # AGENDA BETA v3.7.0 RC1: una confirmación de evento puede llegar
+        # sin repetir el wake word porque Beta acaba de formular la pregunta.
+        if getattr(self, "agenda_confirmacion_pendiente", None):
+            wake_agenda = self._wake_en_inicio(texto_normal, incluir_ambiguos=False)
+            if wake_agenda is None:
+                if self._agenda_resolver_confirmacion(texto_original, fuente_asr):
+                    return
 
         # CONTROL ATLAS: después de preguntar cuál coincidencia abrir, aceptamos
         # una única selección corta sin wake word. La voz ya fue validada.
@@ -21335,6 +21448,465 @@ Recuerdos relevantes:
             self.responder("abriendo Google.", "feliz")
         return True
 
+    # ======================================================
+    # AGENDA BETA v3.7.0 RC1
+    # ======================================================
+
+    @staticmethod
+    def _agenda_numero_palabra(valor):
+        numeros = {
+            "una": 1, "uno": 1, "dos": 2, "tres": 3, "cuatro": 4,
+            "cinco": 5, "seis": 6, "siete": 7, "ocho": 8, "nueve": 9,
+            "diez": 10, "once": 11, "doce": 12, "trece": 13,
+            "catorce": 14, "quince": 15, "dieciseis": 16,
+            "diecisiete": 17, "dieciocho": 18, "diecinueve": 19,
+            "veinte": 20, "veintiuno": 21, "veintidos": 22,
+            "veintitres": 23, "veinticuatro": 24, "veinticinco": 25,
+            "veintiseis": 26, "veintisiete": 27, "veintiocho": 28,
+            "veintinueve": 29, "treinta": 30, "treinta y uno": 31,
+        }
+        s = normalizar(str(valor or "")).strip()
+        if s.isdigit():
+            return int(s)
+        return numeros.get(s)
+
+    def _agenda_es_intencion(self, texto):
+        t = normalizar(texto or "")
+        return any(x in t for x in (
+            "agenda", "agendar", "calendario",
+            "anota en la agenda", "anotar en la agenda",
+        ))
+
+    def _agenda_disponible(self):
+        faltan = []
+        for p in (AGENDA_BETA_PYTHON, AGENDA_BETA_APP, AGENDA_BETA_SERVICE):
+            if not p.exists():
+                faltan.append(str(p))
+        return (not faltan), faltan
+
+    def _agenda_abrir_visual(self):
+        disponible, faltan = self._agenda_disponible()
+        if not disponible:
+            print("AGENDA BETA: faltan archivos:", faltan)
+            self.responder(
+                "la Agenda Beta todavía no está disponible en su carpeta de integración.",
+                "confundida",
+            )
+            return True
+        try:
+            subprocess.Popen(
+                [str(AGENDA_BETA_PYTHON), str(AGENDA_BETA_APP)],
+                cwd=str(AGENDA_BETA_DIR),
+            )
+            self.responder("abriendo Agenda Beta.", "feliz")
+        except Exception as exc:
+            print("AGENDA BETA: error abriendo interfaz:", exc)
+            self.responder("no pude abrir la Agenda Beta.", "molesta")
+        return True
+
+    def _agenda_extraer_fecha(self, texto):
+        t = normalizar(texto or "")
+        ahora = datetime.now()
+
+        # Relativas.
+        if "pasado manana" in t:
+            return (ahora + timedelta(days=2)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+        if re.search(r"\bmanana\b", t):
+            return (ahora + timedelta(days=1)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+        if re.search(r"\bhoy\b", t):
+            return ahora.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        meses = (
+            "enero|febrero|marzo|abril|mayo|junio|julio|agosto|"
+            "septiembre|setiembre|octubre|noviembre|diciembre"
+        )
+        dias_palabra = (
+            r"treinta y uno|veintinueve|veintiocho|veintisiete|veintiseis|"
+            r"veinticinco|veinticuatro|veintitres|veintidos|veintiuno|"
+            r"diecinueve|dieciocho|diecisiete|dieciseis|quince|catorce|"
+            r"trece|doce|once|diez|nueve|ocho|siete|seis|cinco|cuatro|"
+            r"tres|dos|uno|una|veinte|treinta|\d{1,2}"
+        )
+        patron = re.compile(
+            rf"(?:el\s+)?(?:dia\s+)?({dias_palabra})\s+de\s+({meses})"
+            rf"(?:\s+(?:de|del)\s+(\d{{4}}))?"
+        )
+        m = patron.search(t)
+        if not m:
+            return None
+
+        dia = self._agenda_numero_palabra(m.group(1))
+        mes = self._orq_mes_numero(m.group(2))
+        anio = int(m.group(3) or ahora.year)
+
+        if not dia or not mes:
+            return None
+
+        try:
+            dt = datetime(anio, mes, dia)
+        except Exception:
+            return None
+
+        # Si no dijo año y la fecha ya pasó claramente, usamos la siguiente.
+        if not m.group(3) and dt.date() < ahora.date():
+            try:
+                dt = dt.replace(year=anio + 1)
+            except Exception:
+                return None
+        return dt
+
+    def _agenda_extraer_hora(self, texto):
+        t = normalizar(texto or "")
+
+        # Casos explícitos.
+        if re.search(r"\bmediodia\b", t):
+            return 12, 0
+        if re.search(r"\bmedianoche\b", t):
+            return 0, 0
+
+        horas_palabra = (
+            r"veintitres|veintidos|veintiuno|veinte|diecinueve|dieciocho|"
+            r"diecisiete|dieciseis|quince|catorce|trece|doce|once|diez|"
+            r"nueve|ocho|siete|seis|cinco|cuatro|tres|dos|uno|una|\d{1,2}"
+        )
+
+        m = re.search(
+            rf"(?:a\s+las?|a\s+la)\s+({horas_palabra})"
+            rf"(?::(\d{{2}}))?"
+            rf"(?:\s+y\s+(media|cuarto))?"
+            rf"(?:\s+horas?)?"
+            rf"\s*(?:de\s+la\s+(manana|tarde|noche))?",
+            t,
+        )
+        if not m:
+            return None
+
+        h = self._agenda_numero_palabra(m.group(1))
+        if h is None:
+            return None
+
+        mi = int(m.group(2) or 0)
+        fraccion = m.group(3) or ""
+        tramo = m.group(4) or ""
+
+        if fraccion == "media":
+            mi = 30
+        elif fraccion == "cuarto":
+            mi = 15
+
+        if tramo in {"tarde", "noche"}:
+            if h < 12:
+                h += 12
+        elif tramo == "manana":
+            if h == 12:
+                h = 0
+
+        # "12 de la noche" se interpreta como medianoche.
+        if tramo == "noche" and h == 12:
+            h = 0
+
+        if 0 <= h <= 23 and 0 <= mi <= 59:
+            return h, mi
+        return None
+
+    @staticmethod
+    def _agenda_canonizar_titulo(titulo):
+        """Corrige variantes ASR frecuentes sin alterar el resto del título.
+
+        RC4 incorpora variantes observadas en voz real para Kinesiología y
+        conserva nombres propios frecuentes con su ortografía correcta.
+        """
+        titulo = re.sub(r"\s+", " ", str(titulo or "")).strip(" ,.-")
+        if not titulo:
+            return "evento"
+
+        # Caso real de Whisper observado en RC3:
+        # "Quinesología, Benjamin" -> "Kinesiología Benjamín".
+        titulo = re.sub(
+            r"\b(?:quinesolog[ií]a|quinesiolog[ií]a|kinesolog[ií]a|"
+            r"kinesiolog[ií]a|quinesilog[ií]a)\b",
+            "Kinesiología",
+            titulo,
+            flags=re.IGNORECASE,
+        )
+        titulo = re.sub(
+            r"\bbenjamin\b",
+            "Benjamín",
+            titulo,
+            flags=re.IGNORECASE,
+        )
+        titulo = re.sub(
+            r"\brafael\b",
+            "Rafael",
+            titulo,
+            flags=re.IGNORECASE,
+        )
+        # Whisper puede usar comas como separación prosódica entre el concepto
+        # y el nombre propio: "Quinesología, Benjamin".
+        titulo = re.sub(
+            r"\bKinesiología\s*,\s*Benjamín\b",
+            "Kinesiología Benjamín",
+            titulo,
+            flags=re.IGNORECASE,
+        )
+
+        return re.sub(r"\s+", " ", titulo).strip(" ,.-") or "evento"
+
+    def _agenda_extraer_titulo(self, texto):
+        """Extrae el título preservando tildes y corrigiendo variantes ASR conocidas."""
+        original = str(texto or "").strip()
+
+        # Quitamos la palabra de activación de Agenda sobre el texto original,
+        # sin normalizar el contenido que acabará guardado.
+        original = re.sub(
+            r"^(?:agenda|agendar|calendario|anota(?:r)?\s+en\s+(?:la\s+)?agenda)"
+            r"\s*[,:\-]*\s*",
+            "",
+            original,
+            flags=re.IGNORECASE,
+        )
+
+        meses = (
+            r"enero|febrero|marzo|abril|mayo|junio|julio|agosto|"
+            r"septiembre|setiembre|octubre|noviembre|diciembre"
+        )
+        dias = (
+            r"treinta\s+y\s+uno|veintinueve|veintiocho|veintisiete|"
+            r"veintis[eé]is|veinticinco|veinticuatro|veintitr[eé]s|"
+            r"veintid[oó]s|veintiuno|diecinueve|dieciocho|diecisiete|"
+            r"diecis[eé]is|quince|catorce|trece|doce|once|diez|nueve|"
+            r"ocho|siete|seis|cinco|cuatro|tres|dos|uno|una|veinte|"
+            r"treinta|\d{1,2}"
+        )
+
+        # Cortamos solo al comienzo de una fecha real.
+        m = re.search(
+            rf"\s+(?:para\s+)?(?:el\s+)?(?:d[ií]a\s+)?"
+            rf"(?:{dias})\s+de\s+(?:{meses})\b",
+            original,
+            flags=re.IGNORECASE,
+        )
+        if m:
+            titulo = original[:m.start()].strip(" ,.-")
+        else:
+            m_rel = re.search(
+                r"\s+(?:para\s+)?(?:hoy|mañana|manana|pasado\s+mañana|pasado\s+manana)\b",
+                original,
+                flags=re.IGNORECASE,
+            )
+            titulo = (
+                original[:m_rel.start()].strip(" ,.-")
+                if m_rel
+                else original.strip(" ,.-")
+            )
+
+        # Error ASR observado: "ORA MÉDICA".
+        titulo = re.sub(
+            r"\bora\s+m[eé]dica\b",
+            "hora médica",
+            titulo,
+            flags=re.IGNORECASE,
+        )
+        titulo = re.sub(r"\s+", " ", titulo).strip(" ,.-")
+        return self._agenda_canonizar_titulo(titulo)
+
+    def _agenda_extraer_lugar(self, texto):
+        t = normalizar(texto or "")
+        # Buscamos "en ..." solo después de la expresión horaria.
+        hora_pat = re.search(
+            r"(?:a\s+las?|a\s+la)\s+.+?(?=\s+en\s+|$)",
+            t,
+        )
+        if not hora_pat:
+            return ""
+        resto = t[hora_pat.end():].strip()
+        if resto.startswith("en "):
+            lugar = resto[3:].strip(" ,.-")
+            lugar = re.split(
+                r"\s+(?:y\s+)?(?:avisame|avisa me|recuerdame|recordatorio)\b",
+                lugar,
+                maxsplit=1,
+            )[0].strip()
+            return lugar
+        return ""
+
+    def _agenda_fecha_humana(self, dt):
+        meses = [
+            "", "enero", "febrero", "marzo", "abril", "mayo", "junio",
+            "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+        ]
+        return f"{dt.day} de {meses[dt.month]} de {dt.year}"
+
+    def _agenda_enviar_servicio(self, payload):
+        disponible, faltan = self._agenda_disponible()
+        if not disponible:
+            return False, {
+                "error": "faltan archivos de Agenda Beta",
+                "faltan": faltan,
+            }
+        try:
+            proc = subprocess.run(
+                [str(AGENDA_BETA_PYTHON), str(AGENDA_BETA_SERVICE)],
+                input=json.dumps(payload, ensure_ascii=False),
+                text=True,
+                capture_output=True,
+                cwd=str(AGENDA_BETA_DIR),
+                timeout=30,
+            )
+            salida = (proc.stdout or "").strip().splitlines()
+            if not salida:
+                return False, {
+                    "error": (proc.stderr or "sin respuesta del servicio").strip()
+                }
+            try:
+                datos = json.loads(salida[-1])
+            except Exception:
+                return False, {
+                    "error": "respuesta inválida del servicio",
+                    "stdout": proc.stdout,
+                    "stderr": proc.stderr,
+                }
+            return bool(datos.get("ok")), datos
+        except Exception as exc:
+            return False, {"error": str(exc)}
+
+    def _agenda_iniciar_confirmacion(self, original):
+        fecha = self._agenda_extraer_fecha(original)
+        hora = self._agenda_extraer_hora(original)
+
+        if not fecha:
+            self.responder(
+                "entendí que quiere agendar un evento, pero me falta una fecha concreta.",
+                "confundida",
+            )
+            return True
+
+        if not hora:
+            self.responder(
+                "entendí la fecha, pero me falta una hora concreta para el evento.",
+                "confundida",
+            )
+            return True
+
+        titulo = self._agenda_extraer_titulo(original)
+        lugar = self._agenda_extraer_lugar(original)
+        h, mi = hora
+        fecha_evento = fecha.replace(hour=h, minute=mi, second=0, microsecond=0)
+
+        payload = {
+            "accion": "crear",
+            "titulo": titulo,
+            "fecha": fecha_evento.strftime("%Y-%m-%d"),
+            "hora": fecha_evento.strftime("%H:%M"),
+            "lugar": lugar,
+            "notas": "",
+            "recordatorio_minutos": 1440,
+        }
+
+        self.agenda_confirmacion_pendiente = payload
+        self.agenda_confirmacion_hasta = time.time() + AGENDA_CONFIRMACION_SEGUNDOS
+
+        resumen = (
+            f"entendí: {titulo}, el {self._agenda_fecha_humana(fecha_evento)}, "
+            f"a las {fecha_evento:%H:%M}"
+        )
+        if lugar:
+            resumen += f", en {lugar}"
+        resumen += ". El aviso por correo será 24 horas antes. ¿Confirma?"
+
+        self.responder(resumen, "normal")
+        print(
+            "AGENDA BETA v3.7.0 RC4: confirmación pendiente "
+            + json.dumps(payload, ensure_ascii=False)
+        )
+        return True
+
+    def _agenda_resolver_confirmacion(self, texto, fuente_asr="manual"):
+        pendiente = getattr(self, "agenda_confirmacion_pendiente", None)
+        if not pendiente:
+            return False
+
+        if self.agenda_confirmacion_hasta and time.time() > self.agenda_confirmacion_hasta:
+            self.agenda_confirmacion_pendiente = None
+            self.agenda_confirmacion_hasta = 0.0
+            return False
+
+        t = normalizar(texto or "")
+        negativas = {"no", "cancela", "cancelar", "dejalo"}
+        afirmativas = {
+            "si", "confirmo", "confirma", "de acuerdo",
+            "correcto", "hazlo", "adelante", "acepto",
+        }
+
+        if t in negativas:
+            self.agenda_confirmacion_pendiente = None
+            self.agenda_confirmacion_hasta = 0.0
+            self.responder("cancelado. No agregué nada a la agenda.", "normal")
+            return True
+
+        if t not in afirmativas:
+            return False
+
+        fuente = (fuente_asr or "manual").strip().lower()
+        if fuente not in {"whisper", "manual", "teclado", "ui"}:
+            self.responder(
+                "por seguridad necesito confirmar ese sí con Whisper. Repita la confirmación.",
+                "confundida",
+            )
+            return True
+
+        payload = dict(pendiente)
+        self.agenda_confirmacion_pendiente = None
+        self.agenda_confirmacion_hasta = 0.0
+
+        ok, datos = self._agenda_enviar_servicio(payload)
+        if ok:
+            if datos.get("sincronizado"):
+                try:
+                    fecha_natural = self._agenda_fecha_humana(
+                        datetime.strptime(payload["fecha"], "%Y-%m-%d")
+                    )
+                except Exception:
+                    fecha_natural = payload["fecha"]
+                self.responder(
+                    f"evento {payload['titulo']} agendado para el "
+                    f"{fecha_natural} a las {payload['hora']}. "
+                    "Quedó sincronizado con Google Calendar y el aviso por correo "
+                    "está configurado 24 horas antes.",
+                    "feliz",
+                )
+            else:
+                self.responder(
+                    "guardé el evento localmente, pero la sincronización con Google "
+                    "quedó pendiente. Puede reintentarse desde Agenda Beta.",
+                    "confundida",
+                )
+        else:
+            print("AGENDA BETA: servicio error:", datos)
+            self.responder(
+                "no pude guardar el evento en Agenda Beta. No afirmaré que quedó agendado.",
+                "molesta",
+            )
+        return True
+
+    def _agenda_manejar(self, original):
+        t = normalizar(original or "")
+
+        if any(x in t for x in (
+            "abre agenda", "abrir agenda", "muestra agenda", "mostrar agenda",
+            "abre calendario", "abrir calendario", "muestra calendario",
+        )):
+            return self._agenda_abrir_visual()
+
+        if self._agenda_es_intencion(t):
+            return self._agenda_iniciar_confirmacion(original)
+
+        return False
+
     def _recordatorios_conexion(self):
         return sqlite3.connect(BASE_DATOS, timeout=15)
 
@@ -21395,7 +21967,7 @@ Recuerdos relevantes:
 
     def _recordatorios_extraer_hora(self, texto):
         t=normalizar(texto or "")
-        m=re.search(r"(?:a\s+las?|a\s+la)\s+(\d{1,2})(?::(\d{2}))?\s*(?:horas?)?(?:\s+de\s+la\s+(manana|tarde|noche))?", t)
+        m=re.search(r"(?:a\s+las?|a\s+la)\s+(\d{1,2})(?::(\d{2}))?(?:\s+horas?)?\s*(?:de\s+la\s+(manana|tarde|noche))?", t)
         if not m:
             return None
         h=int(m.group(1)); mi=int(m.group(2) or 0); tramo=m.group(3) or ""
@@ -21774,6 +22346,11 @@ Recuerdos relevantes:
             return False
 
         # 1) Tareas persistentes: nunca pasan por memoria inteligente ni RAG.
+        if self._agenda_es_intencion(t):
+            self.orquestador_ultima_intencion="agenda"
+            print("ORQUESTADOR v3.7.0 RC4: intención=agenda")
+            return self._agenda_manejar(original)
+
         if self._orq_es_recordatorio(t):
             self.orquestador_ultima_intencion="recordatorio"
             print("ORQUESTADOR v3.5.3: intención=recordatorio")
