@@ -1,0 +1,48 @@
+BETA v3.7.2 ESTABLE
+===================
+
+Fecha de promocion final: 2026-10-07 20:20:42
+Archivo principal: A:\Beta\beta.py
+SHA256 beta.py: 6ADDA7B99F36B350118A9DDA131BD33B281CE3FA9E8356EE3E436C3457675002
+Origen definitivo: Beta v3.7.2 Control Atlas Fase 3 RC6
+
+VALIDACION
+----------
+- RC5: 115/115 pruebas automaticas correctas.
+- RC6: 18/18 pruebas focalizadas correctas.
+- RC6 validada mediante pruebas reales de voz.
+- Configuracion/configuraciones de Windows: correcto.
+- Mostrar/muestrame escritorio: correcto.
+- Pantallazos independientes de pantalla 1, 2 y 3: correcto.
+- Seleccion contextual de monitor: correcto.
+- Cortafuegos ASR de capturas deformadas: correcto.
+- Volumen global real de Windows mediante Pycaw: correcto.
+- Consulta, ajuste, mute y unmute: correcto.
+- Bloqueo del equipo con confirmacion: correcto.
+- Cierre de sesion con confirmacion: correcto.
+- Reinicio con confirmacion: correcto.
+- Apagado con confirmacion: correcto.
+
+CONTROL ATLAS FASE 3
+--------------------
+- Abrir Configuracion de Windows.
+- Mostrar escritorio.
+- Pantallazos multi-monitor.
+- Volumen real del sistema.
+- Consulta de volumen y mute.
+- Ajuste absoluto de volumen.
+- Silenciar y reactivar sonido.
+- Bloquear Windows.
+- Cerrar sesion.
+- Reiniciar computador.
+- Apagar computador.
+- Confirmacion obligatoria para acciones criticas.
+- Cortafuegos contra respuestas ficticias de Ollama.
+
+RESPALDOS
+---------
+v3.7.1 estable:
+A:\Beta_Versiones_Antiguas\Beta_v3.7.1_ESTABLE
+
+Desarrollo v3.7.2 RC1-RC6:
+A:\Beta_Versiones_Antiguas\Beta_v3.7.2_Desarrollo

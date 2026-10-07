@@ -38,10 +38,10 @@ import urllib.request
 from datetime import datetime, timedelta
 
 
-BETA_VERSION = "3.7.1"
+BETA_VERSION = "3.7.2"
 
 # ==========================================================
-# BETA v3.7.1 ASR COMANDOS DIRECTOS RC2 + AGENDA v3.7.0 RC4 - CANDIDATA
+# BETA v3.7.2 ESTABLE - CONTROL ATLAS FASE 3 + ASR v3.7.1 + AGENDA v3.7.0 RC4
 # Mascota virtual + memoria + comandos aprendidos + clima
 # + Ollama/Qwen3 Instruct + memoria evolutiva + personalidad adaptativa
 # + voz híbrida: Vosk para activación y Faster-Whisper para dictado
@@ -3491,6 +3491,12 @@ class BetaApp:
         # Nunca se guardan como memoria personal.
         self.atlas_confirmacion_pendiente = None
         self.atlas_confirmacion_hasta = 0.0
+
+        # v3.7.2 Fase 3 RC3: selección efímera de monitor para pantallazos.
+        # Si Beta pregunta "¿pantalla 1, 2 o 3?", la siguiente respuesta corta
+        # puede llegar sin repetir el wake word. Nunca se persiste en memoria.
+        self.atlas_pantallazo_pendiente = False
+        self.atlas_pantallazo_hasta = 0.0
 
         # v3.5.3: recordatorios persistentes y orquestador de intenciones.
         # El recordatorio vive en SQLite, separado de memoria personal y del
@@ -14967,6 +14973,15 @@ Recuerdos relevantes:
             elif 1 <= len(t.split()) <= 10:
                 return True
 
+        # v3.7.2 Fase 3 RC3: Beta acaba de pedir elegir pantalla para un
+        # pantallazo. Una respuesta breve como "dos" es continuación explícita,
+        # mantiene biometría obligatoria y no exige repetir el wake word.
+        if self._atlas_pantallazo_pendiente_activo():
+            if self._atlas_numero_pantalla_respuesta(t) is not None:
+                return True
+            if re.fullmatch(r"(?:cancela|cancelar|ninguna|ninguno|dejalo|déjalo)", t):
+                return True
+
         # v3.7.0 RC1: Beta acaba de repetir un evento de Agenda y espera sí/no.
         if getattr(self, "agenda_confirmacion_pendiente", None):
             limite = float(getattr(self, "agenda_confirmacion_hasta", 0.0) or 0.0)
@@ -15830,6 +15845,18 @@ Recuerdos relevantes:
         if getattr(self, "atlas_confirmacion_pendiente", None):
             return False
 
+        # v3.7.2 Fase 3 RC3: la respuesta breve a "pantalla 1, 2 o 3"
+        # es segura y local; si la selección pendiente está activa, Vosk puede
+        # resolverla sin una segunda pasada por Whisper.
+        if self._atlas_pantallazo_pendiente_activo():
+            if self._atlas_numero_pantalla_respuesta(texto_vosk) is not None:
+                return True
+            if re.fullmatch(
+                r"(?:cancela|cancelar|ninguna|ninguno|dejalo|déjalo)",
+                normalizar(texto_vosk or ""),
+            ):
+                return True
+
         # Spotify puede llegar como "espotifai"/"spotifai" por su pronunciación.
         t = self._spotify_normalizar_aliases(texto_vosk)
         palabras = set(t.split())
@@ -15866,6 +15893,69 @@ Recuerdos relevantes:
             "beta abre office word",
         }
         if t_atlas in comandos_word_rapidos:
+            return True
+
+        # v3.7.2 Control Atlas Fase 3 RC1: órdenes Windows locales, cortas y
+        # reversibles pueden conservar la transcripción clara de Vosk. El
+        # conjunto es deliberadamente EXACTO para no capturar frases con
+        # contenido adicional ni desviar consultas hacia acciones del sistema.
+        comandos_windows_rapidos = {
+            "beta abre configuracion",
+            "beta abrir configuracion",
+            "beta abre la configuracion",
+            "beta abre configuracion de windows",
+            "beta abre configuraciones",
+            "beta abrir configuraciones",
+            "beta abre las configuraciones",
+            "beta abre configuraciones de windows",
+            "beta abre la configuracion de windows",
+            "beta muestra escritorio",
+            "beta muestra el escritorio",
+            "beta mostrar escritorio",
+            "beta mostrar el escritorio",
+            "beta muestrame escritorio",
+            "beta muestrame el escritorio",
+            "beta ensename escritorio",
+            "beta ensename el escritorio",
+            "beta sube volumen",
+            "beta sube el volumen",
+            "beta subir volumen",
+            "beta subir el volumen",
+            "beta baja volumen",
+            "beta baja el volumen",
+            "beta bajar volumen",
+            "beta bajar el volumen",
+            # v3.7.2 RC4: mute/unmute y consultas exactas pueden usar Vosk
+            # directo porque no contienen nombres propios ni valores numéricos.
+            "beta silencia volumen",
+            "beta silencia el volumen",
+            "beta silencia el computador",
+            "beta silencia el equipo",
+            "beta quita el sonido",
+            "beta activa sonido",
+            "beta activa el sonido",
+            "beta vuelve a activar el sonido",
+            "beta quita el silencio",
+            "beta cuanto esta el volumen",
+            "beta en cuanto esta el volumen",
+            "beta cual es el volumen",
+            "beta esta silenciado",
+            "beta esta silenciado el volumen",
+            "beta esta silenciado el computador",
+        }
+        if t_atlas in comandos_windows_rapidos:
+            return True
+
+        # v3.7.2 Control Atlas Fase 3 RC5: las acciones críticas de sesión/energía
+        # nunca se ejecutan desde Vosk directo. La orden inicial debe pasar por
+        # Whisper y, además, requiere una segunda confirmación antes de ejecutar.
+        if self._atlas_detectar_accion_sistema_critica(t_atlas):
+            return False
+
+        # Un pantallazo solo entra por Vosk directo cuando el usuario identifica
+        # expresamente la pantalla/monitor. No existe captura general en Fase 3:
+        # "pantallazo de la pantalla 2" sí; "toma una captura" no.
+        if self._atlas_monitor_captura_solicitado(t_atlas) is not None:
             return True
 
         # Las órdenes que crean/modifican datos de Agenda siguen obligatoriamente
@@ -17068,6 +17158,13 @@ Recuerdos relevantes:
             if wake_agenda is None:
                 if self._agenda_resolver_confirmacion(texto_original, fuente_asr):
                     return
+
+        # CONTROL ATLAS v3.7.2 RC4: después de pedir "pantalla 1, 2 o 3",
+        # aceptamos una única selección corta con o sin wake word. La voz ya fue
+        # validada por la capa de audio y nunca se delega esta respuesta a Ollama.
+        if self._atlas_pantallazo_pendiente_activo():
+            if self._atlas_resolver_pantallazo_pendiente(texto_original):
+                return
 
         # CONTROL ATLAS: después de preguntar cuál coincidencia abrir, aceptamos
         # una única selección corta sin wake word. La voz ya fue validada.
@@ -18319,6 +18416,19 @@ Recuerdos relevantes:
             t = re.sub(r"\bbaje\b", "baja", t)
             t = re.sub(r"\baumente\b", "aumenta", t)
             t = re.sub(r"\bdisminuya\b", "disminuye", t)
+            # v3.7.2 RC4: variantes reales de ASR observadas al consultar el
+            # volumen. Se corrigen solo dentro del router operativo de Atlas.
+            t = re.sub(r"\ben cuanto tal volumen\b", "en cuanto esta el volumen", t)
+            t = re.sub(r"\ben cuanto el volumen\b", "en cuanto esta el volumen", t)
+            t = re.sub(r"\bcuanto el volumen\b", "cuanto esta el volumen", t)
+            t = re.sub(r"\bcuanto esta volumen\b", "cuanto esta el volumen", t)
+            t = re.sub(r"\ben cuanto esta volumen\b", "en cuanto esta el volumen", t)
+
+        # Whisper puede devolver "¿Estás silenciado?" cuando el usuario pregunta
+        # por el estado de mute. Atlas lo trata como consulta del audio del sistema
+        # y nunca permite que termine en Ollama con una afirmación no verificada.
+        if "silenciado" in t:
+            t = re.sub(r"\bestas silenciado\b", "esta silenciado", t)
 
         # Alias de aplicaciones solo si la frase ya parece una orden operativa.
         contexto_control = bool(re.search(r"\b(?:abre|abrir|inicia|iniciar|pon|minimiza|maximiza|restaura|cierra)\b", t))
@@ -18800,6 +18910,446 @@ Recuerdos relevantes:
         except Exception as error:
             print("CONTROL ATLAS: error controlando ventana:", error)
             self.responder("no pude realizar esa acción sobre la ventana.", "molesta")
+        return True
+
+    # -------------------- Control Windows v3.7.2 RC4 --------------------
+    def _atlas_windows_pulsar_tecla(self, vk, repeticiones=1):
+        """Envía una tecla multimedia de Windows mediante Win32 sin dependencias nuevas."""
+        if os.name != "nt":
+            return False
+        try:
+            user32 = ctypes.windll.user32
+            KEYEVENTF_KEYUP = 0x0002
+            repeticiones = max(1, min(int(repeticiones or 1), 20))
+            for indice in range(repeticiones):
+                user32.keybd_event(int(vk), 0, 0, 0)
+                user32.keybd_event(int(vk), 0, KEYEVENTF_KEYUP, 0)
+                if indice + 1 < repeticiones:
+                    time.sleep(0.035)
+            return True
+        except Exception as error:
+            print("CONTROL ATLAS v3.7.2 RC4: error enviando tecla Windows:", error)
+            return False
+
+    def _atlas_abrir_configuracion_windows(self):
+        if os.name != "nt":
+            self.responder("la configuración de Windows solo está disponible en el equipo Windows de Atlas.", "confundida")
+            return True
+        try:
+            try:
+                os.startfile("ms-settings:")
+            except Exception:
+                subprocess.Popen(["explorer.exe", "ms-settings:"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.responder("abriendo la configuración de Windows.", "feliz")
+            print("CONTROL ATLAS v3.7.2 RC4: configuración Windows abierta")
+        except Exception as error:
+            print("CONTROL ATLAS v3.7.2 RC4: no pude abrir Configuración:", error)
+            self.responder("no pude abrir la configuración de Windows.", "molesta")
+        return True
+
+    def _atlas_mostrar_escritorio(self):
+        if os.name != "nt":
+            self.responder("mostrar el escritorio solo está disponible en Windows.", "confundida")
+            return True
+        try:
+            # Shell.Application.MinimizeAll es idempotente: repetir la orden no
+            # vuelve a restaurar las ventanas como sí ocurre con Win+D.
+            try:
+                import win32com.client
+                win32com.client.Dispatch("Shell.Application").MinimizeAll()
+            except Exception:
+                # Fallback nativo sin dependencia adicional.
+                user32 = ctypes.windll.user32
+                KEYEVENTF_KEYUP = 0x0002
+                VK_LWIN, VK_D = 0x5B, 0x44
+                user32.keybd_event(VK_LWIN, 0, 0, 0)
+                user32.keybd_event(VK_D, 0, 0, 0)
+                user32.keybd_event(VK_D, 0, KEYEVENTF_KEYUP, 0)
+                user32.keybd_event(VK_LWIN, 0, KEYEVENTF_KEYUP, 0)
+            self.responder("mostrando el escritorio.", "normal")
+            print("CONTROL ATLAS v3.7.2 RC4: escritorio mostrado")
+        except Exception as error:
+            print("CONTROL ATLAS v3.7.2 RC4: no pude mostrar el escritorio:", error)
+            self.responder("no pude mostrar el escritorio.", "molesta")
+        return True
+
+    def _atlas_audio_windows_core(self, accion, nivel=None):
+        """Lee y modifica el endpoint de audio predeterminado con Core Audio/Pycaw.
+
+        RC3 evita afirmar cambios a ciegas: después de fijar volumen o mute se
+        vuelve a consultar el endpoint real. El control de Spotify permanece
+        separado y sigue usando su propia API.
+        """
+        if os.name != "nt":
+            self.responder("el control de audio del sistema solo está disponible en Windows.", "confundida")
+            return True
+
+        accion = normalizar(accion or "")
+        comtypes_mod = None
+        com_inicializado = False
+        try:
+            import comtypes as comtypes_mod
+            from pycaw.pycaw import AudioUtilities
+
+            comtypes_mod.CoInitialize()
+            com_inicializado = True
+
+            dispositivo = AudioUtilities.GetSpeakers()
+            endpoint = dispositivo.EndpointVolume
+            nombre_dispositivo = str(getattr(dispositivo, "FriendlyName", "") or "audio predeterminado")
+
+            volumen_antes = int(round(float(endpoint.GetMasterVolumeLevelScalar()) * 100))
+            mute_antes = bool(endpoint.GetMute())
+
+            if accion == "estado":
+                estado_sonido = "está silenciado" if mute_antes else "está activo"
+                self.responder(
+                    f"el volumen del sistema está en {volumen_antes} por ciento y el sonido {estado_sonido}.",
+                    "normal",
+                )
+                print(
+                    f"CONTROL ATLAS v3.7.2 RC4: audio Windows estado "
+                    f"volumen={volumen_antes} mute={mute_antes} dispositivo={nombre_dispositivo!r}"
+                )
+                return True
+
+            if accion == "estado_silencio":
+                if mute_antes:
+                    self.responder("el sonido del sistema está silenciado.", "normal")
+                else:
+                    self.responder("el sonido del sistema está activo; no está silenciado.", "normal")
+                print(
+                    f"CONTROL ATLAS v3.7.2 RC4: audio Windows consulta_mute "
+                    f"mute={mute_antes} dispositivo={nombre_dispositivo!r}"
+                )
+                return True
+
+            if accion in {"subir", "bajar"}:
+                delta = 10 if accion == "subir" else -10
+                objetivo = max(0, min(100, volumen_antes + delta))
+                endpoint.SetMasterVolumeLevelScalar(objetivo / 100.0, None)
+                time.sleep(0.06)
+                volumen_despues = int(round(float(endpoint.GetMasterVolumeLevelScalar()) * 100))
+                mute_despues = bool(endpoint.GetMute())
+                extra = " El sonido continúa silenciado." if mute_despues else ""
+                self.responder(f"volumen del sistema en {volumen_despues} por ciento.{extra}", "normal")
+                print(
+                    f"CONTROL ATLAS v3.7.2 RC4: audio Windows accion={accion} "
+                    f"antes={volumen_antes} despues={volumen_despues} mute={mute_despues} "
+                    f"dispositivo={nombre_dispositivo!r}"
+                )
+                return True
+
+            if accion == "fijar":
+                try:
+                    objetivo = int(nivel)
+                except Exception:
+                    objetivo = -1
+                if not 0 <= objetivo <= 100:
+                    self.responder("necesito un porcentaje de volumen entre 0 y 100.", "confundida")
+                    return True
+                endpoint.SetMasterVolumeLevelScalar(objetivo / 100.0, None)
+                time.sleep(0.06)
+                volumen_despues = int(round(float(endpoint.GetMasterVolumeLevelScalar()) * 100))
+                mute_despues = bool(endpoint.GetMute())
+                extra = " El sonido continúa silenciado." if mute_despues else ""
+                self.responder(f"volumen del sistema ajustado a {volumen_despues} por ciento.{extra}", "normal")
+                print(
+                    f"CONTROL ATLAS v3.7.2 RC4: audio Windows accion=fijar "
+                    f"solicitado={objetivo} verificado={volumen_despues} mute={mute_despues} "
+                    f"dispositivo={nombre_dispositivo!r}"
+                )
+                return True
+
+            if accion == "silenciar":
+                if mute_antes:
+                    self.responder("el sonido del sistema ya estaba silenciado.", "normal")
+                    print(
+                        f"CONTROL ATLAS v3.7.2 RC4: audio Windows silenciar sin_cambio "
+                        f"dispositivo={nombre_dispositivo!r}"
+                    )
+                    return True
+                endpoint.SetMute(1, None)
+                time.sleep(0.06)
+                mute_despues = bool(endpoint.GetMute())
+                if mute_despues:
+                    self.responder("sonido del sistema silenciado.", "normal")
+                else:
+                    self.responder("Windows no confirmó que el sonido quedara silenciado.", "molesta")
+                print(
+                    f"CONTROL ATLAS v3.7.2 RC4: audio Windows accion=silenciar "
+                    f"verificado={mute_despues} dispositivo={nombre_dispositivo!r}"
+                )
+                return True
+
+            if accion == "activar":
+                if not mute_antes:
+                    self.responder("el sonido del sistema ya estaba activo.", "normal")
+                    print(
+                        f"CONTROL ATLAS v3.7.2 RC4: audio Windows activar sin_cambio "
+                        f"dispositivo={nombre_dispositivo!r}"
+                    )
+                    return True
+                endpoint.SetMute(0, None)
+                time.sleep(0.06)
+                mute_despues = bool(endpoint.GetMute())
+                if not mute_despues:
+                    self.responder("sonido del sistema activado.", "normal")
+                else:
+                    self.responder("Windows no confirmó que el sonido quedara activo.", "molesta")
+                print(
+                    f"CONTROL ATLAS v3.7.2 RC4: audio Windows accion=activar "
+                    f"verificado={not mute_despues} dispositivo={nombre_dispositivo!r}"
+                )
+                return True
+
+            return False
+
+        except ImportError as error:
+            print("CONTROL ATLAS v3.7.2 RC4: Pycaw/Comtypes no disponible:", error)
+            self.responder(
+                "no está disponible el componente de control de audio de Windows.",
+                "molesta",
+            )
+            return True
+        except Exception as error:
+            print("CONTROL ATLAS v3.7.2 RC4: error Core Audio Windows:", error)
+            self.responder("no pude consultar o cambiar el audio del sistema.", "molesta")
+            return True
+        finally:
+            if com_inicializado and comtypes_mod is not None:
+                try:
+                    comtypes_mod.CoUninitialize()
+                except Exception:
+                    pass
+
+    def _atlas_volumen_windows(self, accion):
+        """Sube/baja 10 puntos y verifica el volumen maestro real con Pycaw."""
+        accion = normalizar(accion or "")
+        if accion not in {"subir", "bajar"}:
+            return False
+        return self._atlas_audio_windows_core(accion)
+
+    def _atlas_pantallazo_pendiente_activo(self):
+        """Indica si Beta sigue esperando una selección breve de monitor."""
+        if not getattr(self, "atlas_pantallazo_pendiente", False):
+            return False
+        limite = float(getattr(self, "atlas_pantallazo_hasta", 0.0) or 0.0)
+        if limite and time.time() > limite:
+            self.atlas_pantallazo_pendiente = False
+            self.atlas_pantallazo_hasta = 0.0
+            return False
+        return True
+
+    def _atlas_numero_pantalla_respuesta(self, texto):
+        """Extrae 1/2/3 de una respuesta corta a la pregunta de pantallazo."""
+        t = self._atlas_quitar_wake(texto)
+        t = normalizar(t or "")
+        t = re.sub(r"^(?:la|el)\s+", "", t).strip()
+        m = re.fullmatch(
+            r"(?:(?:pantalla|monitor)\s+)?(?:numero\s+)?(1|2|3|uno|una|dos|tres)",
+            t,
+        )
+        if not m:
+            return None
+        valor = m.group(1)
+        return {"1": 1, "uno": 1, "una": 1, "2": 2, "dos": 2, "3": 3, "tres": 3}.get(valor)
+
+    def _atlas_iniciar_seleccion_pantallazo(self):
+        self.atlas_pantallazo_pendiente = True
+        self.atlas_pantallazo_hasta = time.time() + 20.0
+        self.responder(
+            "indíqueme de qué pantalla quiere el pantallazo: pantalla 1, 2 o 3.",
+            "confundida",
+        )
+        print("CONTROL ATLAS v3.7.2 RC4: pantallazo pendiente de selección de pantalla")
+        return True
+
+    def _atlas_resolver_pantallazo_pendiente(self, texto):
+        if not self._atlas_pantallazo_pendiente_activo():
+            return False
+
+        t = normalizar(self._atlas_quitar_wake(texto) or "")
+        if re.fullmatch(r"(?:cancela|cancelar|ninguna|ninguno|dejalo|déjalo)", t):
+            self.atlas_pantallazo_pendiente = False
+            self.atlas_pantallazo_hasta = 0.0
+            self.responder("pantallazo cancelado.", "normal")
+            print("CONTROL ATLAS v3.7.2 RC4: selección de pantallazo cancelada")
+            return True
+
+        numero = self._atlas_numero_pantalla_respuesta(texto)
+        if numero is None:
+            return False
+
+        self.atlas_pantallazo_pendiente = False
+        self.atlas_pantallazo_hasta = 0.0
+        print(f"CONTROL ATLAS v3.7.2 RC4: selección breve de pantallazo pantalla={numero}")
+        return self._atlas_captura_pantalla(numero)
+
+    @staticmethod
+    def _atlas_monitor_captura_solicitado(texto):
+        """Devuelve el número de pantalla pedido en una orden de pantallazo."""
+        t = normalizar(texto or "")
+        if not t or ("pantallazo" not in t and "captura" not in t):
+            return None
+
+        palabras_numero = {
+            "uno": 1, "una": 1,
+            "dos": 2,
+            "tres": 3,
+        }
+        # Acepta, entre otras: "pantallazo de la pantalla 2",
+        # "captura de pantalla 1" y "captura solamente de la pantalla tres".
+        coincidencias = re.findall(
+            r"\b(?:pantalla|monitor)\s+(?:numero\s+)?(\d+|uno|una|dos|tres)\b",
+            t,
+        )
+        if not coincidencias:
+            return None
+        valor = coincidencias[-1]
+        if valor.isdigit():
+            numero = int(valor)
+        else:
+            numero = palabras_numero.get(valor)
+        return numero if numero and numero > 0 else None
+
+    @staticmethod
+    def _atlas_monitores_windows():
+        """Enumera monitores y conserva el identificador DISPLAYn de Windows."""
+        if os.name != "nt":
+            return []
+        try:
+            from ctypes import wintypes
+
+            class RECT(ctypes.Structure):
+                _fields_ = [
+                    ("left", ctypes.c_long),
+                    ("top", ctypes.c_long),
+                    ("right", ctypes.c_long),
+                    ("bottom", ctypes.c_long),
+                ]
+
+            class MONITORINFOEXW(ctypes.Structure):
+                _fields_ = [
+                    ("cbSize", wintypes.DWORD),
+                    ("rcMonitor", RECT),
+                    ("rcWork", RECT),
+                    ("dwFlags", wintypes.DWORD),
+                    ("szDevice", wintypes.WCHAR * 32),
+                ]
+
+            user32 = ctypes.windll.user32
+            monitores = []
+            CALLBACK = ctypes.WINFUNCTYPE(
+                wintypes.BOOL,
+                wintypes.HANDLE,
+                wintypes.HDC,
+                ctypes.POINTER(RECT),
+                wintypes.LPARAM,
+            )
+
+            def _recibir(hmonitor, _hdc, _rect, _data):
+                info = MONITORINFOEXW()
+                info.cbSize = ctypes.sizeof(MONITORINFOEXW)
+                if user32.GetMonitorInfoW(hmonitor, ctypes.byref(info)):
+                    dispositivo = str(info.szDevice or "")
+                    m = re.search(r"DISPLAY(\d+)$", dispositivo, re.I)
+                    numero = int(m.group(1)) if m else 0
+                    monitores.append({
+                        "numero": numero,
+                        "dispositivo": dispositivo,
+                        "bbox": (
+                            int(info.rcMonitor.left),
+                            int(info.rcMonitor.top),
+                            int(info.rcMonitor.right),
+                            int(info.rcMonitor.bottom),
+                        ),
+                    })
+                return True
+
+            callback = CALLBACK(_recibir)
+            user32.EnumDisplayMonitors(None, None, callback, 0)
+
+            # En la práctica GetMonitorInfoW informa \\.\DISPLAY1, DISPLAY2...
+            # Si algún controlador no entrega sufijo, asignamos un número estable
+            # solo como respaldo sin alterar los DISPLAYn reales detectados.
+            usados = {m["numero"] for m in monitores if m["numero"] > 0}
+            siguiente = 1
+            for monitor in monitores:
+                if monitor["numero"] <= 0:
+                    while siguiente in usados:
+                        siguiente += 1
+                    monitor["numero"] = siguiente
+                    usados.add(siguiente)
+            monitores.sort(key=lambda m: m["numero"])
+            return monitores
+        except Exception as error:
+            print("CONTROL ATLAS v3.7.2 RC4: no pude enumerar monitores:", error)
+            return []
+
+    def _atlas_captura_pantalla(self, numero_pantalla):
+        """Guarda un pantallazo de un monitor concreto; nunca del escritorio completo."""
+        if os.name != "nt":
+            self.responder("los pantallazos por pantalla solo están disponibles en Windows.", "confundida")
+            return True
+        try:
+            from PIL import ImageGrab
+
+            numero_pantalla = int(numero_pantalla)
+            monitores = self._atlas_monitores_windows()
+            monitor = next((m for m in monitores if int(m.get("numero", 0)) == numero_pantalla), None)
+            if monitor is None:
+                disponibles = ", ".join(str(m.get("numero")) for m in monitores) or "ninguna"
+                self.responder(
+                    f"no detecté la pantalla {numero_pantalla}. Pantallas disponibles: {disponibles}.",
+                    "confundida",
+                )
+                print(
+                    f"CONTROL ATLAS v3.7.2 RC4: pantalla solicitada no disponible="
+                    f"{numero_pantalla} disponibles={disponibles}"
+                )
+                return True
+
+            # CSIDL_MYPICTURES respeta la carpeta Imágenes/Pictures configurada
+            # por Windows, incluso si fue redirigida por el usuario.
+            carpeta_imagenes = None
+            try:
+                buffer = ctypes.create_unicode_buffer(1024)
+                resultado = ctypes.windll.shell32.SHGetFolderPathW(None, 0x0027, None, 0, buffer)
+                if int(resultado) == 0 and buffer.value:
+                    carpeta_imagenes = Path(buffer.value)
+            except Exception:
+                carpeta_imagenes = None
+            if carpeta_imagenes is None:
+                carpeta_imagenes = Path.home() / "Pictures"
+
+            destino_dir = carpeta_imagenes / "Beta Pantallazos"
+            destino_dir.mkdir(parents=True, exist_ok=True)
+            nombre = datetime.now().strftime(
+                f"Pantallazo_Beta_Pantalla_{numero_pantalla}_%Y-%m-%d_%H-%M-%S.png"
+            )
+            destino = destino_dir / nombre
+
+            # all_screens=True permite que bbox funcione también cuando un monitor
+            # está a la izquierda/arriba del principal y usa coordenadas negativas.
+            imagen = ImageGrab.grab(bbox=monitor["bbox"], all_screens=True)
+            imagen.save(destino, "PNG")
+            if not destino.exists() or destino.stat().st_size <= 0:
+                raise RuntimeError("Windows no confirmó el archivo del pantallazo")
+
+            self.atlas_ultima_ruta_referida = destino
+            self.responder(
+                f"pantallazo de la pantalla {numero_pantalla} guardado en Beta Pantallazos.",
+                "normal",
+            )
+            print(
+                f"CONTROL ATLAS v3.7.2 RC4: pantallazo pantalla={numero_pantalla} "
+                f"dispositivo={monitor.get('dispositivo','')} bbox={monitor.get('bbox')} "
+                f"guardado={destino}"
+            )
+        except Exception as error:
+            print("CONTROL ATLAS v3.7.2 RC4: no pude guardar pantallazo:", error)
+            self.responder("no pude guardar el pantallazo de esa pantalla.", "molesta")
         return True
 
     def _atlas_ruta_app_registro(self, exe):
@@ -20157,6 +20707,18 @@ Recuerdos relevantes:
 
     def _atlas_ejecutar_operacion_confirmada(self, accion, datos):
         try:
+            if accion in {"sistema_bloquear", "sistema_cerrar_sesion", "sistema_reiniciar", "sistema_apagar"}:
+                accion_windows = accion.removeprefix("sistema_")
+                mensajes = {
+                    "bloquear": "confirmado. Bloquearé el equipo.",
+                    "cerrar_sesion": "confirmado. Cerraré la sesión de Windows.",
+                    "reiniciar": "confirmado. Reiniciaré el computador en unos segundos.",
+                    "apagar": "confirmado. Apagaré el computador en unos segundos.",
+                }
+                self.responder(mensajes[accion_windows], "normal")
+                print(f"CONTROL ATLAS v3.7.2 RC5: confirmación crítica aceptada accion={accion_windows}")
+                return self._atlas_programar_accion_sistema_critica(accion_windows)
+
             if accion == "crear_carpeta":
                 nombre = self._atlas_nombre_windows_seguro(datos.get("nombre", ""))
                 base = Path(datos.get("base", ""))
@@ -20482,6 +21044,57 @@ Recuerdos relevantes:
             return True
 
         self.responder("la operación pendiente ya no es válida; no hice cambios.", "confundida")
+        return True
+
+    def _atlas_ejecutar_accion_sistema_critica(self, accion):
+        """Ejecuta la acción crítica ya confirmada. Nunca se llama desde el parser directo."""
+        if os.name != "nt":
+            raise RuntimeError("las acciones críticas de Control Atlas solo están disponibles en Windows")
+
+        if accion == "bloquear":
+            resultado = ctypes.windll.user32.LockWorkStation()
+            if not resultado:
+                raise ctypes.WinError()
+            print("CONTROL ATLAS v3.7.2 RC5: Windows bloqueado tras confirmación")
+            return True
+
+        system_root = Path(os.environ.get("SystemRoot", r"C:\Windows"))
+        shutdown_exe = system_root / "System32" / "shutdown.exe"
+        ejecutable = str(shutdown_exe if shutdown_exe.exists() else "shutdown.exe")
+        comandos = {
+            "cerrar_sesion": [ejecutable, "/l"],
+            # Sin /f: no forzamos el cierre de aplicaciones con cambios abiertos.
+            "reiniciar": [ejecutable, "/r", "/t", "10"],
+            "apagar": [ejecutable, "/s", "/t", "10"],
+        }
+        comando = comandos.get(accion)
+        if not comando:
+            raise ValueError(f"acción crítica no válida: {accion}")
+
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        proceso = subprocess.run(
+            comando, capture_output=True, text=True, timeout=5, creationflags=flags
+        )
+        if proceso.returncode != 0:
+            detalle = (proceso.stderr or proceso.stdout or "").strip()
+            raise RuntimeError(detalle or f"shutdown.exe devolvió {proceso.returncode}")
+        print(f"CONTROL ATLAS v3.7.2 RC5: acción crítica ejecutada={accion}")
+        return True
+
+    def _atlas_programar_accion_sistema_critica(self, accion, demora_ms=3000):
+        """Da tiempo a que Beta anuncie la confirmación antes de bloquear/cerrar Windows."""
+        def ejecutar():
+            try:
+                self._atlas_ejecutar_accion_sistema_critica(accion)
+            except Exception as error:
+                print(f"CONTROL ATLAS v3.7.2 RC5: fallo acción crítica={accion}: {error}")
+
+        try:
+            self.root.after(int(demora_ms), ejecutar)
+        except Exception:
+            temporizador = threading.Timer(max(0.1, demora_ms / 1000.0), ejecutar)
+            temporizador.daemon = True
+            temporizador.start()
         return True
 
     def _atlas_cpu_modelo(self):
@@ -20854,6 +21467,23 @@ Recuerdos relevantes:
             "de acuerdo", "hazlo", "adelante", "acepto",
         }
 
+    def _atlas_detectar_accion_sistema_critica(self, texto):
+        """Devuelve una acción crítica de Windows solo ante una orden inequívoca."""
+        t = self._atlas_normalizar_orden_operativa(self._atlas_quitar_wake(texto))
+        if not t:
+            return ""
+
+        patrones = (
+            ("bloquear", r"^(?:bloquea|bloquear)\s+(?:(?:el|mi)\s+)?(?:computador|equipo|pc|windows)$"),
+            ("cerrar_sesion", r"^(?:cierra|cerrar)\s+(?:la\s+)?sesion(?:\s+(?:de\s+)?windows)?$"),
+            ("reiniciar", r"^(?:reinicia|reiniciar)\s+(?:(?:el|mi)\s+)?(?:computador|equipo|pc|windows)$"),
+            ("apagar", r"^(?:apaga|apagar)\s+(?:(?:el|mi)\s+)?(?:computador|equipo|pc|windows)$"),
+        )
+        for accion, patron in patrones:
+            if re.fullmatch(patron, t):
+                return accion
+        return ""
+
     def _atlas_bloquear_por_asr_inseguro(self, texto, fuente_asr):
         """Impide escrituras reales cuando Whisper no confirmó la frase.
 
@@ -20862,23 +21492,24 @@ Recuerdos relevantes:
         precisión suficiente para elegir nombres/rutas de una operación de disco.
         """
         es_escritura = self._atlas_es_accion_escritura(texto)
+        accion_critica = self._atlas_detectar_accion_sistema_critica(texto)
         confirma_pendiente = bool(
             getattr(self, "atlas_confirmacion_pendiente", None)
             and self._atlas_confirmacion_afirmativa(texto)
         )
-        if not (es_escritura or confirma_pendiente):
+        if not (es_escritura or accion_critica or confirma_pendiente):
             return False
 
         if self._atlas_fuente_asr_confiable_para_escritura(fuente_asr):
             return False
 
         print(
-            "CONTROL ATLAS v3.6.0 RC6: operación bloqueada; "
+            "CONTROL ATLAS v3.7.2 RC5: operación sensible bloqueada; "
             "Whisper no confirmó la transcripción."
         )
         self.responder(
             "Whisper todavía se está preparando. Por seguridad no ejecutaré "
-            "una modificación de archivos con una transcripción provisional. "
+            "una operación sensible con una transcripción provisional. "
             "Repita la orden cuando indique que Whisper está listo.",
             "confundida",
         )
@@ -20888,11 +21519,178 @@ Recuerdos relevantes:
         t = self._atlas_normalizar_orden_operativa(self._atlas_quitar_wake(original))
         if not t:
             return False
+        if self._atlas_resolver_pantallazo_pendiente(original):
+            return True
         if self._atlas_resolver_opcion_pendiente(original):
             return True
         if self._atlas_resolver_confirmacion_pendiente(original):
             return True
         if self._atlas_manejar_aclaracion(original):
+            return True
+
+        # v3.7.2 Control Atlas Fase 3 RC5: sesión/energía son acciones críticas.
+        # La orden inicial solo crea una confirmación pendiente; jamás ejecuta
+        # directamente. La respuesta afirmativa vuelve a pasar por Whisper.
+        accion_critica = self._atlas_detectar_accion_sistema_critica(t)
+        if accion_critica:
+            mensajes = {
+                "bloquear": "bloquearé el equipo y necesitará volver a desbloquear Windows",
+                "cerrar_sesion": "cerrar la sesión cerrará sus aplicaciones y podría perder cambios no guardados",
+                "reiniciar": "reiniciar el computador cerrará las aplicaciones abiertas y podría perder cambios no guardados",
+                "apagar": "apagar el computador cerrará las aplicaciones abiertas y podría perder cambios no guardados",
+            }
+            return self._atlas_solicitar_confirmacion(
+                f"sistema_{accion_critica}", {}, mensajes[accion_critica]
+            )
+
+        # Cortafuegos: una frase claramente crítica pero deformada nunca llega a
+        # Ollama ni se confunde con una orden genérica de ventanas.
+        if (
+            re.search(r"^(?:apaga|apagar|reinicia|reiniciar|bloquea|bloquear)\b", t)
+            and any(x in t for x in ["computador", "equipo", " pc", "windows"])
+        ) or re.search(r"^(?:cierra|cerrar)\s+(?:la\s+)?sesion\b", t):
+            self.responder(
+                "entendí una acción crítica de Windows, pero no quedó suficientemente clara. "
+                "Repita exactamente si quiere bloquear el equipo, cerrar sesión, reiniciar o apagar.",
+                "confundida",
+            )
+            print(f"CONTROL ATLAS v3.7.2 RC5: acción crítica ambigua bloqueada={t!r}")
+            return True
+
+        # v3.7.2 Control Atlas Fase 3 RC1: comandos seguros del sistema Windows.
+        # Van antes de los patrones genéricos de carpetas/aplicaciones para que
+        # "configuración" o "captura de pantalla" nunca terminen en Ollama.
+        if t in {
+            "abre configuracion", "abrir configuracion",
+            "abre la configuracion", "abre configuracion de windows",
+            "abre configuraciones", "abrir configuraciones",
+            "abre las configuraciones", "abre configuraciones de windows",
+            "abre la configuracion de windows",
+        }:
+            return self._atlas_abrir_configuracion_windows()
+
+        if t in {
+            "muestra escritorio", "muestra el escritorio",
+            "mostrar escritorio", "mostrar el escritorio",
+            "muestrame escritorio", "muestrame el escritorio",
+            "ensename escritorio", "ensename el escritorio",
+        }:
+            return self._atlas_mostrar_escritorio()
+
+        # v3.7.2 RC6: robustez ASR para pantallazos. Una orden operativa
+        # que conserve "captura" o "pantallazo" nunca puede caer a Ollama
+        # solo porque Whisper deforme "pantalla" como "bandalla".
+        if re.search(r"\b(?:captura|pantallazo)\b", t):
+            t_captura = re.sub(
+                r"\b(?:bandalla|pantaya|pantala|vantalla)\b",
+                "pantalla",
+                t,
+            )
+            intencion_captura = bool(
+                re.search(
+                    r"^(?:toma|tomar|tomo|saca|sacar|haz|hacer|realiza|realizar)\b",
+                    t_captura,
+                )
+                or re.match(r"^(?:una\s+)?captura\b", t_captura)
+                or re.match(r"^pantallazo\b", t_captura)
+            )
+            if intencion_captura:
+                numero_pantalla = self._atlas_monitor_captura_solicitado(t_captura)
+                if numero_pantalla is not None:
+                    return self._atlas_captura_pantalla(numero_pantalla)
+                print(
+                    f"CONTROL ATLAS v3.7.2 RC6: captura reconocida; "
+                    f"falta pantalla concreta original={t!r} normalizada={t_captura!r}"
+                )
+                return self._atlas_iniciar_seleccion_pantallazo()
+
+        if re.fullmatch(r"(?:sube|subir|aumenta|aumentar)(?:\s+el)?\s+volumen(?:\s+(?:del\s+sistema|de\s+windows))?", t):
+            return self._atlas_volumen_windows("subir")
+        if re.fullmatch(r"(?:baja|bajar|disminuye|disminuir)(?:\s+el)?\s+volumen(?:\s+(?:del\s+sistema|de\s+windows))?", t):
+            return self._atlas_volumen_windows("bajar")
+
+        # RC3: estado real, mute/unmute y volumen absoluto del endpoint de
+        # Windows. Las frases de Spotify no pasan por estas reglas: su volumen
+        # continúa controlándose mediante la API específica más abajo.
+        if t in {
+            "cuanto esta el volumen", "en cuanto esta el volumen",
+            "cual es el volumen", "a cuanto esta el volumen",
+            "cuanto volumen tengo",
+        }:
+            return self._atlas_audio_windows_core("estado")
+
+        if t in {
+            "esta silenciado", "esta silenciado el volumen",
+            "esta silenciado el computador", "esta silenciado el equipo",
+            "el volumen esta silenciado", "tengo el sonido silenciado",
+        }:
+            return self._atlas_audio_windows_core("estado_silencio")
+
+        if re.fullmatch(
+            r"(?:silencia|silenciar|mutea|mutear)(?:\s+(?:el|mi))?\s*(?:volumen|sonido|computador|equipo|pc|windows)?",
+            t,
+        ) or t in {"quita el sonido", "quitar el sonido", "sin sonido"}:
+            return self._atlas_audio_windows_core("silenciar")
+
+        if re.fullmatch(
+            r"(?:activa|activar|reactiva|reactivar)(?:\s+(?:el|mi))?\s*(?:sonido|volumen|audio)?",
+            t,
+        ) or t in {
+            "vuelve a activar el sonido", "vuelve a activar sonido",
+            "quita el silencio", "quitar el silencio",
+        }:
+            return self._atlas_audio_windows_core("activar")
+
+        if "spotify" not in t and "volumen" in t:
+            nivel_sistema = self._atlas_extraer_porcentaje(t)
+            if nivel_sistema is not None and (
+                re.search(r"\b(?:pon|poner|fija|fijar|deja|dejar|ajusta|ajustar)\b", t)
+                or re.match(r"^(?:el\s+)?volumen\s+(?:a|al|en)\b", t)
+            ):
+                return self._atlas_audio_windows_core("fijar", nivel_sistema)
+
+        # v3.7.2 RC4: cortafuegos de audio. Si la frase conserva claramente
+        # una intención operativa/consulta sobre volumen o silencio pero quedó
+        # deformada por ASR, pedimos repetir en vez de permitir una respuesta
+        # ficticia de Ollama sobre el estado real de Windows.
+        if "spotify" not in t and any(x in t for x in ["volumen", "silenciado", "sonido"]):
+            if re.search(
+                r"^(?:cuanto|en cuanto|a cuanto|cual|esta|estas|sube|subir|baja|bajar|"
+                r"aumenta|disminuye|pon|poner|fija|fijar|deja|dejar|ajusta|ajustar|"
+                r"silencia|silenciar|activa|activar|reactiva|reactivar|quita|quitar)\b",
+                t,
+            ):
+                self.responder(
+                    "entendí una consulta u orden sobre el audio de Windows, pero no quedó suficientemente clara. Repítala indicando volumen o silencio.",
+                    "confundida",
+                )
+                print(f"CONTROL ATLAS v3.7.2 RC4: orden de audio bloqueada por ambigüedad={t!r}")
+                return True
+
+        # Pantallazos/capturas: siempre exigen una pantalla concreta. Se aceptan
+        # las dos formas de lenguaje ("pantallazo" y "captura de pantalla"),
+        # pero jamás se toma el escritorio virtual completo por omisión.
+        if "pantallazo" in t or ("captura" in t and ("pantalla" in t or "monitor" in t)):
+            numero_pantalla = self._atlas_monitor_captura_solicitado(t)
+            if numero_pantalla is None:
+                return self._atlas_iniciar_seleccion_pantallazo()
+            self.atlas_pantallazo_pendiente = False
+            self.atlas_pantallazo_hasta = 0.0
+            return self._atlas_captura_pantalla(numero_pantalla)
+
+        # Cortafuegos de pantalla: frases como "muestra la pantalla" no deben
+        # llegar a Ollama, porque el modelo podría afirmar falsamente que mostró
+        # o capturó algo. Atlas pide una acción verificable.
+        if re.fullmatch(
+            r"(?:muestra|mostrar|muestrame|enseña|ensena|ver)\s+(?:la\s+)?(?:pantalla|monitor)(?:\s+(?:1|2|3|uno|dos|tres))?",
+            t,
+        ):
+            self.responder(
+                "si quiere guardar un pantallazo, indique pantalla 1, 2 o 3. "
+                "Si quiere mostrar el escritorio, diga muestra el escritorio.",
+                "confundida",
+            )
+            print(f"CONTROL ATLAS v3.7.2 RC4: orden ambigua de pantalla bloqueada={t!r}")
             return True
 
         # Estado real del computador. El enrutador tolera ruido ASR antes de

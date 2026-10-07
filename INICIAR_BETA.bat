@@ -6,7 +6,7 @@ set "PYTHON=python"
 where py >nul 2>nul && set "PYTHON=py -3"
 
 echo ==============================================================
-echo INICIANDO BETA v3.7.1 ESTABLE
+echo INICIANDO BETA v3.7.2 ESTABLE
 echo Carpeta: %CD%
 echo ==============================================================
 
@@ -15,9 +15,9 @@ set "RC=%ERRORLEVEL%"
 
 echo.
 if not "%RC%"=="0" (
-    echo [ERROR] Beta v3.7.1 estable termino con codigo %RC%.
+    echo [ERROR] Beta v3.7.2 estable termino con codigo %RC%.
 ) else (
-    echo Beta v3.7.1 estable finalizo correctamente.
+    echo Beta v3.7.2 estable finalizo correctamente.
 )
 
 echo.

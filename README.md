@@ -1,4 +1,4 @@
-﻿# Beta - Asistente Virtual Local con Inteligencia Artificial
+# Beta - Asistente Virtual Local con Inteligencia Artificial
 
 Beta es un asistente virtual desarrollado en Python como proyecto personal de aprendizaje y desarrollo.
 
@@ -6,7 +6,7 @@ El objetivo del proyecto es construir un asistente local capaz de interactuar me
 
 ## Versión estable actual
 
-**Beta v3.7.1**
+**Beta v3.7.2**
 
 ## Características principales
 
@@ -23,6 +23,10 @@ El objetivo del proyecto es construir un asistente local capaz de interactuar me
 - Enrutamiento inteligente de fuentes
 - Integración con Spotify
 - Control de aplicaciones mediante Control Atlas
+- Control local de funciones de Windows
+- Pantallazos independientes para múltiples monitores
+- Control real del volumen global de Windows
+- Bloqueo, cierre de sesión, reinicio y apagado con confirmación obligatoria
 - Agenda Beta integrada con Google Calendar
 - Confirmación por voz antes de crear eventos
 - Recordatorios por correo configurables
@@ -46,6 +50,28 @@ Control Atlas / Agenda / Biblioteca / Qwen
 ↓  
 Piper / Daniela
 
+## Control Atlas Fase 3
+
+Beta v3.7.2 amplía Control Atlas con integración directa sobre funciones de Windows.
+
+Entre sus capacidades se incluyen:
+
+- Abrir la Configuración de Windows
+- Mostrar el escritorio
+- Crear pantallazos independientes de las pantallas 1, 2 o 3
+- Seleccionar el monitor mediante una respuesta contextual
+- Consultar el volumen real del sistema
+- Subir, bajar y fijar un porcentaje de volumen
+- Silenciar y reactivar el sonido
+- Consultar el estado real de silencio
+- Bloquear Windows
+- Cerrar sesión
+- Reiniciar el computador
+- Apagar el computador
+
+Las operaciones críticas de sesión y energía requieren confirmación por voz antes de ejecutarse.
+
+También se utilizan cortafuegos locales para impedir que una transcripción ambigua termine produciendo una respuesta ficticia de la inteligencia artificial sobre una operación que no fue ejecutada.
 ## Agenda Beta
 
 Beta puede abrir la Agenda mediante voz y crear eventos usando lenguaje natural.
@@ -71,7 +97,7 @@ Las bases de datos personales, documentos, modelos de IA, credenciales, tokens y
 
 ## Tecnologías
 
-Python, SQLite, Vosk, Faster-Whisper, Piper, Ollama, Qwen, Sentence Transformers, SpeechBrain, PyMuPDF, Tkinter, Pygame, Spotify Web API y Google Calendar.
+Python, SQLite, Vosk, Faster-Whisper, Piper, Ollama, Qwen, Sentence Transformers, SpeechBrain, PyMuPDF, Tkinter, Pygame, Pycaw, Spotify Web API y Google Calendar.
 
 ## Autor
 
