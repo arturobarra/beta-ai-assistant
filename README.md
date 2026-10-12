@@ -6,7 +6,7 @@ El objetivo del proyecto es construir un asistente local capaz de interactuar me
 
 ## Versión estable actual
 
-**Beta v3.7.2**
+**Beta v3.7.3**
 
 ## Características principales
 
@@ -52,7 +52,7 @@ Piper / Daniela
 
 ## Control Atlas Fase 3
 
-Beta v3.7.2 amplía Control Atlas con integración directa sobre funciones de Windows.
+Beta v3.7.3 conserva Control Atlas Fase 3 con integración directa sobre funciones de Windows.
 
 Entre sus capacidades se incluyen:
 
@@ -72,6 +72,19 @@ Entre sus capacidades se incluyen:
 Las operaciones críticas de sesión y energía requieren confirmación por voz antes de ejecutarse.
 
 También se utilizan cortafuegos locales para impedir que una transcripción ambigua termine produciendo una respuesta ficticia de la inteligencia artificial sobre una operación que no fue ejecutada.
+## Integraciones v3.7.3
+
+Beta v3.7.3 incorpora accesos personales controlados y mejoras de reconocimiento de voz:
+
+- Abrir WhatsApp Desktop mediante Control Atlas.
+- Cerrar WhatsApp mediante Control Atlas.
+- Recuperación contextual de deformaciones ASR frecuentes de WhatsApp, sin relajar el wake word global.
+- Abrir el Gmail personal `u/0` en Google Chrome.
+- Abrir Google Drive personal `u/0` en Google Chrome.
+- Gmail y Drive se limitan a apertura/navegación; esta integración no lee, escribe, envía ni elimina contenido.
+- Se mantiene la biometría de voz y el modo estricto.
+- El experimento visual de desintegrador no forma parte de la versión estable.
+
 ## Agenda Beta
 
 Beta puede abrir la Agenda mediante voz y crear eventos usando lenguaje natural.

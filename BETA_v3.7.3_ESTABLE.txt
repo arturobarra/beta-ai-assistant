@@ -1,0 +1,28 @@
+BETA v3.7.3 ESTABLE
+===================
+
+Fecha de promocion final: 2026-10-12 18:35:47
+Archivo principal: A:\Beta\beta.py
+SHA256 beta.py: 774944526963A3D7EA1E5795CF4839C333CCDF1FD2A7872C1DB02514D1EE0C65
+Origen definitivo: Beta v3.7.3 Integraciones RC16
+
+VALIDACION FINAL
+----------------
+- RC14: 44/44 pruebas correctas.
+- RC15 FIX1: 39/39 pruebas correctas.
+- RC16: 38/38 pruebas correctas.
+- Google Drive real por Vosk directo: validado.
+- Google Drive real por Whisper: validado.
+- Google Drive abre por Control Atlas u/0 en Chrome.
+- Alias ASR Drive final incluye google draib y Uldraip.
+- Peter se mantiene contextual solo para la intencion exacta de Drive.
+- WhatsApp apertura/cierre conservados.
+- Gmail personal u/0 conservado.
+- Wake global no relajado.
+- Desintegrador excluido.
+- beta_apariencia.json local se conserva.
+- A:\Beta_Google_Pruebas no se toca.
+
+RESPALDO
+--------
+A:\Beta_Versiones_Antiguas\Beta_v3.7.3_PreRC16

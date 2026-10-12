@@ -38,10 +38,10 @@ import urllib.request
 from datetime import datetime, timedelta
 
 
-BETA_VERSION = "3.7.2"
+BETA_VERSION = "3.7.3"
 
 # ==========================================================
-# BETA v3.7.2 ESTABLE - CONTROL ATLAS FASE 3 + ASR v3.7.1 + AGENDA v3.7.0 RC4
+# BETA v3.7.3 ESTABLE - CONTROL ATLAS FASE 3 + ASR v3.7.1 + AGENDA v3.7.0 RC4
 # Mascota virtual + memoria + comandos aprendidos + clima
 # + Ollama/Qwen3 Instruct + memoria evolutiva + personalidad adaptativa
 # + voz híbrida: Vosk para activación y Faster-Whisper para dictado
@@ -14921,6 +14921,49 @@ Recuerdos relevantes:
             modo = "estricto"
         self.establecer_modo_escucha(modo, anunciar=True)
 
+    def _vosk_whatsapp_directo_seguro(self, texto_vosk):
+        # Matcher Vosk exclusivo para ABRIR WhatsApp.
+        # No debilita el wake global. Solo acepta una frase completa y corta:
+        # wake permitido + intención de apertura + alias WhatsApp.
+        t = normalizar(texto_vosk or "").strip()
+        t = re.sub(r"\s+", " ", t)
+
+        wakes = r"(?:beta|veta|petra|meta|mita)"
+        acciones = (
+            r"(?:abre|abrir|abreme|padre|habre|habri|habria|"
+            r"inicia|iniciar|ejecuta|ejecutar|lanza|lanzar|"
+            r"entra(?: a)?|entrar(?: a)?|pon|poner)"
+        )
+        app = (
+            r"(?:whatsapp|whats app|whats up|what s up|whatsap|"
+            r"watsapp|watsap|wasap|wassap|guasap|guasa|guatsap|uatsapp)"
+        )
+
+        patron = rf"^{wakes}\s+(?:(?:{acciones})\s+)?(?:el\s+)?{app}$"
+        return re.fullmatch(patron, t) is not None
+
+    def _vosk_whatsapp_cierre_seguro(self, texto_vosk):
+        # Matcher Vosk exclusivo para CERRAR WhatsApp.
+        # No relaja el wake global: exige wake + verbo de cierre + alias WhatsApp.
+        t = normalizar(texto_vosk or "").strip()
+        t = re.sub(r"\s+", " ", t)
+
+        wakes = r"(?:beta|veta|petra|meta|mita|metas)"
+        acciones = (
+            r"(?:cierra|cerrar|cierre|cierrame|"
+            r"sierra|serrar|sierre|sierrame|"
+            r"cerra|serra|si era|"
+            r"termina|terminar|sal de|salir de)"
+        )
+        app = (
+            r"(?:whatsapp|whats app|whats up|what s up|whatsap|"
+            r"watsapp|watsap|wasap|wassap|guasap|guasa|guatsap|uatsapp|"
+            r"masa|wasp)"
+        )
+
+        patron = rf"^{wakes}\s+{acciones}\s+(?:el\s+)?{app}$"
+        return re.fullmatch(patron, t) is not None
+
     def frase_candidata_para_beta_vosk(self, texto_vosk):
         """Filtro barato ANTES de biometría y Whisper.
 
@@ -15019,6 +15062,13 @@ Recuerdos relevantes:
             return any(p in t for p in (
                 "despierta", "despertar", "reactiva", "reanuda", "escucha", "silencio"
             ))
+
+        # v3.7.3 ESTABLE: excepción muy acotada para apertura local de WhatsApp.
+        # La biometría sigue ejecutándose inmediatamente después en escuchar_microfono.
+        if self._vosk_whatsapp_directo_seguro(t):
+            return True
+        if self._vosk_whatsapp_cierre_seguro(t):
+            return True
 
         return wake is not None
 
@@ -15831,6 +15881,103 @@ Recuerdos relevantes:
                 except Exception:
                     pass
 
+    def _atlas_es_apertura_whatsapp_directa(self, texto):
+        # Reconoce solamente intención local de abrir WhatsApp.
+        t = normalizar(texto or "").strip()
+        if not t:
+            return False
+
+        try:
+            t = self._atlas_quitar_wake(t)
+        except Exception:
+            if t.startswith("beta "):
+                t = t[5:].strip()
+            elif t == "beta":
+                t = ""
+
+        t = re.sub(r"\s+", " ", t).strip()
+        if not t:
+            return False
+
+        # RC12: un verbo de cierre jamás debe caer al matcher de APERTURA.
+        # Incluye errores ASR reales: "sierra", "serrar", "si era", etc.
+        if re.match(
+            r"^(?:(?:beta|veta|petra|meta|mita|metas)\s+)?"
+            r"(?:cierra|cerrar|cierre|cierrame|sierra|serrar|sierre|sierrame|"
+            r"cerra|serra|si era|termina|terminar|sal de|salir de)\b",
+            t,
+        ):
+            return False
+
+        aliases = (
+            "whatsapp",
+            "whats app",
+            "whats up",
+            "what s up",
+            "whatsap",
+            "watsapp",
+            "watsap",
+            "wasap",
+            "wassap",
+            "guasap",
+            "guasa",
+            "guatsap",
+            "uatsapp",
+            "whatsapp desktop",
+        )
+
+        if not any(alias in t for alias in aliases):
+            return False
+
+        # No convertir preguntas ni operaciones de mensajería en "abrir".
+        bloqueos = (
+            "que es ", "como ", "por que ", "quien ", "cuando ", "donde ",
+            "explica", "cuentame",
+            "lee ", "leer ",
+            "manda ", "mandar ",
+            "envia ", "enviar ",
+            "escribe ", "escribir ",
+            "responde ", "responder ",
+            "mensaje", "mensajes",
+        )
+        if any(b in t for b in bloqueos):
+            return False
+
+        acciones = (
+            "abre", "abrir", "abri", "abreme",
+            "inicia", "iniciar",
+            "ejecuta", "ejecutar",
+            "lanza", "lanzar",
+            "entra", "entrar",
+            "pon", "poner",
+            "quiero", "necesito",
+            "ve a", "ir a",
+            "padre", "habre", "habri",
+            "avry", "avery", "avri",
+        )
+
+        if any(
+            t == a
+            or t.startswith(a + " ")
+            or (" " + a + " ") in (" " + t + " ")
+            for a in acciones
+        ):
+            return True
+
+        # Acceso corto: "Beta WhatsApp".
+        return len(t.split()) <= 3
+
+    def _atlas_manejar_whatsapp_directo(self, texto):
+        # Cortafuegos operativo: abre WhatsApp por Atlas y evita Ollama.
+        if not self._atlas_es_apertura_whatsapp_directa(texto):
+            return False
+
+        print(
+            "CONTROL ATLAS v3.7.3 ESTABLE: WhatsApp directo "
+            f"orden={normalizar(texto or '')!r}"
+        )
+        return self._atlas_abrir_aplicacion("whatsapp")
+
     def es_comando_rapido_vosk(self, texto_vosk):
         """
         Para órdenes simples y bien reconocidas evitamos una segunda pasada por
@@ -15893,6 +16040,144 @@ Recuerdos relevantes:
             "beta abre office word",
         }
         if t_atlas in comandos_word_rapidos:
+            return True
+
+        # v3.7.3 Estable: accesos cortos que solo abren una aplicación
+        # o una URL conocida. No leen correo, no redactan y no modifican datos.
+        # RC8: apertura de WhatsApp es local. Si Vosk conserva WhatsApp,
+        # no se espera Whisper.
+        if self._atlas_es_apertura_whatsapp_directa(t_atlas):
+            return True
+
+        comandos_integraciones_rapidos = {
+            # WhatsApp
+            "beta abre whatsapp",
+            "beta cierra whatsapp",
+            "beta cerrar whatsapp",
+            "beta cierra el whatsapp",
+            "beta cierrame whatsapp",
+            "beta sierra whatsapp",
+            "beta serrar whatsapp",
+            "beta sierre whatsapp",
+            "beta cerra whatsapp",
+            "beta serra whatsapp",
+            "beta si era whatsapp",
+            "beta termina whatsapp",
+            "beta sal de whatsapp",
+            "beta cierra guasa",
+            "beta sierra guasa",
+            "meta cierra whatsapp",
+            "meta sierra whatsapp",
+            "mita cierra whatsapp",
+            "mita sierra whatsapp",
+            "metas cierra whatsapp",
+            "metas sierra whatsapp",
+            "beta abre el whatsapp",
+            "beta abrir whatsapp",
+            "beta abre guasap",
+            "beta abre guasa",
+            "beta abrir guasa",
+            "beta padre guasa",
+            "beta guasa",
+            "meta abre guasa",
+            "meta padre guasa",
+            "mita abre guasa",
+            "mita padre guasa",
+            "beta abrir whatsapp",
+            "beta abre el whatsapp",
+            "beta abreme whatsapp",
+            "beta inicia whatsapp",
+            "beta iniciar whatsapp",
+            "beta ejecuta whatsapp",
+            "beta lanza whatsapp",
+            "beta entra a whatsapp",
+            "beta pon whatsapp",
+            "beta whatsapp",
+            "beta padre whatsapp",
+            "beta habre whatsapp",
+            "beta habri whatsapp",
+            "beta avry whatsapp",
+            "beta avery whatsapp",
+            "beta abre whats app",
+            "beta abre whatsap",
+            "beta abre watsapp",
+            "beta abre watsap",
+            "beta abre wasap",
+            "beta abre wassap",
+            "beta abre guatsap",
+            "beta abre uatsapp",
+
+            # Gmail / correo
+            "beta abre gmail",
+            "beta abrir gmail",
+            "beta abre mi correo",
+            "beta abrir mi correo",
+            "beta abre correo",
+            "beta abrir correo",
+            "beta entra a mi correo",
+            "beta ingresa a mi correo",
+            "beta abre mi correo electronico",
+            "beta abrir mi correo electronico",
+            "beta entra a mi correo electronico",
+            "beta ingresa a mi correo electronico",
+
+            # Google Drive: formas naturales
+            "beta abre drive",
+            "beta abre el drive",
+            "beta abre mi drive",
+            "beta abre google drive",
+            "beta abre el google drive",
+            "beta abrir drive",
+            "beta abrir el drive",
+            "beta abrir mi drive",
+            "beta abrir google drive",
+            "beta entra a drive",
+            "beta entra a mi drive",
+            "beta entra a google drive",
+            "beta ingresa a drive",
+            "beta ingresa a mi drive",
+            "beta ingresa a google drive",
+            "beta ve a drive",
+            "beta ve a mi drive",
+            "beta ve a google drive",
+
+            # Google Drive: deformaciones ASR observadas o plausibles.
+            "beta abre dry",
+            "beta abre mi dry",
+            "beta abre el dry",
+            "beta abre google dry",
+            "beta abre draiv",
+            "beta abre mi draiv",
+            "beta abre el draiv",
+            "beta abre google draiv",
+            "beta abre drai",
+            "beta abre mi drai",
+            "beta abre dray",
+            "beta abre mi dray",
+            "beta abre midrive",
+            "beta abre midry",
+            "beta abre midride",
+            "beta abre mid ride",
+            "beta abre midrai",
+            "beta abre midray",
+            "beta abre mi y",
+            "beta abre mitra y",
+            "beta abre mi trai",
+            "beta avry midry",
+            "beta avry midride",
+            "beta avry mid ride",
+            "beta avry mi drive",
+            "beta avri midry",
+
+            # v3.7.3 ESTABLE: nuevas formas observadas en prueba real.
+            "beta average drive",
+            "beta average google drive",
+            "beta haber drive",
+            "beta haber dry",
+            "beta haber mi drive",
+            "beta haber google drive",
+        }
+        if t_atlas in comandos_integraciones_rapidos:
             return True
 
         # v3.7.2 Control Atlas Fase 3 RC1: órdenes Windows locales, cortas y
@@ -16141,13 +16426,39 @@ Recuerdos relevantes:
                         # Whisper en modo estricto. Si Vosk oyó uno de ellos,
                         # obligamos a Whisper a confirmar y preferimos que la
                         # transcripción final contenga "Beta".
+                        whatsapp_vosk_seguro = self._vosk_whatsapp_directo_seguro(texto_vosk)
+                        whatsapp_cierre_vosk_seguro = self._vosk_whatsapp_cierre_seguro(texto_vosk)
+                        whatsapp_operacion_vosk_segura = (
+                            whatsapp_vosk_seguro or whatsapp_cierre_vosk_seguro
+                        )
                         rapido_vosk = self.es_comando_rapido_vosk(texto_vosk)
-                        if self.modo_escucha != "conversacion" and self.activacion_vosk_ambigua(texto_vosk):
+
+                        if (
+                            self.modo_escucha != "conversacion"
+                            and self.activacion_vosk_ambigua(texto_vosk)
+                            and not whatsapp_operacion_vosk_segura
+                        ):
                             rapido_vosk = False
+
+                        if whatsapp_operacion_vosk_segura:
+                            rapido_vosk = True
 
                         if rapido_vosk:
                             fuente_asr = "vosk_rapido"
                             print("MODO RÁPIDO: comando directo; se omite Whisper.")
+
+                        if whatsapp_vosk_seguro:
+                            print(
+                                "ASR WHATSAPP v3.7.3: Vosk apertura segura recuperada "
+                                f"'{texto_vosk}' -> 'Beta abre WhatsApp'"
+                            )
+                            texto_final = "Beta abre WhatsApp"
+                        elif whatsapp_cierre_vosk_seguro:
+                            print(
+                                "ASR WHATSAPP v3.7.3: Vosk cierre seguro recuperado "
+                                f"'{texto_vosk}' -> 'Beta cierra WhatsApp'"
+                            )
+                            texto_final = "Beta cierra WhatsApp"
 
                         # Vosk decide si la frase es candidata. Solo entonces usamos
                         # Whisper, evitando consumir CPU con conversaciones ambientales.
@@ -16256,6 +16567,26 @@ Recuerdos relevantes:
                         # antes de volver al ciclo de escucha para evitar dobles órdenes.
                         if USAR_WHISPER and not rapido_vosk:
                             self.vaciar_cola_audio_pendiente()
+
+                        if fuente_asr == "whisper":
+                            whatsapp_whisper_seguro = (
+                                self._asr_whisper_whatsapp_ambiguo_seguro(texto_final)
+                            )
+                            if whatsapp_whisper_seguro:
+                                print(
+                                    "ASR WHATSAPP v3.7.3: Whisper ambiguo seguro recuperado "
+                                    f"'{texto_final}' -> '{whatsapp_whisper_seguro}'"
+                                )
+                                texto_final = whatsapp_whisper_seguro
+
+                        if fuente_asr == "whisper":
+                            drive_whisper_seguro = self._asr_drive_apertura_segura(texto_final)
+                            if drive_whisper_seguro:
+                                print(
+                                    "ASR DRIVE v3.7.3: Whisper apertura segura recuperada "
+                                    f"'{texto_final}' -> '{drive_whisper_seguro}'"
+                                )
+                                texto_final = drive_whisper_seguro
 
                         print("BETA ENTENDIÓ FINALMENTE:", texto_final)
                         print("ASR FUENTE:", fuente_asr)
@@ -17051,6 +17382,66 @@ Recuerdos relevantes:
     # ======================================================
     # PROCESAR VOZ / CEREBRO
     # ======================================================
+
+    def _asr_whisper_whatsapp_ambiguo_seguro(self, texto):
+        # RC13: recuperación EXCLUSIVA de WhatsApp para transcripción final Whisper.
+        # Nunca convierte meta/mita/metas en wake global.
+        t = normalizar(texto or "").strip()
+        t = re.sub(r"\s+", " ", t)
+
+        wakes = r"(?:meta|mita|metas)"
+        app = (
+            r"(?:whatsapp|whats app|whats up|what s up|whatsap|"
+            r"watsapp|watsap|wasap|wassap|guasap|guasa|guatsap|uatsapp|"
+            r"masa|wasp)"
+        )
+        abrir = (
+            r"(?:abre|abrir|abreme|padre|habre|habri|habria|"
+            r"inicia|iniciar|ejecuta|ejecutar|lanza|lanzar|"
+            r"entra a|entrar a|pon|poner)"
+        )
+        cerrar = (
+            r"(?:cierra|cerrar|cierre|cierrame|"
+            r"sierra|serrar|sierre|sierrame|"
+            r"cerra|serra|si era|termina|terminar|sal de|salir de)"
+        )
+
+        if re.fullmatch(rf"^{wakes}\s+{abrir}\s+(?:el\s+)?{app}$", t):
+            return "Beta abre WhatsApp"
+
+        if re.fullmatch(rf"^{wakes}\s+{cerrar}\s+(?:el\s+)?{app}$", t):
+            return "Beta cierra WhatsApp"
+
+        return None
+
+    def _asr_drive_apertura_segura(self, texto):
+        # RC14: recuperación EXCLUSIVA de apertura de Google Drive.
+        # Full-match para evitar convertir preguntas u otras acciones en apertura.
+        # 'peter' y 'uldraip' se aceptan SOLO dentro de esta intención exacta de Drive.
+        t = normalizar(texto or "").strip()
+        t = re.sub(r"\s+", " ", t)
+
+        wakes = r"(?:beta|veta|petra|meta|mita|metas|peter)"
+        acciones = (
+            r"(?:abre|abrir|abreme|"
+            r"adre|habre|habri|avre|avri|"
+            r"inicia|iniciar|ejecuta|ejecutar|lanza|lanzar|"
+            r"entra a|entrar a|pon|poner)"
+        )
+        drive = (
+            r"(?:google drive|google draib|gugol drive|gugel drive|gugle drive|"
+            r"googel drive|google draiv|gugol draiv|"
+            r"will drive|wil drive|wheel drive|"
+            r"uldraip|uldrive|ul draiv)"
+        )
+
+        if re.fullmatch(
+            rf"^{wakes}\s+{acciones}\s+(?:mi\s+|el\s+)?{drive}$",
+            t,
+        ):
+            return "Beta abre Google Drive"
+
+        return None
 
     def procesar_voz(self, texto, fuente_asr="manual"):
         texto_original = (texto or "").strip()
@@ -18359,6 +18750,7 @@ Recuerdos relevantes:
         nombres = {
             "spotify": "Spotify", "word": "Word", "excel": "Excel",
             "steam": "Steam", "explorador": "Explorador", "chrome": "Chrome",
+            "whatsapp": "WhatsApp",
             "notepad": "Bloc de notas", "calculadora": "Calculadora",
         }
         return nombres.get((clave or "").lower(), clave or "la ventana")
@@ -18730,6 +19122,11 @@ Recuerdos relevantes:
             ("steam", ["steam"]),
             ("explorador", ["explorador", "explorador de archivos", "explorer"]),
             ("chrome", ["chrome", "google chrome"]),
+            ("whatsapp", [
+                "whatsapp", "whats app", "whats up", "what s up", "whatsap", "watsapp", "watsap",
+                "wasap", "wassap", "guasap", "guasa", "guatsap", "uatsapp",
+                "whatsapp desktop",
+            ]),
             ("notepad", ["bloc de notas", "notepad"]),
             ("calculadora", ["calculadora", "calculator"]),
         ]
@@ -18814,6 +19211,7 @@ Recuerdos relevantes:
             "steam": ["steam.exe", "steamwebhelper.exe"],
             "explorador": ["explorer.exe"],
             "chrome": ["chrome.exe"],
+            "whatsapp": ["whatsapp.exe"],
             "notepad": ["notepad.exe"],
             "calculadora": ["calculatorapp.exe", "calculator.exe"],
         }.get(app, [])
@@ -18824,6 +19222,7 @@ Recuerdos relevantes:
             "steam": ["steam"],
             "explorador": ["explorador de archivos", "file explorer"],
             "chrome": ["google chrome", "chrome"],
+            "whatsapp": ["whatsapp"],
             "notepad": ["bloc de notas", "notepad"],
             "calculadora": ["calculadora", "calculator"],
         }.get(app, [app])
@@ -19389,6 +19788,14 @@ Recuerdos relevantes:
                     if not local.exists():
                         raise FileNotFoundError("Spotify local no encontrado")
                     subprocess.Popen([str(local)])
+            elif app == "whatsapp":
+                # Microsoft Store / AppX detectado en Atlas.
+                aumid = r"5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App"
+                subprocess.Popen(
+                    ["explorer.exe", "shell:AppsFolder\\{}".format(aumid)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
             elif app == "explorador":
                 subprocess.Popen(["explorer.exe"])
             elif app == "notepad":
@@ -21467,6 +21874,127 @@ Recuerdos relevantes:
             "de acuerdo", "hazlo", "adelante", "acepto",
         }
 
+    def _atlas_manejar_accesos_personales(self, texto):
+        # v3.7.3 ESTABLE: accesos visuales a Gmail/Drive. No lee, redacta,
+        # envia ni elimina contenido de la cuenta.
+        t_bruto = normalizar(self._atlas_quitar_wake(texto or "")).strip()
+        if not t_bruto:
+            return False
+
+        # "abrir" / "abri" ya se recuperan en Atlas. Aqui agregamos tambien
+        # deformaciones reales de Whisper como "avry".
+        t = self._atlas_normalizar_orden_operativa(t_bruto)
+        t = re.sub(
+            r"^(?:abrir|abri|avry|avri|avery|averi|avre|habre|habri)\b",
+            "abre",
+            t,
+        )
+
+        # v3.7.3 ESTABLE: Whisper produjo "Average Drive" al escuchar
+        # "abre Drive". Vosk tambien llego a oir "haber dry".
+        # Solo recuperamos ese verbo si el objetivo restante parece Drive.
+        m_verbo_drive = re.fullmatch(
+            r"(average|averaje|averash|haber)\s+(.+)",
+            t,
+        )
+        if m_verbo_drive:
+            objetivo_pre = m_verbo_drive.group(2).strip()
+            compacto_pre = re.sub(r"[\s_\-]+", "", objetivo_pre)
+            objetivos_pre_drive = {
+                "drive", "eldrive", "midrive", "googledrive",
+                "elgoogledrive", "migoogledrive",
+                "dry", "eldry", "midry", "googledry",
+                "draiv", "eldraiv", "midraiv", "googledraiv",
+                "drai", "eldrai", "midrai", "googledrai",
+                "dray", "eldray", "midray", "googledray",
+                "midride", "miy", "mitray", "mitrai", "mitraiy",
+            }
+            if compacto_pre in objetivos_pre_drive:
+                print(
+                    "CONTROL ATLAS v3.7.3 ESTABLE: verbo Drive recuperado "
+                    f"original={t_bruto!r} interpretado='abre {objetivo_pre}'"
+                )
+                t = "abre " + objetivo_pre
+
+        t = re.sub(r"\s+", " ", t).strip()
+
+        correo = {
+            "abre gmail",
+            "abre mi gmail",
+            "abre correo",
+            "abre el correo",
+            "abre mi correo",
+            "abre correo electronico",
+            "abre el correo electronico",
+            "abre mi correo electronico",
+            "entra a gmail",
+            "entra a mi gmail",
+            "entra a mi correo",
+            "entra a mi correo electronico",
+            "ingresa a gmail",
+            "ingresa a mi gmail",
+            "ingresa a mi correo",
+            "ingresa a mi correo electronico",
+            "ve a gmail",
+            "ve a mi correo",
+        }
+
+        if t in correo:
+            try:
+                self.abrir_url_en_chrome("https://mail.google.com/mail/u/0/?tab=rm&ogbl#inbox")
+                self.responder("abriendo su correo en Google Chrome.", "feliz")
+                print("CONTROL ATLAS v3.7.3 ESTABLE: Gmail u/0 abierto en Chrome")
+            except Exception as error:
+                print("CONTROL ATLAS v3.7.3 ESTABLE: no pude abrir Gmail:", error)
+                self.responder("no pude abrir su correo en Google Chrome.", "molesta")
+            return True
+
+        # Drive se reconoce solo cuando hay una accion explicita de acceso.
+        # Compactar el objetivo permite recuperar "mid ride" / "mitra y"
+        # sin alterar nombres de carpetas fuera de este handler.
+        m_drive = re.fullmatch(
+            r"(abre|entra(?: a)?|ingresa(?: a)?|ve a)\s+(.+)",
+            t,
+        )
+        if m_drive:
+            objetivo = m_drive.group(2).strip()
+            compacto = re.sub(r"[\s_\-]+", "", objetivo)
+
+            objetivos_drive = {
+                # formas correctas
+                "drive", "eldrive", "midrive", "googledrive",
+                "elgoogledrive", "migoogledrive", "drivedegoogle",
+                "eldrivedegoogle",
+
+                # pronunciacion / ASR
+                "dry", "eldry", "midry", "googledry",
+                "draiv", "eldraiv", "midraiv", "googledraiv",
+                "drai", "eldrai", "midrai", "googledrai",
+                "dray", "eldray", "midray", "googledray",
+                "draib", "midraib", "draif", "midraif",
+
+                # deformaciones reales observadas
+                "midride", "miy", "mitray", "mitrai", "mitraiy",
+                "mitrai", "mitray", "mitray", "mitrai",
+            }
+
+            if compacto in objetivos_drive:
+                if t != t_bruto or compacto not in {"drive", "eldrive", "midrive", "googledrive"}:
+                    print(
+                        "CONTROL ATLAS v3.7.3 ESTABLE: Drive ASR/contexto recuperado "
+                        f"original={t_bruto!r} normalizado={t!r} objetivo={objetivo!r}"
+                    )
+                try:
+                    self.abrir_url_en_chrome("https://drive.google.com/drive/u/0/my-drive")
+                    self.responder("abriendo su Google Drive en Google Chrome.", "feliz")
+                    print("CONTROL ATLAS v3.7.3 ESTABLE: Google Drive u/0 abierto en Chrome")
+                except Exception as error:
+                    print("CONTROL ATLAS v3.7.3 ESTABLE: no pude abrir Google Drive:", error)
+                    self.responder("no pude abrir su Google Drive en Google Chrome.", "molesta")
+                return True
+
+        return False
+
     def _atlas_detectar_accion_sistema_critica(self, texto):
         """Devuelve una acción crítica de Windows solo ante una orden inequívoca."""
         t = self._atlas_normalizar_orden_operativa(self._atlas_quitar_wake(texto))
@@ -21526,6 +22054,15 @@ Recuerdos relevantes:
         if self._atlas_resolver_confirmacion_pendiente(original):
             return True
         if self._atlas_manejar_aclaracion(original):
+            return True
+
+        # v3.7.3 ESTABLE: Gmail/Drive se resuelven antes de carpetas genéricas.
+        # La acción se limita a abrir una URL conocida en Chrome.
+        # RC8: cortafuegos operativo de WhatsApp antes de carpetas/Ollama.
+        if self._atlas_manejar_whatsapp_directo(original):
+            return True
+
+        if self._atlas_manejar_accesos_personales(original):
             return True
 
         # v3.7.2 Control Atlas Fase 3 RC5: sesión/energía son acciones críticas.
@@ -22177,6 +22714,7 @@ Recuerdos relevantes:
             "consultar CPU, RAM, disco, red y GPU sin inventar sensores",
             "controlar Spotify",
             "abrir Google y YouTube y realizar búsquedas reales",
+            "abrir WhatsApp, Gmail y Google Drive sin operar el contenido de la cuenta",
             "guardar, consultar, reprogramar y cancelar recordatorios persistentes",
             "informar fecha, hora y clima",
             "trabajar en modo estudio con documentos, tareas y exportación a Word",
@@ -22210,6 +22748,14 @@ Recuerdos relevantes:
         return q
 
     def _orq_manejar_web(self, original):
+        # v3.7.3 ESTABLE: "abre Google Drive" contiene la palabra Google, por lo
+        # que el orquestador web generico puede detectarlo antes que Atlas.
+        # El handler personal solo acepta accesos explicitos a Gmail/Drive y
+        # devuelve False para una orden normal de Google.
+        if self._atlas_manejar_accesos_personales(original):
+            print("ORQUESTADOR v3.7.3 ESTABLE: acceso personal priorizado sobre web generica")
+            return True
+
         t = normalizar(original or "")
         es_youtube = any(x in t for x in ["youtube", "yutube", "yutu", "you tube"])
         if es_youtube:
