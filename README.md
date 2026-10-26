@@ -6,7 +6,7 @@ El objetivo del proyecto es construir un asistente local capaz de interactuar me
 
 ## Versión estable actual
 
-**Beta v3.7.3**
+**Beta v3.7.4**
 
 ## Características principales
 
@@ -52,7 +52,7 @@ Piper / Daniela
 
 ## Control Atlas Fase 3
 
-Beta v3.7.3 conserva Control Atlas Fase 3 con integración directa sobre funciones de Windows.
+Beta v3.7.4 conserva y amplía Control Atlas con integración directa sobre funciones de Windows.
 
 Entre sus capacidades se incluyen:
 
@@ -72,16 +72,22 @@ Entre sus capacidades se incluyen:
 Las operaciones críticas de sesión y energía requieren confirmación por voz antes de ejecutarse.
 
 También se utilizan cortafuegos locales para impedir que una transcripción ambigua termine produciendo una respuesta ficticia de la inteligencia artificial sobre una operación que no fue ejecutada.
-## Integraciones v3.7.3
+## Integraciones v3.7.4
 
-Beta v3.7.3 incorpora accesos personales controlados y mejoras de reconocimiento de voz:
+Beta v3.7.4 incorpora integraciones personales controladas, conversación general con ChatGPT y memoria local:
 
 - Abrir WhatsApp Desktop mediante Control Atlas.
 - Cerrar WhatsApp mediante Control Atlas.
 - Recuperación contextual de deformaciones ASR frecuentes de WhatsApp, sin relajar el wake word global.
 - Abrir el Gmail personal `u/0` en Google Chrome.
 - Abrir Google Drive personal `u/0` en Google Chrome.
-- Gmail y Drive se limitan a apertura/navegación; esta integración no lee, escribe, envía ni elimina contenido.
+- Gmail permite lectura controlada de metadatos y Drive permite consultas de metadatos; las credenciales y tokens siguen fuera del repositorio.
+- Google Calendar permite consulta directa y escritura de eventos de Agenda con confirmación previa.
+- Spotify mantiene control directo sin pasar por ChatGPT.
+- ChatGPT funciona como cerebro principal para conversación general, con Ollama como respaldo local.
+- Conversaciones Beta guarda el historial visible de forma local y permite crear, continuar, renombrar y eliminar conversaciones.
+- La memoria inteligente local puede conservar preferencias útiles entre conversaciones y filtra recuerdos irrelevantes.
+- Control Atlas mantiene acciones directas sobre Windows con confirmaciones y límites de seguridad.
 - Se mantiene la biometría de voz y el modo estricto.
 - El experimento visual de desintegrador no forma parte de la versión estable.
 

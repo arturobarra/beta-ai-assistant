@@ -38,10 +38,10 @@ import urllib.request
 from datetime import datetime, timedelta
 
 
-BETA_VERSION = "3.7.3"
+BETA_VERSION = "3.7.4"
 
 # ==========================================================
-# BETA v3.7.3 ESTABLE - CONTROL ATLAS FASE 3 + ASR v3.7.1 + AGENDA v3.7.0 RC4
+# BETA v3.7.4 RC2.6 FIX2 - GOOGLE CALENDAR + DRIVE + GMAIL METADATA VOZ + PRIVACIDAD MEMORIA + CONTROL ATLAS + ASR + AGENDA
 # Mascota virtual + memoria + comandos aprendidos + clima
 # + Ollama/Qwen3 Instruct + memoria evolutiva + personalidad adaptativa
 # + voz híbrida: Vosk para activación y Faster-Whisper para dictado
@@ -558,7 +558,7 @@ BIBLIOTECA_INTELIGENTE_CONTEXTO_SEGUNDOS = 25 * 60
 # Respuesta académica oral: breve por defecto para que Beta se sienta
 # conversacional. El Señor puede decir "profundiza", "explícalo en detalle"
 # o equivalentes para obtener una respuesta más extensa.
-ACADEMICO_TOKENS_BREVE = 72
+ACADEMICO_TOKENS_BREVE = 120
 ACADEMICO_TOKENS_PROFUNDO = 210
 ACADEMICO_FUENTES_BREVE = 2
 ACADEMICO_FUENTES_PROFUNDO = 3
@@ -714,6 +714,43 @@ class MemoriaBeta:
                     mensaje TEXT NOT NULL,
                     fecha TEXT NOT NULL
                 )
+                """
+            )
+
+            # Conversaciones Beta RC1: historial visible y agrupado en sesiones.
+            # La tabla legacy `conversaciones` se conserva intacta.
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS conversaciones_beta (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    titulo TEXT NOT NULL,
+                    creada_en TEXT NOT NULL,
+                    actualizada_en TEXT NOT NULL
+                )
+                """
+            )
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS conversaciones_beta_mensajes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    conversacion_id INTEGER NOT NULL,
+                    autor TEXT NOT NULL,
+                    mensaje TEXT NOT NULL,
+                    fecha TEXT NOT NULL,
+                    tipo_contexto TEXT DEFAULT 'general'
+                )
+                """
+            )
+            con.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_conversaciones_beta_actualizada
+                ON conversaciones_beta(actualizada_en DESC)
+                """
+            )
+            con.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_conversaciones_beta_mensajes_conv
+                ON conversaciones_beta_mensajes(conversacion_id, id)
                 """
             )
 
@@ -1115,7 +1152,7 @@ class MemoriaBeta:
             "que", "como", "cual", "quien", "cuando", "donde", "sobre",
             "sabes", "recuerdas", "recuerdo", "de", "del", "la", "el",
             "los", "las", "un", "una", "mi", "mis", "es", "son", "y",
-            "a", "por", "para", "me", "te", "tu", "tus", "lo", "se",
+            "a", "en", "por", "para", "me", "te", "tu", "tus", "lo", "se",
             "tengo", "tenemos", "pendiente", "pendientes",
         }
         palabras -= ignoradas
@@ -1355,6 +1392,164 @@ class MemoriaBeta:
         with self.conectar() as con:
             fila = con.execute("SELECT COUNT(*) FROM conversaciones").fetchone()
         return int(fila[0]) if fila else 0
+
+    # ======================================================
+    # CONVERSACIONES BETA RC1
+    # Historial visible local separado de la memoria legacy.
+    # ======================================================
+    def crear_conversacion_beta(self, titulo="Nueva conversación"):
+        titulo = re.sub(r"\s+", " ", str(titulo or "")).strip()
+        if not titulo:
+            titulo = "Nueva conversación"
+        titulo = titulo[:80]
+        fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with self.conectar() as con:
+            cur = con.execute(
+                """
+                INSERT INTO conversaciones_beta (titulo, creada_en, actualizada_en)
+                VALUES (?, ?, ?)
+                """,
+                (titulo, fecha, fecha),
+            )
+            return int(cur.lastrowid)
+
+    def existe_conversacion_beta(self, conversacion_id):
+        try:
+            conversacion_id = int(conversacion_id)
+        except Exception:
+            return False
+        with self.conectar() as con:
+            fila = con.execute(
+                "SELECT 1 FROM conversaciones_beta WHERE id=? LIMIT 1",
+                (conversacion_id,),
+            ).fetchone()
+        return bool(fila)
+
+    def guardar_intercambio_conversacion_beta(
+        self,
+        conversacion_id,
+        mensaje_usuario,
+        mensaje_beta,
+        tipo_contexto="general",
+    ):
+        try:
+            conversacion_id = int(conversacion_id)
+        except Exception:
+            return False
+
+        usuario = str(mensaje_usuario or "").strip()
+        beta = str(mensaje_beta or "").strip()
+        if not usuario or not beta:
+            return False
+
+        tipo = str(tipo_contexto or "general").strip() or "general"
+        fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with self.conectar() as con:
+            existe = con.execute(
+                "SELECT 1 FROM conversaciones_beta WHERE id=?",
+                (conversacion_id,),
+            ).fetchone()
+            if not existe:
+                return False
+            con.execute(
+                """
+                INSERT INTO conversaciones_beta_mensajes
+                (conversacion_id, autor, mensaje, fecha, tipo_contexto)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (conversacion_id, "Señor", usuario, fecha, tipo),
+            )
+            con.execute(
+                """
+                INSERT INTO conversaciones_beta_mensajes
+                (conversacion_id, autor, mensaje, fecha, tipo_contexto)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (conversacion_id, "Beta", beta, fecha, tipo),
+            )
+            con.execute(
+                "UPDATE conversaciones_beta SET actualizada_en=? WHERE id=?",
+                (fecha, conversacion_id),
+            )
+        return True
+
+    def listar_conversaciones_beta(self, limite=200):
+        limite = max(1, min(int(limite or 200), 1000))
+        with self.conectar() as con:
+            return con.execute(
+                """
+                SELECT
+                    c.id,
+                    c.titulo,
+                    c.creada_en,
+                    c.actualizada_en,
+                    COUNT(m.id) AS mensajes
+                FROM conversaciones_beta c
+                LEFT JOIN conversaciones_beta_mensajes m
+                    ON m.conversacion_id = c.id
+                GROUP BY c.id, c.titulo, c.creada_en, c.actualizada_en
+                ORDER BY c.actualizada_en DESC, c.id DESC
+                LIMIT ?
+                """,
+                (limite,),
+            ).fetchall()
+
+    def mensajes_conversacion_beta(self, conversacion_id, limite=1000):
+        try:
+            conversacion_id = int(conversacion_id)
+        except Exception:
+            return []
+        limite = max(1, min(int(limite or 1000), 5000))
+        with self.conectar() as con:
+            filas = con.execute(
+                """
+                SELECT autor, mensaje, fecha, tipo_contexto
+                FROM conversaciones_beta_mensajes
+                WHERE conversacion_id=?
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (conversacion_id, limite),
+            ).fetchall()
+        filas.reverse()
+        return filas
+
+    def renombrar_conversacion_beta(self, conversacion_id, titulo):
+        try:
+            conversacion_id = int(conversacion_id)
+        except Exception:
+            return False
+        titulo = re.sub(r"\s+", " ", str(titulo or "")).strip()[:80]
+        if not titulo:
+            return False
+        with self.conectar() as con:
+            cur = con.execute(
+                "UPDATE conversaciones_beta SET titulo=? WHERE id=?",
+                (titulo, conversacion_id),
+            )
+        return bool(cur.rowcount)
+
+    def eliminar_conversacion_beta(self, conversacion_id):
+        try:
+            conversacion_id = int(conversacion_id)
+        except Exception:
+            return False
+        with self.conectar() as con:
+            existe = con.execute(
+                "SELECT 1 FROM conversaciones_beta WHERE id=?",
+                (conversacion_id,),
+            ).fetchone()
+            if not existe:
+                return False
+            con.execute(
+                "DELETE FROM conversaciones_beta_mensajes WHERE conversacion_id=?",
+                (conversacion_id,),
+            )
+            con.execute(
+                "DELETE FROM conversaciones_beta WHERE id=?",
+                (conversacion_id,),
+            )
+        return True
 
     def recuerdos_para_iniciativa(self, limite=8):
         """Recuerdos apropiados para retomar espontáneamente.
@@ -3514,6 +3709,10 @@ class BetaApp:
         # en Agenda Beta / Google Calendar.
         self.agenda_confirmacion_pendiente = None
         self.agenda_confirmacion_hasta = 0.0
+        # FIX10: conserva temporalmente una solicitud de Agenda incompleta
+        # para completar fecha/hora en el siguiente turno.
+        self.agenda_aclaracion_pendiente = None
+        self.agenda_aclaracion_hasta = 0.0
 
         # Respaldos v2.7.1. Se ejecutan en segundo plano y nunca bloquean
         # el arranque de voz, Spotify o la biblioteca.
@@ -3922,6 +4121,10 @@ class BetaApp:
         # decidir si una orden corta y ambigua (por ejemplo, "profundiza") debe
         # heredar el contexto académico anterior en vez de caer al chat general.
         self.ultimo_tipo_respuesta_terminada = "general"
+        # Conversaciones Beta RC1.
+        self.conversacion_beta_id = 0
+        self.conversacion_beta_usuario_pendiente = ""
+        self._conversaciones_beta_ventana_rc1 = None
         # Mientras se pronuncia el informe de inicio, el micrófono permanece
         # apagado para que Beta no se escuche a sí misma.
         self.informe_inicio_en_curso = False
@@ -4436,6 +4639,15 @@ class BetaApp:
             command=self.ventana_administrar_voces,
         )
 
+        self.menu.add_separator()
+        self.menu.add_command(
+            label="Conversaciones Beta...",
+            command=self.abrir_conversaciones_beta_rc1,
+        )
+        self.menu.add_command(
+            label="ChatGPT / administrar cuentas...",
+            command=self.abrir_chatgpt_cuentas_rc2,
+        )
         self.menu.add_separator()
         self.menu.add_command(
             label="Probar IA local (Ollama)",
@@ -6121,6 +6333,7 @@ class BetaApp:
         try:
             self.memoria.guardar_conversacion("Señor", respuesta)
             self.actualizar_contexto_turno("Señor", respuesta)
+            self._conversaciones_beta_preparar_usuario_rc1(respuesta)
         except Exception:
             pass
         try:
@@ -14073,13 +14286,20 @@ Recuerdos relevantes:
         # v3.2.1: recuperar el contexto ANTES de finalizar_respuesta(), que lo elimina
         # del mapa. v3.1.2 referenciaba una variable inexistente y podía lanzar NameError.
         tipo_contexto = self.respuesta_tipo_por_id.get(respuesta_id, "general")
+        self._conversaciones_beta_registrar_respuesta_rc1(texto, tipo_contexto)
         # El chat de proyectos se persiste en su propio manifiesto.
         # No se mezcla con memoria inteligente ni resúmenes globales de Beta.
-        if tipo_contexto != "proyecto":
+        if tipo_contexto not in {"proyecto", "gmail_privado"}:
             self.memoria.guardar_conversacion("Beta", texto)
             self.ultima_respuesta_beta = texto
             self.actualizar_contexto_turno("Beta", texto)
             self.programar_memoria_inteligente(self.ultimo_mensaje_usuario, texto)
+        elif tipo_contexto == "gmail_privado":
+            self.ultima_respuesta_beta = texto
+            print(
+                "PRIVACIDAD GMAIL RC2.6 FIX2: "
+                "streaming no persistido en memoria ni resumen."
+            )
 
         if "?" in texto and self.modo_escucha == "conversacion":
             self.renovar_modo_conversacion()
@@ -14337,6 +14557,992 @@ Recuerdos relevantes:
 
         return self.limpiar_respuesta_ollama(respuesta)
 
+    # ==========================================================
+    # CHATGPT RC2 - CEREBRO GENERAL + OLLAMA COMO RESPALDO
+    # ==========================================================
+    def _chatgpt_estado_rc2(self):
+        try:
+            import beta_chatgpt_oauth_rc1 as chatgpt_oauth
+            estado = chatgpt_oauth.estado()
+            perfil_id = str(estado.get("perfil_activo") or "").strip()
+            meta = (estado.get("perfiles") or {}).get(perfil_id) or {}
+            if not perfil_id:
+                return chatgpt_oauth, None, None
+            if not meta.get("conectado") or not meta.get("plan_habilitado"):
+                return chatgpt_oauth, None, meta
+            return chatgpt_oauth, perfil_id, meta
+        except Exception as error:
+            print("CHATGPT RC2: estado no disponible:", error)
+            return None, None, None
+
+
+    # ======================================================
+    # CONVERSACIONES BETA RC1
+    # Historial local visible. No usa historial de ChatGPT.
+    # ======================================================
+    def _conversaciones_beta_tipo_privado_rc1(self, tipo_contexto):
+        return str(tipo_contexto or "general").strip().lower() in {
+            "gmail_privado",
+            "proyecto",
+        }
+
+    def _conversaciones_beta_preparar_usuario_rc1(self, mensaje):
+        self.conversacion_beta_usuario_pendiente = str(mensaje or "").strip()
+
+    def _conversaciones_beta_titulo_rc1(self, mensaje):
+        titulo = re.sub(r"\s+", " ", str(mensaje or "")).strip()
+        titulo = re.sub(r"(?i)^\s*beta[\s,.:;-]*", "", titulo).strip()
+        if not titulo:
+            return "Nueva conversación"
+        if len(titulo) > 64:
+            titulo = titulo[:64].rsplit(" ", 1)[0].rstrip(" ,.;:-") + "…"
+        return titulo
+
+    def _conversaciones_beta_registrar_respuesta_rc1(self, texto, tipo_contexto="general"):
+        usuario = str(
+            getattr(self, "conversacion_beta_usuario_pendiente", "") or ""
+        ).strip()
+        self.conversacion_beta_usuario_pendiente = ""
+
+        if self._conversaciones_beta_tipo_privado_rc1(tipo_contexto):
+            if usuario:
+                print(
+                    "CONVERSACIONES BETA RC1: turno omitido por privacidad/contexto:",
+                    tipo_contexto,
+                )
+            return False
+
+        beta = str(texto or "").strip()
+        if not usuario or not beta:
+            return False
+
+        try:
+            cid = int(getattr(self, "conversacion_beta_id", 0) or 0)
+        except Exception:
+            cid = 0
+
+        try:
+            if not cid or not self.memoria.existe_conversacion_beta(cid):
+                cid = self.memoria.crear_conversacion_beta(
+                    self._conversaciones_beta_titulo_rc1(usuario)
+                )
+                self.conversacion_beta_id = cid
+
+            guardado = self.memoria.guardar_intercambio_conversacion_beta(
+                cid,
+                usuario,
+                beta,
+                tipo_contexto=tipo_contexto or "general",
+            )
+            if guardado:
+                print(
+                    f"CONVERSACIONES BETA RC1: intercambio guardado "
+                    f"en conversación #{cid} ({tipo_contexto or 'general'})."
+                )
+            return bool(guardado)
+        except Exception as error:
+            print("CONVERSACIONES BETA RC1: no pude guardar intercambio:", error)
+            return False
+
+    def _conversaciones_beta_limpiar_contexto_rc1(self):
+        self.contexto_turnos = []
+        self.contexto_resumen = ""
+        self.contexto_tema = ""
+        # FIX2: vacío intencional y fresco. Evita que construir_prompt_sistema()
+        # recupere el último resumen GLOBAL al iniciar/cambiar una Conversación Beta.
+        self.contexto_actualizado_ts = time.time()
+        self.ultimo_tipo_respuesta_terminada = "general"
+
+        for nombre, valor in [
+            ("ultimo_contexto_academico", None),
+            ("ultimo_contexto_tecnico", None),
+            ("ultimo_contexto_inteligente", None),
+        ]:
+            if hasattr(self, nombre):
+                setattr(self, nombre, valor)
+        for nombre in [
+            "ultimo_contexto_academico_ts",
+            "ultimo_contexto_tecnico_ts",
+            "ultimo_contexto_inteligente_ts",
+        ]:
+            if hasattr(self, nombre):
+                setattr(self, nombre, 0.0)
+
+    def nueva_conversacion_beta_rc1(self):
+        self.conversacion_beta_id = 0
+        self.conversacion_beta_usuario_pendiente = ""
+        self._conversaciones_beta_limpiar_contexto_rc1()
+        print(
+            "CONVERSACIONES BETA RC1: nueva conversación preparada; "
+            "se creará con el próximo intercambio."
+        )
+        return True
+
+    def continuar_conversacion_beta_rc1(self, conversacion_id):
+        try:
+            cid = int(conversacion_id)
+        except Exception:
+            return False
+        if not self.memoria.existe_conversacion_beta(cid):
+            return False
+
+        mensajes = self.memoria.mensajes_conversacion_beta(cid, limite=8)
+        contexto = []
+        for autor, mensaje, _fecha, _tipo in mensajes:
+            if str(autor or "").strip() in {"Señor", "Beta"} and str(mensaje or "").strip():
+                contexto.append((autor, mensaje))
+
+        self._conversaciones_beta_limpiar_contexto_rc1()
+        self.contexto_turnos = contexto[-8:]
+        if self.contexto_turnos:
+            self.contexto_actualizado_ts = time.time()
+        self.conversacion_beta_id = cid
+        self.conversacion_beta_usuario_pendiente = ""
+        print(f"CONVERSACIONES BETA RC1: conversación #{cid} activada.")
+        return True
+
+    def abrir_conversaciones_beta_rc1(self):
+        try:
+            anterior = getattr(self, "_conversaciones_beta_ventana_rc1", None)
+            if anterior is not None and anterior.winfo_exists():
+                anterior.destroy()
+        except Exception:
+            pass
+
+        ventana = tk.Toplevel(self.root)
+        self._conversaciones_beta_ventana_rc1 = ventana
+        ventana.title("Conversaciones Beta")
+        ventana.geometry("1080x660")
+        ventana.minsize(900, 540)
+        ventana.transient(self.root)
+        ventana.attributes("-topmost", True)
+
+        marco = ttk.Frame(ventana, padding=12)
+        marco.pack(fill="both", expand=True)
+
+        cabecera = ttk.Frame(marco)
+        cabecera.pack(fill="x", pady=(0, 10))
+        ttk.Label(
+            cabecera,
+            text="Conversaciones Beta",
+            font=("Segoe UI", 16, "bold"),
+        ).pack(side="left")
+        estado = ttk.Label(
+            cabecera,
+            text="Historial local de Beta · separado de ChatGPT",
+        )
+        estado.pack(side="right")
+
+        cuerpo = ttk.Panedwindow(marco, orient="horizontal")
+        cuerpo.pack(fill="both", expand=True)
+
+        izquierda = ttk.Frame(cuerpo, padding=(0, 0, 8, 0))
+        derecha = ttk.Frame(cuerpo, padding=(8, 0, 0, 0))
+        cuerpo.add(izquierda, weight=1)
+        cuerpo.add(derecha, weight=3)
+
+        lista = ttk.Treeview(
+            izquierda,
+            columns=("actualizada", "mensajes"),
+            show="tree headings",
+            selectmode="browse",
+        )
+        lista.heading("#0", text="Conversación")
+        lista.heading("actualizada", text="Última actividad")
+        lista.heading("mensajes", text="Mensajes")
+        lista.column("#0", width=260, minwidth=180)
+        lista.column("actualizada", width=140, minwidth=120, anchor="center")
+        lista.column("mensajes", width=70, minwidth=60, anchor="center")
+
+        sb_lista = ttk.Scrollbar(izquierda, orient="vertical", command=lista.yview)
+        lista.configure(yscrollcommand=sb_lista.set)
+        lista.pack(side="left", fill="both", expand=True)
+        sb_lista.pack(side="right", fill="y")
+
+        texto = tk.Text(
+            derecha,
+            wrap="word",
+            font=("Segoe UI", 10),
+            state="disabled",
+        )
+        sb_texto = ttk.Scrollbar(derecha, orient="vertical", command=texto.yview)
+        texto.configure(yscrollcommand=sb_texto.set)
+        texto.pack(side="left", fill="both", expand=True)
+        sb_texto.pack(side="right", fill="y")
+
+        barra = ttk.Frame(marco)
+        barra.pack(fill="x", pady=(10, 0))
+
+        def seleccion_id():
+            seleccion = lista.selection()
+            if not seleccion:
+                return 0
+            try:
+                return int(seleccion[0])
+            except Exception:
+                return 0
+
+        def mostrar_conversacion(_event=None):
+            cid = seleccion_id()
+            texto.configure(state="normal")
+            texto.delete("1.0", "end")
+            if cid:
+                for autor, mensaje, fecha, tipo in self.memoria.mensajes_conversacion_beta(
+                    cid, limite=2000
+                ):
+                    texto.insert(
+                        "end",
+                        f"{autor} · {fecha} · {tipo or 'general'}\n",
+                    )
+                    texto.insert("end", str(mensaje or "").strip() + "\n\n")
+            texto.configure(state="disabled")
+
+        def refrescar(seleccionar_activa=True):
+            for item in lista.get_children():
+                lista.delete(item)
+            activa = int(getattr(self, "conversacion_beta_id", 0) or 0)
+            filas = self.memoria.listar_conversaciones_beta(300)
+            for cid, titulo, _creada, actualizada, mensajes in filas:
+                etiqueta = str(titulo or "Nueva conversación")
+                if int(cid) == activa:
+                    etiqueta = "● " + etiqueta
+                lista.insert(
+                    "",
+                    "end",
+                    iid=str(cid),
+                    text=etiqueta,
+                    values=(actualizada, mensajes),
+                )
+            if seleccionar_activa and activa and lista.exists(str(activa)):
+                lista.selection_set(str(activa))
+                lista.focus(str(activa))
+                lista.see(str(activa))
+                mostrar_conversacion()
+            elif lista.get_children():
+                primero = lista.get_children()[0]
+                lista.selection_set(primero)
+                lista.focus(primero)
+                mostrar_conversacion()
+            else:
+                texto.configure(state="normal")
+                texto.delete("1.0", "end")
+                texto.insert(
+                    "end",
+                    "Todavía no hay conversaciones visibles.\n\n"
+                    "La primera se creará cuando usted hable con Beta y "
+                    "Beta complete una respuesta no privada."
+                )
+                texto.configure(state="disabled")
+
+        def nueva():
+            self.nueva_conversacion_beta_rc1()
+            estado.configure(
+                text="Nueva conversación preparada · hable con Beta para iniciarla"
+            )
+            refrescar(seleccionar_activa=False)
+
+        def continuar():
+            cid = seleccion_id()
+            if not cid:
+                messagebox.showinfo(
+                    "Conversaciones Beta",
+                    "Seleccione una conversación para continuarla.",
+                    parent=ventana,
+                )
+                return
+            if self.continuar_conversacion_beta_rc1(cid):
+                estado.configure(text=f"Conversación #{cid} activa")
+                refrescar(seleccionar_activa=True)
+            else:
+                messagebox.showerror(
+                    "Conversaciones Beta",
+                    "No pude activar esa conversación.",
+                    parent=ventana,
+                )
+
+        def renombrar():
+            cid = seleccion_id()
+            if not cid:
+                return
+            nuevo = simpledialog.askstring(
+                "Renombrar conversación",
+                "Nuevo título:",
+                parent=ventana,
+            )
+            if nuevo and self.memoria.renombrar_conversacion_beta(cid, nuevo):
+                refrescar(seleccionar_activa=True)
+
+        def eliminar():
+            cid = seleccion_id()
+            if not cid:
+                return
+            if not messagebox.askyesno(
+                "Eliminar conversación",
+                "¿Eliminar esta conversación de Beta?\n\n"
+                "Se borrarán únicamente esta conversación y sus mensajes "
+                "del historial local Conversaciones Beta. "
+                "La memoria inteligente y la cuenta de ChatGPT no se eliminan.",
+                parent=ventana,
+            ):
+                return
+            if self.memoria.eliminar_conversacion_beta(cid):
+                if int(getattr(self, "conversacion_beta_id", 0) or 0) == cid:
+                    self.nueva_conversacion_beta_rc1()
+                refrescar(seleccionar_activa=True)
+
+        ttk.Button(barra, text="Nueva conversación", command=nueva).pack(side="left")
+        ttk.Button(
+            barra,
+            text="Continuar seleccionada",
+            command=continuar,
+        ).pack(side="left", padx=(6, 0))
+        ttk.Button(barra, text="Renombrar", command=renombrar).pack(side="left", padx=(6, 0))
+        ttk.Button(barra, text="Eliminar", command=eliminar).pack(side="left", padx=(6, 0))
+        ttk.Button(barra, text="Actualizar", command=refrescar).pack(side="left", padx=(6, 0))
+        ttk.Button(barra, text="Cerrar", command=ventana.destroy).pack(side="right")
+
+        lista.bind("<<TreeviewSelect>>", mostrar_conversacion)
+        lista.bind("<Double-1>", lambda _e: continuar())
+
+        refrescar(seleccionar_activa=True)
+        print("CONVERSACIONES BETA RC1: ventana integrada abierta.")
+
+    def abrir_chatgpt_cuentas_rc2(self):
+        """Administra las cuentas ChatGPT dentro de la interfaz de Beta."""
+        try:
+            import beta_chatgpt_oauth_rc2_fix1 as chatgpt_oauth
+        except Exception as error:
+            print("CHATGPT RC3 UI1: módulo OAuth no disponible:", error)
+            self.responder(
+                "el administrador de cuentas ChatGPT no está disponible.",
+                "confundida",
+            )
+            return
+
+        anterior = getattr(self, "_chatgpt_ventana_cuentas_rc3", None)
+        try:
+            if anterior is not None and anterior.winfo_exists():
+                anterior.destroy()
+        except Exception:
+            pass
+
+        ventana = tk.Toplevel(self.root)
+        self._chatgpt_ventana_cuentas_rc3 = ventana
+        ventana.title("ChatGPT en Beta")
+        ventana.geometry("760x560")
+        ventana.minsize(700, 500)
+        ventana.transient(self.root)
+        ventana.attributes("-topmost", True)
+        try:
+            aplicar_icono_beta(ventana, heredar=False)
+        except Exception:
+            pass
+
+        exterior = ttk.Frame(ventana, padding=16)
+        exterior.pack(fill="both", expand=True)
+
+        ttk.Label(
+            exterior,
+            text="ChatGPT",
+            font=("Segoe UI", 16, "bold"),
+        ).pack(anchor="w")
+        ttk.Label(
+            exterior,
+            text=(
+                "Administre las cuentas que Beta puede usar como cerebro general. "
+                "Las credenciales permanecen cifradas localmente con Windows DPAPI."
+            ),
+            wraplength=710,
+        ).pack(anchor="w", pady=(3, 10))
+
+        estado_var = tk.StringVar(value="Listo.")
+        resumen_var = tk.StringVar(value="Consultando estado...")
+
+        ttk.Label(
+            exterior,
+            textvariable=resumen_var,
+            font=("Segoe UI", 11, "bold"),
+        ).pack(anchor="w", pady=(0, 8))
+
+        barra = ttk.Frame(exterior)
+        barra.pack(fill="x", pady=(0, 10))
+
+        cuerpo = ttk.Frame(exterior)
+        cuerpo.pack(fill="both", expand=True)
+
+        pie = ttk.Frame(exterior)
+        pie.pack(fill="x", pady=(10, 0))
+        ttk.Label(pie, textvariable=estado_var).pack(side="left")
+        ttk.Button(pie, text="Cerrar", command=ventana.destroy).pack(side="right")
+
+        def limpiar_cache(pid=None):
+            cache = getattr(self, "_chatgpt_modelos_cache_rc2", {})
+            if not isinstance(cache, dict):
+                cache = {}
+            if pid:
+                cache.pop(pid, None)
+            else:
+                cache.clear()
+            self._chatgpt_modelos_cache_rc2 = cache
+
+        def ejecutar_trabajo(mensaje, funcion, al_terminar=None):
+            estado_var.set(mensaje)
+
+            def trabajo():
+                try:
+                    resultado = funcion()
+                except Exception as error:
+                    mensaje_error = str(error)
+
+                    def mostrar_error():
+                        try:
+                            if not ventana.winfo_exists():
+                                return
+                        except Exception:
+                            return
+                        estado_var.set("La operación no pudo completarse.")
+                        messagebox.showerror(
+                            "ChatGPT",
+                            mensaje_error,
+                            parent=ventana,
+                        )
+                        render()
+
+                    self.root.after(0, mostrar_error)
+                    return
+
+                def finalizar():
+                    try:
+                        if not ventana.winfo_exists():
+                            return
+                    except Exception:
+                        return
+                    if al_terminar:
+                        al_terminar(resultado)
+                    render()
+
+                self.root.after(0, finalizar)
+
+            threading.Thread(target=trabajo, daemon=True).start()
+
+        def agregar_cuenta():
+            def listo(resultado):
+                pid, meta = resultado
+                limpiar_cache(pid)
+                estado_var.set("Cuenta conectada.")
+                mensaje = (
+                    "Cuenta conectada y lista para usar en Beta."
+                    if meta.get("plan_habilitado")
+                    else "Cuenta conectada, pero el uso del plan ChatGPT no fue habilitado."
+                )
+                messagebox.showinfo("ChatGPT", mensaje, parent=ventana)
+
+            ejecutar_trabajo(
+                "Abriendo ChatGPT en el navegador...",
+                lambda: chatgpt_oauth.registrar(),
+                listo,
+            )
+
+        def reconectar(pid):
+            def listo(resultado):
+                nuevo_pid, meta = resultado
+                limpiar_cache(pid)
+                limpiar_cache(nuevo_pid)
+                estado_var.set("Cuenta reconectada.")
+                mensaje = (
+                    "Cuenta reconectada y lista para usar."
+                    if meta.get("plan_habilitado")
+                    else "Cuenta reconectada, pero el uso del plan no está habilitado."
+                )
+                messagebox.showinfo("ChatGPT", mensaje, parent=ventana)
+
+            ejecutar_trabajo(
+                "Reconectando cuenta en el navegador...",
+                lambda p=pid: chatgpt_oauth.registrar(p),
+                listo,
+            )
+
+        def usar_cuenta(pid):
+            try:
+                chatgpt_oauth.seleccionar(pid)
+                estado_var.set("Cuenta activa cambiada.")
+                print("CHATGPT RC3 UI1: cuenta activa cambiada.")
+                render()
+            except Exception as error:
+                messagebox.showerror("ChatGPT", str(error), parent=ventana)
+
+        def probar_cuenta(pid):
+            def listo(resultado):
+                modelo, respuesta, latencia = resultado
+                estado_var.set("Prueba completada.")
+                messagebox.showinfo(
+                    "Prueba ChatGPT",
+                    f"Modelo: {modelo}\nRespuesta: {respuesta}\nLatencia: {latencia:.2f} s",
+                    parent=ventana,
+                )
+
+            ejecutar_trabajo(
+                "Probando ChatGPT...",
+                lambda p=pid: chatgpt_oauth.probar(p),
+                listo,
+            )
+
+        def desconectar_cuenta(pid):
+            if not messagebox.askyesno(
+                "Desconectar ChatGPT",
+                (
+                    "Se eliminarán los tokens locales de esta cuenta. "
+                    "El perfil se conservará para poder reconectarlo más adelante."
+                ),
+                parent=ventana,
+            ):
+                return
+
+            def listo(resultado):
+                limpiar_cache(pid)
+                estado_var.set("Cuenta desconectada.")
+                messagebox.showinfo(
+                    "ChatGPT",
+                    f"Cuenta desconectada. Revocación remota: {resultado}",
+                    parent=ventana,
+                )
+
+            ejecutar_trabajo(
+                "Desconectando cuenta...",
+                lambda p=pid: chatgpt_oauth.desconectar(p),
+                listo,
+            )
+
+        def eliminar_cuenta(pid):
+            try:
+                datos = chatgpt_oauth.estado()
+                meta = (datos.get("perfiles") or {}).get(pid) or {}
+            except Exception:
+                meta = {}
+
+            nombre = (
+                meta.get("name")
+                or meta.get("email")
+                or f"Cuenta {pid[:8]}"
+            )
+
+            if not messagebox.askyesno(
+                "Eliminar cuenta de Beta",
+                (
+                    f"¿Eliminar “{nombre}” de Beta?\n\n"
+                    "Esto no elimina su cuenta de ChatGPT. "
+                    "Beta intentará revocar la conexión, borrará las credenciales "
+                    "locales cifradas y quitará este perfil de la lista.\n\n"
+                    "Si más adelante quiere usarla otra vez, tendrá que agregarla de nuevo."
+                ),
+                parent=ventana,
+            ):
+                return
+
+            def listo(resultado):
+                limpiar_cache(pid)
+                estado_var.set("Cuenta eliminada de Beta.")
+                messagebox.showinfo(
+                    "ChatGPT",
+                    f"Cuenta eliminada de Beta. Revocación remota: {resultado}",
+                    parent=ventana,
+                )
+
+            ejecutar_trabajo(
+                "Eliminando cuenta de Beta...",
+                lambda p=pid: chatgpt_oauth.eliminar_perfil(p, revocar=True),
+                listo,
+            )
+
+        def render():
+            for widget in cuerpo.winfo_children():
+                widget.destroy()
+
+            try:
+                datos = chatgpt_oauth.estado()
+            except Exception as error:
+                resumen_var.set("ChatGPT: estado no disponible")
+                ttk.Label(
+                    cuerpo,
+                    text=f"No pude leer el estado de ChatGPT: {error}",
+                    wraplength=700,
+                ).pack(anchor="w", pady=8)
+                return
+
+            perfiles = datos.get("perfiles") or {}
+            activo = str(datos.get("perfil_activo") or "")
+            meta_activa = perfiles.get(activo) or {}
+
+            if (
+                activo
+                and meta_activa.get("conectado")
+                and meta_activa.get("plan_habilitado")
+            ):
+                nombre_activo = (
+                    meta_activa.get("name")
+                    or meta_activa.get("email")
+                    or f"Cuenta {activo[:8]}"
+                )
+                resumen_var.set(f"● Conectado — {nombre_activo}")
+            elif activo and meta_activa.get("conectado"):
+                resumen_var.set("● Conectado — plan ChatGPT no habilitado")
+            else:
+                resumen_var.set("○ ChatGPT no conectado")
+
+            if not perfiles:
+                ttk.Label(
+                    cuerpo,
+                    text=(
+                        "Todavía no hay cuentas ChatGPT guardadas. "
+                        "Use “Agregar otra cuenta” para conectar la primera."
+                    ),
+                    wraplength=700,
+                ).pack(anchor="w", pady=(8, 12))
+
+            ordenados = sorted(
+                perfiles.items(),
+                key=lambda item: (
+                    str(
+                        item[1].get("name")
+                        or item[1].get("email")
+                        or item[0]
+                    ).lower()
+                ),
+            )
+
+            for pid, meta in ordenados:
+                marco = ttk.LabelFrame(cuerpo, padding=10)
+                marco.pack(fill="x", pady=5)
+
+                nombre = (
+                    meta.get("name")
+                    or meta.get("email")
+                    or f"Cuenta {pid[:8]}"
+                )
+                sufijo = "  • ACTIVA" if pid == activo else ""
+                ttk.Label(
+                    marco,
+                    text=nombre + sufijo,
+                    font=("Segoe UI", 11, "bold"),
+                ).pack(anchor="w")
+
+                if meta.get("email") and meta.get("email") != nombre:
+                    ttk.Label(marco, text=meta.get("email")).pack(anchor="w")
+
+                if meta.get("conectado"):
+                    estado = (
+                        "Conectada • plan habilitado"
+                        if meta.get("plan_habilitado")
+                        else "Conectada • solo identidad"
+                    )
+                else:
+                    estado = "Desconectada"
+
+                ttk.Label(marco, text=estado).pack(anchor="w", pady=(2, 7))
+
+                botones = ttk.Frame(marco)
+                botones.pack(anchor="w")
+
+                if meta.get("conectado"):
+                    if pid == activo:
+                        ttk.Button(
+                            botones,
+                            text="Cuenta activa",
+                            state="disabled",
+                        ).pack(side="left", padx=(0, 5))
+                    else:
+                        ttk.Button(
+                            botones,
+                            text="Cambiar a esta cuenta",
+                            command=lambda p=pid: usar_cuenta(p),
+                        ).pack(side="left", padx=(0, 5))
+
+                    if meta.get("plan_habilitado"):
+                        ttk.Button(
+                            botones,
+                            text="Probar ChatGPT",
+                            command=lambda p=pid: probar_cuenta(p),
+                        ).pack(side="left", padx=(0, 5))
+
+                    ttk.Button(
+                        botones,
+                        text="Reconectar",
+                        command=lambda p=pid: reconectar(p),
+                    ).pack(side="left", padx=(0, 5))
+                    ttk.Button(
+                        botones,
+                        text="Desconectar",
+                        command=lambda p=pid: desconectar_cuenta(p),
+                    ).pack(side="left", padx=(0, 5))
+                    ttk.Button(
+                        botones,
+                        text="Eliminar cuenta",
+                        command=lambda p=pid: eliminar_cuenta(p),
+                    ).pack(side="left")
+                else:
+                    ttk.Button(
+                        botones,
+                        text="Reconectar",
+                        command=lambda p=pid: reconectar(p),
+                    ).pack(side="left", padx=(0, 5))
+                    ttk.Button(
+                        botones,
+                        text="Eliminar cuenta",
+                        command=lambda p=pid: eliminar_cuenta(p),
+                    ).pack(side="left")
+
+        ttk.Button(
+            barra,
+            text="Agregar otra cuenta",
+            command=agregar_cuenta,
+        ).pack(side="left")
+        ttk.Button(
+            barra,
+            text="Actualizar estado",
+            command=render,
+        ).pack(side="left", padx=(6, 0))
+
+        render()
+        print("CHATGPT RC3 UI2 FIX1: administrador integrado abierto.")
+
+    def _chatgpt_modelo_rc2(self, chatgpt_oauth, perfil_id):
+        cache = getattr(self, "_chatgpt_modelos_cache_rc2", {})
+        if not isinstance(cache, dict):
+            cache = {}
+        modelo = str(cache.get(perfil_id) or "").strip()
+        if modelo:
+            return modelo
+
+        modelos = chatgpt_oauth.modelos(perfil_id)
+        if not modelos:
+            raise RuntimeError("La cuenta ChatGPT no devolvió modelos disponibles.")
+
+        primero = modelos[0]
+        modelo = str(
+            primero[0] if isinstance(primero, (tuple, list)) else primero
+        ).strip()
+        if not modelo:
+            raise RuntimeError("No pude resolver un modelo ChatGPT utilizable.")
+
+        cache[perfil_id] = modelo
+        self._chatgpt_modelos_cache_rc2 = cache
+        return modelo
+
+    def enviar_chatgpt_streaming_rc2(
+        self,
+        mensajes,
+        on_fragment=None,
+        token_proceso=None,
+    ):
+        chatgpt_oauth, perfil_id, _meta = self._chatgpt_estado_rc2()
+        if not chatgpt_oauth or not perfil_id:
+            return {
+                "estado": "no_disponible",
+                "texto": "",
+                "emitio": False,
+                "modelo": "",
+                "error": "sin cuenta ChatGPT activa con plan habilitado",
+            }
+
+        from openai import OpenAI
+
+        cred = chatgpt_oauth.refrescar(perfil_id)
+        modelo = self._chatgpt_modelo_rc2(chatgpt_oauth, perfil_id)
+        cliente = OpenAI(
+            api_key=cred["access_token"],
+            base_url=chatgpt_oauth.RESOURCE,
+            max_retries=0,
+        )
+
+        texto_total = ""
+        buffer = ""
+        emitio = False
+        completado = False
+        inicio = time.perf_counter()
+        primer_token = False
+
+        try:
+            with cliente.responses.create(
+                model=modelo,
+                input=mensajes,
+                store=False,
+                stream=True,
+            ) as stream:
+                for evento in stream:
+                    if token_proceso is not None and token_proceso != self.proceso_id:
+                        print("CHATGPT RC2: stream cancelado por cambio de proceso.")
+                        return {
+                            "estado": "cancelado",
+                            "texto": texto_total.strip(),
+                            "emitio": emitio,
+                            "modelo": modelo,
+                            "error": "",
+                        }
+
+                    tipo = getattr(evento, "type", "")
+                    if tipo == "response.output_text.delta":
+                        pieza = getattr(evento, "delta", "") or ""
+                        if pieza:
+                            if not primer_token:
+                                primer_token = True
+                                print(
+                                    "LATENCIA CHATGPT HASTA PRIMER TOKEN: "
+                                    f"{time.perf_counter() - inicio:.2f} s"
+                                )
+                            texto_total += pieza
+                            buffer += pieza
+                            fragmentos, buffer = self.extraer_fragmentos_streaming(buffer)
+                            if on_fragment:
+                                for fragmento in fragmentos:
+                                    on_fragment(fragmento)
+                                    emitio = True
+
+                    elif tipo == "response.failed":
+                        respuesta = getattr(evento, "response", None)
+                        error = getattr(respuesta, "error", None) if respuesta else None
+                        codigo = getattr(error, "code", "unknown_error") if error else "unknown_error"
+                        raise RuntimeError(f"Responses API falló: {codigo}")
+
+                    elif tipo == "response.completed":
+                        completado = True
+
+            fragmentos, resto = self.extraer_fragmentos_streaming(buffer, forzar=False)
+            if on_fragment:
+                for fragmento in fragmentos:
+                    on_fragment(fragmento)
+                    emitio = True
+
+            resto = (resto or "").strip()
+            if resto and re.search(r'[.!?][\"”»]?\s*$', resto):
+                if on_fragment:
+                    on_fragment(resto)
+                    emitio = True
+            elif resto:
+                print(
+                    "CHATGPT RC2: cola incompleta descartada "
+                    f"({len(resto)} caracteres)."
+                )
+
+            print(
+                "LATENCIA CHATGPT GENERACIÓN COMPLETA: "
+                f"{time.perf_counter() - inicio:.2f} s | modelo={modelo}"
+            )
+            return {
+                "estado": "ok" if completado else "incompleto",
+                "texto": texto_total.strip(),
+                "emitio": emitio,
+                "modelo": modelo,
+                "error": "",
+            }
+
+        except Exception as error:
+            print("ERROR CHATGPT RC2:", error)
+            return {
+                "estado": "error",
+                "texto": texto_total.strip(),
+                "emitio": emitio,
+                "modelo": modelo,
+                "error": str(error),
+            }
+
+    def generar_y_hablar_chatgpt_streaming_rc2(
+        self,
+        mensajes,
+        tipo_contexto,
+        token_proceso,
+    ):
+        sesion = self.iniciar_pipeline_respuesta_streaming(
+            tipo_contexto,
+            "hablando",
+        )
+        resultado = self.enviar_chatgpt_streaming_rc2(
+            mensajes,
+            on_fragment=lambda frag: self.encolar_fragmento_streaming(sesion, frag),
+            token_proceso=token_proceso,
+        )
+
+        estado = resultado.get("estado")
+        emitio = bool(resultado.get("emitio"))
+
+        if estado == "ok" and sesion.get("partes"):
+            self.cerrar_pipeline_respuesta_streaming(sesion, cancelar=False)
+            texto_final = (
+                sesion.get("texto_final")
+                or " ".join(sesion.get("partes") or [])
+            )
+            return "ok", texto_final.strip()
+
+        self.cerrar_pipeline_respuesta_streaming(sesion, cancelar=True)
+        if emitio or sesion.get("partes"):
+            return "parcial", " ".join(sesion.get("partes") or []).strip()
+        return "fallo", ""
+
+    def conversar_chatgpt_async(self, pregunta):
+        _mod, perfil_id, _meta = self._chatgpt_estado_rc2()
+        if not perfil_id:
+            print("CHATGPT RC2: no disponible; usando Ollama como respaldo local.")
+            self.conversar_ollama_async(pregunta)
+            return
+
+        token = self.iniciar_proceso("chatgpt")
+        if token is None:
+            self.responder(
+                "todavía estoy terminando la respuesta anterior. Espere un momento y vuelva a preguntarme.",
+                "pensando",
+            )
+            return
+
+        self.expresion_pensando()
+
+        def trabajo():
+            estado = "fallo"
+            try:
+                sistema = self.construir_prompt_sistema(pregunta)
+                mensajes = [{"role": "system", "content": sistema}]
+                mensajes.extend(self.preparar_historial_ollama(pregunta)[-4:])
+                mensajes.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            pregunta
+                            + "\n\nResponde únicamente en español. "
+                              "Para conversación oral, da primero la respuesta directa "
+                              "y normalmente usa entre 2 y 4 frases. "
+                              "No uses Markdown salvo que sea imprescindible."
+                        ),
+                    }
+                )
+                print("RUTA CEREBRO RC2: ChatGPT principal.")
+                estado, _respuesta = self.generar_y_hablar_chatgpt_streaming_rc2(
+                    mensajes,
+                    "general",
+                    token,
+                )
+            except Exception as error:
+                print("ERROR HILO CHATGPT RC2:", error)
+                estado = "fallo"
+            finally:
+                self.terminar_proceso(token)
+
+            if token != self.proceso_id:
+                return
+
+            if estado == "fallo":
+                print(
+                    "RUTA CEREBRO RC2: ChatGPT falló antes de hablar; "
+                    "respaldo=Ollama."
+                )
+                self.root.after(
+                    0,
+                    lambda p=pregunta: self.conversar_ollama_async(p),
+                )
+            elif estado == "parcial":
+                print(
+                    "RUTA CEREBRO RC2: ChatGPT se interrumpió después de emitir audio; "
+                    "no se superpone Ollama por seguridad."
+                )
+
+        threading.Thread(target=trabajo, daemon=True).start()
     def conversar_ollama_async(self, pregunta):
         token = self.iniciar_proceso("ollama")
         if token is None:
@@ -16700,11 +17906,19 @@ Recuerdos relevantes:
                 return False
 
         # Preguntas puras normalmente consultan información; no son un hecho nuevo.
+        # FIX2: toleramos conectores conversacionales al inicio. Sin esto,
+        # "y cuál era la decimotercera que me mencionaste" no comenzaba por
+        # "cual " y la palabra "me" podía hacerla pasar como supuesto dato personal.
+        t_pregunta = re.sub(
+            r"^(?:(?:y|e|entonces|pero|bueno|bien|ahora|oye|mira)\s+)+",
+            "",
+            t,
+        ).strip()
         interrogativos = (
             "que ", "como ", "cual ", "quien ", "cuando ", "donde ",
             "por que ", "puedes ", "podrias ", "me puedes ", "cuanto ",
         )
-        if t.startswith(interrogativos):
+        if t_pregunta.startswith(interrogativos):
             return False
 
         # Comandos operativos no deben convertirse en recuerdos personales.
@@ -16727,6 +17941,7 @@ Recuerdos relevantes:
             "incorpora ", "incorporar ", "termina ", "cierra ",
             "minimiza ", "minimizar ", "maximiza ", "maximizar ",
             "restaura ", "restaurar ", "pausa", "reanuda", "continua ",
+            "repite ", "repiteme ",
             "entra a ", "entra en ", "vuelve a ", "volver a ",
             "dime la temperatura", "dime el clima", "dime el tiempo",
             "dime el estado", "estado de ", "estado del ", "estado de atlas",
@@ -16907,7 +18122,7 @@ Recuerdos relevantes:
         ]
 
         inicio = time.perf_counter()
-        respuesta = self.enviar_ollama(mensajes, temperatura=0.05, num_predict=220)
+        respuesta = self.enviar_ollama(mensajes, temperatura=0.05, num_predict=220, formato_json=True)
         if not respuesta:
             return
         datos = self.extraer_json_de_texto(self.limpiar_respuesta_ollama(respuesta))
@@ -17001,7 +18216,7 @@ Recuerdos relevantes:
             },
             {"role": "user", "content": transcripcion},
         ]
-        respuesta = self.enviar_ollama(mensajes, temperatura=0.08, num_predict=180)
+        respuesta = self.enviar_ollama(mensajes, temperatura=0.08, num_predict=180, formato_json=True)
         datos = self.extraer_json_de_texto(self.limpiar_respuesta_ollama(respuesta or ""))
         if not isinstance(datos, dict):
             return
@@ -17098,6 +18313,7 @@ Recuerdos relevantes:
         self.memoria.guardar_conversacion("Señor", respuesta)
         self.ultimo_mensaje_usuario = respuesta
         self.actualizar_contexto_turno("Señor", respuesta)
+        self._conversaciones_beta_preparar_usuario_rc1(respuesta)
         self.memoria.marcar_pregunta_curiosa_respondida(pregunta_id, respuesta)
         self.ultima_respuesta_curiosa_ts = time.time()
 
@@ -17443,9 +18659,140 @@ Recuerdos relevantes:
 
         return None
 
+    def _google_calendar_manejar_voz_rc2_2(self, texto):
+        # RC2.2: ruta directa Google Calendar, sin Ollama.
+        try:
+            import beta_google_calendar_voz_rc2_2_fix2 as calendar_voz
+        except Exception as error:
+            print("GOOGLE CALENDAR RC2.2: módulo no disponible:", error)
+            return False
+
+        tipo = calendar_voz.clasificar_consulta(texto)
+        if not tipo:
+            return False
+
+        print(
+            "GOOGLE CALENDAR v3.7.4 RC2.2 FIX2: "
+            f"intención={tipo}; consulta directa; sin Ollama"
+        )
+
+        try:
+            if not calendar_voz.calendar_autorizado():
+                self.responder(
+                    "Google Calendar todavía no tiene autorización de lectura. "
+                    "Abra el Centro de Conexiones para autorizarlo.",
+                    "neutral",
+                )
+                return True
+
+            respuesta = calendar_voz.responder_consulta(tipo)
+            self.responder(respuesta, "feliz")
+            return True
+
+        except Exception as error:
+            print("GOOGLE CALENDAR RC2.2: error de consulta:", repr(error))
+            self.responder(
+                "no pude consultar Google Calendar en este momento.",
+                "molesta",
+            )
+            return True
+
+    def _google_drive_manejar_voz_rc2_4(self, texto):
+        # RC2.4: ruta directa Google Drive metadata, sin Ollama.
+        try:
+            import beta_google_drive_voz_rc2_4_3 as drive_voz
+        except Exception as error:
+            print("GOOGLE DRIVE RC2.4: módulo no disponible:", error)
+            return False
+
+        consulta = drive_voz.clasificar_consulta(texto)
+        if not consulta:
+            return False
+
+        tipo = consulta.get("tipo")
+        print(
+            "GOOGLE DRIVE v3.7.4 RC2.4.3: "
+            f"intención={tipo}; consulta directa; sin Ollama"
+        )
+
+        try:
+            if not drive_voz.drive_autorizado():
+                self.responder(
+                    "Google Drive todavía no tiene autorización de metadatos. "
+                    "Abra el Centro de Conexiones para autorizarlo.",
+                    "neutral",
+                )
+                return True
+
+            respuesta = drive_voz.responder_consulta(consulta)
+            self.responder(respuesta, "feliz")
+            return True
+
+        except Exception as error:
+            print("GOOGLE DRIVE RC2.4: error de consulta:", repr(error))
+            self.responder(
+                "no pude consultar Google Drive en este momento.",
+                "molesta",
+            )
+            return True
+
+    def _google_gmail_manejar_voz_rc2_6(self, texto):
+        # RC2.6: ruta directa Gmail metadata, sin Ollama.
+        try:
+            import beta_google_gmail_voz_rc2_6_fix1 as gmail_voz
+        except Exception as error:
+            print("GMAIL RC2.6: módulo no disponible:", error)
+            return False
+
+        consulta = gmail_voz.clasificar_consulta(texto)
+        if not consulta:
+            return False
+
+        tipo = consulta.get("tipo")
+        print(
+            "GMAIL v3.7.4 RC2.6 FIX2: "
+            f"intención={tipo}; consulta directa; sin Ollama"
+        )
+
+        try:
+            if not gmail_voz.gmail_autorizado():
+                self.responder(
+                    "Gmail todavía no tiene autorización de metadatos. "
+                    "Abra el Centro de Conexiones para autorizarlo.",
+                    "neutral",
+                    tipo_contexto="gmail_privado",
+                )
+                return True
+
+            respuesta = gmail_voz.responder_consulta(consulta)
+            self.responder(
+                respuesta,
+                "feliz",
+                tipo_contexto="gmail_privado",
+            )
+            return True
+
+        except Exception as error:
+            print("GMAIL RC2.6: error de consulta:", repr(error))
+            self.responder(
+                "no pude consultar Gmail en este momento.",
+                "molesta",
+                tipo_contexto="gmail_privado",
+            )
+            return True
+
     def procesar_voz(self, texto, fuente_asr="manual"):
         texto_original = (texto or "").strip()
         fuente_asr = (fuente_asr or "manual").strip().lower()
+        if self._google_gmail_manejar_voz_rc2_6(texto_original):
+            return
+
+        if self._google_drive_manejar_voz_rc2_4(texto_original):
+            return
+
+        if self._google_calendar_manejar_voz_rc2_2(texto_original):
+            return
+
         texto_normal = normalizar(texto_original)
         if texto_original:
             self.penultimo_texto_asr_aceptado = self.ultimo_texto_asr_aceptado
@@ -17542,13 +18889,18 @@ Recuerdos relevantes:
         if self.pregunta_curiosa_pendiente and ahora > self.pregunta_curiosa_hasta:
             self.cancelar_pregunta_curiosa("tiempo agotado")
 
-        # AGENDA BETA v3.7.0 RC1: una confirmación de evento puede llegar
-        # sin repetir el wake word porque Beta acaba de formular la pregunta.
+        # AGENDA BETA FIX10: una confirmación pendiente acepta tanto
+        # "Confirmo/No" como "Beta, confirmo/no". El resolver quita el wake
+        # de forma acotada y conserva el requisito de Whisper para un sí.
         if getattr(self, "agenda_confirmacion_pendiente", None):
-            wake_agenda = self._wake_en_inicio(texto_normal, incluir_ambiguos=False)
-            if wake_agenda is None:
-                if self._agenda_resolver_confirmacion(texto_original, fuente_asr):
-                    return
+            if self._agenda_resolver_confirmacion(texto_original, fuente_asr):
+                return
+
+        # Una solicitud incompleta de Agenda conserva su contexto unos segundos.
+        # Ej.: "Beta, agenda dentista" -> "Beta, mañana a las 10".
+        if getattr(self, "agenda_aclaracion_pendiente", None):
+            if self._agenda_resolver_aclaracion(texto_original, fuente_asr):
+                return
 
         # CONTROL ATLAS v3.7.2 RC4: después de pedir "pantalla 1, 2 o 3",
         # aceptamos una única selección corta con o sin wake word. La voz ya fue
@@ -17701,6 +19053,7 @@ Recuerdos relevantes:
         self.memoria.guardar_conversacion("Señor", comando)
         self.ultimo_mensaje_usuario = comando
         self.actualizar_contexto_turno("Señor", comando)
+        self._conversaciones_beta_preparar_usuario_rc1(comando)
         self.memoria.registrar_interaccion()
         self.interacciones_desde_curiosidad += 1
         # Capturamos la ventana del usuario antes de responder. La ventana
@@ -17737,6 +19090,96 @@ Recuerdos relevantes:
         if "hora" not in palabras:
             return False
         return not any(p in palabras for p in {"temperatura", "clima", "tiempo"})
+
+    def _chatgpt_rc2_permitir_biblioteca_automatica(self, pregunta, decision):
+        texto = normalizar(pregunta)
+        decision = decision or {}
+
+        explicita_local = any(
+            marca in texto
+            for marca in [
+                "mis apuntes",
+                "mis modulos",
+                "segun mis apuntes",
+                "segun el modulo",
+                "segun mis modulos",
+                "mi material",
+                "biblioteca academica",
+                "biblioteca de beta",
+                "mi libro",
+                "biblioteca tecnica",
+                "libro tecnico",
+                "ultimate python",
+            ]
+        )
+        if explicita_local:
+            return True
+
+        perfiles = {
+            normalizar(x)
+            for x in (decision.get("perfiles") or [])
+            if normalizar(x)
+        }
+        if perfiles:
+            return True
+
+        try:
+            if self.parece_consulta_tecnica_programacion(pregunta):
+                return True
+        except Exception:
+            pass
+
+        tokens = set(texto.split())
+        fuertes_academicos = {
+            "subnetting", "vlan", "firewall", "criptografia", "ciberseguridad",
+            "vulnerabilidad", "confidencialidad", "integridad", "autenticacion",
+            "virtualizacion", "iot", "uml", "scrum", "kanban",
+        }
+        if tokens & fuertes_academicos:
+            return True
+
+        return False
+
+    def _chatgpt_rc2_candidata_biblioteca_rapida(self, pregunta):
+        # FIX2 LATENCIA: filtro barato antes de ejecutar búsqueda semántica.
+        # Los seguimientos académicos/técnicos activos ya se resolvieron antes.
+        texto = normalizar(pregunta)
+        if not texto:
+            return False
+
+        explicita_local = any(
+            marca in texto
+            for marca in [
+                "mis apuntes",
+                "mis modulos",
+                "segun mis apuntes",
+                "segun el modulo",
+                "segun mis modulos",
+                "mi material",
+                "biblioteca academica",
+                "biblioteca de beta",
+                "mi libro",
+                "biblioteca tecnica",
+                "libro tecnico",
+                "ultimate python",
+            ]
+        )
+        if explicita_local:
+            return True
+
+        try:
+            if self.parece_consulta_tecnica_programacion(pregunta):
+                return True
+        except Exception:
+            pass
+
+        try:
+            if self.parece_consulta_academica(pregunta):
+                return True
+        except Exception:
+            pass
+
+        return False
 
     def ejecutar_comando(self, comando, fuente_asr="manual"):
         original = comando.strip()
@@ -18681,8 +20124,39 @@ Recuerdos relevantes:
 
         # 8.10) Biblioteca inteligente: decide automáticamente entre libros
         # técnicos, apuntes académicos o una combinación de ambos.
-        decision_biblioteca = self.decidir_ruta_biblioteca(original)
-        ruta_biblioteca = decision_biblioteca.get("ruta", "qwen")
+        if self._chatgpt_rc2_candidata_biblioteca_rapida(original):
+            decision_biblioteca = self.decidir_ruta_biblioteca(original)
+            ruta_biblioteca = decision_biblioteca.get("ruta", "qwen")
+
+            # FIX1 se mantiene como segunda barrera por si la búsqueda semántica
+            # devuelve una coincidencia alta pero sin intención real de dominio.
+            if (
+                ruta_biblioteca in {"tecnica", "academica", "mixta"}
+                and not self._chatgpt_rc2_permitir_biblioteca_automatica(
+                    original, decision_biblioteca
+                )
+            ):
+                print(
+                    "CHATGPT RC2 FIX1: biblioteca automática descartada; "
+                    f"ruta_original={ruta_biblioteca} "
+                    f"top={float(decision_biblioteca.get('top_score', 0.0) or 0.0):.3f} "
+                    f"perfiles={decision_biblioteca.get('perfiles') or []}. "
+                    "Continuando a conversación general."
+                )
+                ruta_biblioteca = "qwen"
+        else:
+            decision_biblioteca = {
+                "ruta": "qwen",
+                "confianza": "filtro rápido general",
+                "top_score": 0.0,
+                "perfiles": [],
+            }
+            ruta_biblioteca = "qwen"
+            print(
+                "CHATGPT RC2 FIX2: consulta general detectada por filtro rápido; "
+                "se omite búsqueda semántica de biblioteca."
+            )
+
         if ruta_biblioteca == "tecnica":
             self.fallos_consecutivos = 0
             self.consultar_biblioteca_tecnica_async(original)
@@ -18720,7 +20194,7 @@ Recuerdos relevantes:
 
         # 10) Todo lo demás pasa al modelo local para conversación natural.
         self.fallos_consecutivos = 0
-        self.conversar_ollama_async(original)
+        self.conversar_chatgpt_async(original)
 
     def no_entendi(self, texto, mensaje):
         if texto == self.ultimo_no_entendido:
@@ -21004,11 +22478,53 @@ Recuerdos relevantes:
         except Exception as error:
             return False, str(error)
 
+    def _atlas_clasificar_referencia_eliminar(self, referencia):
+        """Separa el tipo explícito del nombre sin inventar rutas.
+
+        Ejemplos:
+        "la carpeta prueba atlas fix 10 del escritorio"
+          -> ("prueba atlas fix 10 del escritorio", "carpeta")
+        "el archivo nota.txt del escritorio"
+          -> ("nota.txt del escritorio", "archivo")
+        """
+        ref = normalizar(referencia or "").strip()
+        ref = re.sub(r"^(?:la|el)\s+", "", ref).strip()
+
+        tipo = "cualquiera"
+        if ref.startswith("carpeta "):
+            tipo = "carpeta"
+            ref = ref[len("carpeta "):].strip()
+        elif ref.startswith("archivo "):
+            tipo = "archivo"
+            ref = ref[len("archivo "):].strip()
+
+        return ref, tipo
+
     def _atlas_eliminar(self, referencia, tipo="cualquiera"):
-        origen = self._atlas_elemento_contextual(referencia, tipo)
+        # FIX11: para carpetas con alcance explícito ("... del escritorio",
+        # "... en Documentos", etc.) reutilizamos el resolvedor seguro que ya
+        # separa nombre + scope y exige que la ruta exista realmente.
+        origen = None
+        if tipo == "carpeta":
+            rutas = self._atlas_resolver_carpeta_real(referencia)
+            if len(rutas) == 1:
+                origen = rutas[0]
+            elif len(rutas) > 1:
+                self.responder(
+                    "encontré varias carpetas reales que coinciden. "
+                    "Indique una ubicación más específica antes de eliminar.",
+                    "confundida",
+                )
+                return True
+        else:
+            # Archivos y referencias genéricas conservan exactamente el
+            # resolvedor contextual previo.
+            origen = self._atlas_elemento_contextual(referencia, tipo)
+
         if not origen:
             self.responder("no pude identificar un único elemento real para eliminar.", "confundida")
             return True
+
         origen = Path(origen)
         if self._atlas_es_ruta_protegida(origen):
             self.responder("esa ubicación está protegida y no la eliminaré.", "molesta")
@@ -22043,6 +23559,54 @@ Recuerdos relevantes:
         )
         return True
 
+    def _atlas_es_consulta_conceptual_ram_rc1(self, texto):
+        """Distingue definición/aprendizaje sobre RAM de una consulta al PC real."""
+        t = normalizar(texto or "").strip()
+        if "ram" not in t:
+            return False
+        marcadores = (
+            "que es", "que significa", "para que sirve", "como funciona",
+            "define ", "definicion", "concepto de", "hablame de",
+            "hablame sobre", "cuentame sobre", "quiero aprender",
+            "ensename", "diferencia entre", "que hace la ram",
+            "que hace una memoria ram",
+        )
+        return any(m in t for m in marcadores)
+
+    def _atlas_es_consulta_estado_ram_rc1(self, texto):
+        """Acepta solo intención operativa/estado real del equipo para RAM."""
+        t = normalizar(texto or "").strip()
+        if "ram" not in t:
+            return False
+        if self._atlas_es_consulta_conceptual_ram_rc1(t):
+            return False
+
+        # Accesos cortos históricos de Control Atlas.
+        if t in {"ram", "memoria ram"}:
+            return True
+
+        marcadores = (
+            "estado de ram", "estado de la ram",
+            "uso de ram", "uso de la ram",
+            "cuanta ram", "cuanto ram",
+            "ram disponible", "ram libre", "ram usada", "ram ocupada",
+            "memoria ram disponible", "memoria ram libre",
+        )
+        if any(m in t for m in marcadores):
+            return True
+
+        if "estado" in t and "ram" in t:
+            return True
+
+        if "ram" in t and any(m in t for m in (
+            "estoy usando", "esta usando", "estas usando",
+            "tengo disponible", "tengo libre", "queda disponible",
+            "queda libre", "esta ocupada", "esta libre",
+        )):
+            return True
+
+        return False
+
     def _atlas_manejar_comando(self, original):
         t = self._atlas_normalizar_orden_operativa(self._atlas_quitar_wake(original))
         if not t:
@@ -22239,8 +23803,13 @@ Recuerdos relevantes:
         if any(x in t for x in ["estado del procesador", "estado de cpu", "como esta el procesador", "uso del procesador", "uso de cpu"]) \
                 or ("estado" in t and any(k in t for k in ["procesador", " cpu"])):
             return self._atlas_estado_sistema_async("cpu")
-        if any(x in t for x in ["memoria ram", "estado de ram", "uso de ram", "cuanta ram"]) \
-                or ("estado" in t and "ram" in t):
+        if self._atlas_es_consulta_conceptual_ram_rc1(t):
+            print(
+                "CONTROL ATLAS RC1 FIX1: consulta conceptual de RAM; "
+                "continúa router de conocimiento."
+            )
+            return False
+        if self._atlas_es_consulta_estado_ram_rc1(t):
             return self._atlas_estado_sistema_async("ram")
         if any(x in t for x in ["estado del disco", "espacio en disco", "espacio del disco", "estado del ssd", "cuanto espacio"]) \
                 or ("estado" in t and any(k in t for k in ["disco", "ssd"])):
@@ -22376,14 +23945,18 @@ Recuerdos relevantes:
             return self._atlas_mover(m.group(1).strip(), m.group(2).strip())
 
         # Eliminación siempre a Papelera y siempre con confirmación.
+        # FIX12: si el usuario dice explícitamente "carpeta" o "archivo",
+        # propagamos ese tipo hasta _atlas_eliminar para que el resolvedor
+        # seguro apropiado pueda respetar también el scope ("del escritorio",
+        # "en Documentos", etc.).
         m = re.match(r"^(?:manda|envia|enviar)\s+(.+?)\s+a\s+(?:la\s+)?papelera$", t)
         if m:
-            return self._atlas_eliminar(m.group(1).strip())
+            ref, tipo_ref = self._atlas_clasificar_referencia_eliminar(m.group(1).strip())
+            return self._atlas_eliminar(ref, tipo_ref)
         m = re.match(r"^(?:elimina|eliminar|borra|borrar)\s+(.+)$", t)
         if m:
-            ref=m.group(1).strip()
-            ref=re.sub(r"^(?:la|el)\s+", "", ref).strip()
-            return self._atlas_eliminar(ref)
+            ref, tipo_ref = self._atlas_clasificar_referencia_eliminar(m.group(1).strip())
+            return self._atlas_eliminar(ref, tipo_ref)
 
         if re.fullmatch(r"(?:organiza|ordenar|ordena)\s+(?:esta|la)\s+carpeta", t) or re.fullmatch(r"separa\s+(?:los\s+)?word\s+de\s+(?:los\s+)?excel", t):
             return self._atlas_organizar_carpeta_actual()
@@ -22912,6 +24485,32 @@ Recuerdos relevantes:
         if re.search(r"\bmedianoche\b", t):
             return 0, 0
 
+        # FIX7: Whisper puede escribir "a las" como "alas".
+        # Aceptamos ambas formas sin ampliar la intención fuera de expresiones horarias.
+        prefijo_hora = r"(?:a\s+las?|a\s+la|alas|ala)"
+
+        # FIX6: normalizar() puede convertir "18:30" o "18.30" en "1830".
+        # Antes del parser genérico resolvemos HHMM/HMM para evitar que "1830"
+        # se interprete parcialmente como 18:00.
+        m_compacta = re.search(rf"{prefijo_hora}\s+(\d{{3,4}})\b", t)
+        if m_compacta:
+            bruto = m_compacta.group(1)
+            h = int(bruto[:-2])
+            mi = int(bruto[-2:])
+            if 0 <= h <= 23 and 0 <= mi <= 59:
+                return h, mi
+
+        # También tolera ASR que deje hora y minutos como dos grupos: "18 30".
+        m_separada = re.search(
+            rf"{prefijo_hora}\s+(\d{{1,2}})\s+(\d{{2}})\b",
+            t,
+        )
+        if m_separada:
+            h = int(m_separada.group(1))
+            mi = int(m_separada.group(2))
+            if 0 <= h <= 23 and 0 <= mi <= 59:
+                return h, mi
+
         horas_palabra = (
             r"veintitres|veintidos|veintiuno|veinte|diecinueve|dieciocho|"
             r"diecisiete|dieciseis|quince|catorce|trece|doce|once|diez|"
@@ -22919,7 +24518,7 @@ Recuerdos relevantes:
         )
 
         m = re.search(
-            rf"(?:a\s+las?|a\s+la)\s+({horas_palabra})"
+            rf"{prefijo_hora}\s+({horas_palabra})"
             rf"(?::(\d{{2}}))?"
             rf"(?:\s+y\s+(media|cuarto))?"
             rf"(?:\s+horas?)?"
@@ -23123,18 +24722,35 @@ Recuerdos relevantes:
         hora = self._agenda_extraer_hora(original)
 
         if not fecha:
+            self.agenda_aclaracion_pendiente = {
+                "original": (original or "").strip(),
+                "falta_fecha": True,
+                "falta_hora": hora is None,
+            }
+            self.agenda_aclaracion_hasta = time.time() + AGENDA_CONFIRMACION_SEGUNDOS
             self.responder(
                 "entendí que quiere agendar un evento, pero me falta una fecha concreta.",
                 "confundida",
             )
+            print("AGENDA BETA FIX10: aclaración pendiente por fecha.")
             return True
 
         if not hora:
+            self.agenda_aclaracion_pendiente = {
+                "original": (original or "").strip(),
+                "falta_fecha": False,
+                "falta_hora": True,
+            }
+            self.agenda_aclaracion_hasta = time.time() + AGENDA_CONFIRMACION_SEGUNDOS
             self.responder(
                 "entendí la fecha, pero me falta una hora concreta para el evento.",
                 "confundida",
             )
+            print("AGENDA BETA FIX10: aclaración pendiente por hora.")
             return True
+
+        self.agenda_aclaracion_pendiente = None
+        self.agenda_aclaracion_hasta = 0.0
 
         titulo = self._agenda_extraer_titulo(original)
         lugar = self._agenda_extraer_lugar(original)
@@ -23169,6 +24785,56 @@ Recuerdos relevantes:
         )
         return True
 
+    def _agenda_resolver_aclaracion(self, texto, fuente_asr="manual"):
+        pendiente = getattr(self, "agenda_aclaracion_pendiente", None)
+        if not pendiente:
+            return False
+
+        ahora = time.time()
+        limite = float(getattr(self, "agenda_aclaracion_hasta", 0.0) or 0.0)
+        if limite and ahora > limite:
+            self.agenda_aclaracion_pendiente = None
+            self.agenda_aclaracion_hasta = 0.0
+            return False
+
+        t = normalizar(texto or "")
+        wake = self._wake_en_inicio(t, incluir_ambiguos=False)
+        if wake is not None:
+            palabras = t.split()
+            try:
+                indice = palabras.index(wake)
+            except ValueError:
+                indice = 0
+            t = " ".join(palabras[indice + 1:]).strip()
+
+        if not t:
+            return False
+
+        aporta_fecha = self._agenda_extraer_fecha(t) is not None
+        aporta_hora = self._agenda_extraer_hora(t) is not None
+        if not (aporta_fecha or aporta_hora):
+            return False
+
+        fuente = (fuente_asr or "manual").strip().lower()
+        if fuente not in {"whisper", "manual", "teclado", "ui"}:
+            self.responder(
+                "por seguridad necesito entender ese dato de agenda con Whisper. "
+                "Repítalo cuando Whisper esté listo.",
+                "confundida",
+            )
+            return True
+
+        base = str(pendiente.get("original") or "").strip()
+        combinado = (base + " " + t).strip()
+
+        self.agenda_aclaracion_pendiente = None
+        self.agenda_aclaracion_hasta = 0.0
+        print(
+            "AGENDA BETA FIX10: completando solicitud pendiente con "
+            + json.dumps({"continuacion": t}, ensure_ascii=False)
+        )
+        return self._agenda_iniciar_confirmacion(combinado)
+
     def _agenda_resolver_confirmacion(self, texto, fuente_asr="manual"):
         pendiente = getattr(self, "agenda_confirmacion_pendiente", None)
         if not pendiente:
@@ -23180,6 +24846,15 @@ Recuerdos relevantes:
             return False
 
         t = normalizar(texto or "")
+        wake = self._wake_en_inicio(t, incluir_ambiguos=False)
+        if wake is not None:
+            palabras = t.split()
+            try:
+                indice = palabras.index(wake)
+            except ValueError:
+                indice = 0
+            t = " ".join(palabras[indice + 1:]).strip()
+
         negativas = {"no", "cancela", "cancelar", "dejalo"}
         afirmativas = {
             "si", "confirmo", "confirma", "de acuerdo",
@@ -23224,11 +24899,38 @@ Recuerdos relevantes:
                     "feliz",
                 )
             else:
-                self.responder(
-                    "guardé el evento localmente, pero la sincronización con Google "
-                    "quedó pendiente. Puede reintentarse desde Agenda Beta.",
-                    "confundida",
-                )
+                # FIX9: Agenda Beta ya guardó localmente, pero su integración
+                # aislada no sincronizó. Reintentamos con el token Google principal
+                # de Beta, que fue autorizado explícitamente con calendar.events.
+                try:
+                    import beta_google_calendar_escritura_fix9 as calendar_write
+
+                    sync_google = calendar_write.crear_evento(payload)
+                except Exception as exc:
+                    sync_google = {"ok": False, "sincronizado": False, "error": str(exc)}
+                    print("AGENDA GOOGLE FIX9: sincronización directa falló:", exc)
+
+                if sync_google.get("sincronizado"):
+                    try:
+                        fecha_natural = self._agenda_fecha_humana(
+                            datetime.strptime(payload["fecha"], "%Y-%m-%d")
+                        )
+                    except Exception:
+                        fecha_natural = payload["fecha"]
+                    self.responder(
+                        f"evento {payload['titulo']} agendado para el "
+                        f"{fecha_natural} a las {payload['hora']}. "
+                        "Quedó sincronizado con Google Calendar y el aviso por correo "
+                        "está configurado 24 horas antes.",
+                        "feliz",
+                    )
+                    print("AGENDA GOOGLE FIX9: evento sincronizado con token principal de Beta.")
+                else:
+                    self.responder(
+                        "guardé el evento localmente, pero la sincronización con Google "
+                        "quedó pendiente. Puede reintentarse desde Agenda Beta.",
+                        "confundida",
+                    )
         else:
             print("AGENDA BETA: servicio error:", datos)
             self.responder(
@@ -24523,8 +26225,10 @@ Recuerdos relevantes:
             ]) or (spotify_explicito and texto in {"anterior spotify", "anterior"}):
                 return "anterior", ""
             if any(x in texto for x in [
-                "reanuda spotify", "continua spotify", "reanuda la musica",
-                "continua la musica", "sigue reproduciendo", "continua reproduccion",
+                "reanuda spotify", "continua spotify",
+                "reanuda con spotify", "continua con spotify", "sigue con spotify",
+                "reanuda la musica", "continua la musica",
+                "sigue reproduciendo", "continua reproduccion",
             ]):
                 return "reanudar", ""
 
@@ -26925,11 +28629,23 @@ $voz.Speak($texto)
             self.ultima_frase_inicio = 0.0
         print("RESPUESTA FINAL DE BETA:", texto)
         self._aula_mostrar_texto_async(texto, tipo_contexto or "general", desde_streaming=False)
+        self._conversaciones_beta_registrar_respuesta_rc1(texto, tipo_contexto)
 
-        self.memoria.guardar_conversacion("Beta", texto)
-        self.ultima_respuesta_beta = texto
-        self.actualizar_contexto_turno("Beta", texto)
-        self.programar_memoria_inteligente(self.ultimo_mensaje_usuario, texto)
+        if tipo_contexto == "gmail_privado":
+            # RC2.6 FIX2: los datos devueltos por Gmail pueden contener
+            # información privada. Se pronuncian y muestran, pero no entran
+            # en conversaciones persistentes, contexto_turnos ni memoria
+            # inteligente/resúmenes.
+            self.ultima_respuesta_beta = texto
+            print(
+                "PRIVACIDAD GMAIL RC2.6 FIX2: "
+                "respuesta no persistida en memoria ni resumen."
+            )
+        else:
+            self.memoria.guardar_conversacion("Beta", texto)
+            self.ultima_respuesta_beta = texto
+            self.actualizar_contexto_turno("Beta", texto)
+            self.programar_memoria_inteligente(self.ultimo_mensaje_usuario, texto)
 
         # En modo estricto, ni siquiera una pregunta de Beta abre escucha libre.
         # Solo el modo conversación explícito conserva continuidad sin wake word.

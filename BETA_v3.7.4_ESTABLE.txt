@@ -1,0 +1,36 @@
+BETA v3.7.4 ESTABLE
+===================
+
+Fecha de promoción local: 2026-10-25 23:11:23
+Archivo principal: A:\Beta\beta.py
+SHA256 beta.py: C35B2965B27DAAF13A65F1FA2E6B29E407112F7C83CFF4C3039CC65821D481E1
+Origen definitivo: beta_v3.7.4_CHATGPT_RC4_CONVERSACIONES_BETA_RC1_FIX14_MEMORIA_RELEVANCIA.py
+Commit RC respaldado: be2deaa1c6300430ef6341ccf18110bfea564d5f
+
+VALIDACIÓN FINAL
+----------------
+- Arranque estable desde INICIAR_BETA.bat: validado.
+- Piper Daniela High: validado.
+- Vosk + Faster-Whisper en modo estricto: validado.
+- ChatGPT general: validado con respuesta real y streaming de voz.
+- Cuentas ChatGPT OAuth: validadas.
+- Biblioteca académica/técnica + Ollama: validados.
+- Google Calendar lectura directa: validada.
+- Google Calendar escritura de Agenda con confirmación: validada.
+- Google Drive metadatos: validado.
+- Gmail metadatos: validado.
+- Scopes Google durables: validados.
+- Spotify directo: validado.
+- Control Atlas: validado.
+- Conversaciones Beta: validadas.
+- Memoria inteligente local: validada.
+- Cierre normal sin proceso beta.py huérfano: validado.
+- Auditoría funcional final: 27/27.
+- Manifiesto final pre-staging: 32/32.
+- beta_apariencia.json local se conserva fuera de la promoción.
+- A:\Beta_Google_Pruebas no se toca.
+- Desintegrador excluido.
+
+RESPALDO PREVIO DE v3.7.3
+-------------------------
+A:\Beta\respaldos\promocion_estable_v374_2026-10-25_23-06-00
