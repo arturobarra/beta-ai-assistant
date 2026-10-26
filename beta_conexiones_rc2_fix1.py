@@ -15,9 +15,13 @@ from urllib.error import URLError, HTTPError
 
 VERSION = "v3.7.4 Conexiones RC2 FIX1"
 SCOPES_GOOGLE = [
-    "openid",
-    "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/userinfo.profile",
+    'openid',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/userinfo.profile',
+    'https://www.googleapis.com/auth/calendar.readonly',
+    'https://www.googleapis.com/auth/calendar.events',
+    'https://www.googleapis.com/auth/drive.metadata.readonly',
+    'https://www.googleapis.com/auth/gmail.metadata',
 ]
 USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 CRYPTPROTECT_UI_FORBIDDEN = 0x1
@@ -303,7 +307,7 @@ class CentroRC2(tk.Tk):
         ttk.Label(cab, text="Centro de Conexiones de Beta", font=("Segoe UI", 18, "bold")).grid(row=0, column=0, sticky="w")
         ttk.Label(
             cab,
-            text="RC2: Google OAuth real. Solo identidad; Gmail, Drive y Calendar siguen sin permisos.",
+            text="Google OAuth unificado para identidad, Calendar, Drive y Gmail de Beta.",
         ).grid(row=1, column=0, sticky="w", pady=(6, 0))
 
         self.cuerpo = ttk.Frame(self, padding=(20, 8, 20, 12))

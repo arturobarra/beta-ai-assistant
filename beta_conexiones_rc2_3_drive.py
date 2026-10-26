@@ -17,13 +17,9 @@ import beta_conexiones_rc2_1_calendar as calendar_base
 VERSION = "v3.7.4 Conexiones RC2.3 Drive Metadata"
 SCOPE_DRIVE_METADATA = "https://www.googleapis.com/auth/drive.metadata.readonly"
 
-SCOPES_GOOGLE_DRIVE = [
-    "openid",
-    "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/userinfo.profile",
-    calendar_base.SCOPE_CALENDAR_READONLY,
-    SCOPE_DRIVE_METADATA,
-]
+SCOPES_GOOGLE_DRIVE = list(dict.fromkeys(
+    list(calendar_base.SCOPES_GOOGLE_CALENDAR) + [SCOPE_DRIVE_METADATA]
+))
 
 DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files"
 
@@ -65,7 +61,7 @@ def autorizar_google_drive_metadata():
         port=0,
         open_browser=True,
         authorization_prompt_message=(
-            "Beta abrió el navegador para autorizar Google Drive "
+            "Beta abrió el navegador para autorizar Google Drive conservando los permisos Google de Beta "
             "en modo metadatos de solo lectura."
         ),
         success_message=(

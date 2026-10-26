@@ -15,12 +15,9 @@ import beta_conexiones_rc2_fix1 as base
 
 VERSION = "v3.7.4 Conexiones RC2.1 Calendar Lectura"
 SCOPE_CALENDAR_READONLY = "https://www.googleapis.com/auth/calendar.readonly"
-SCOPES_GOOGLE_CALENDAR = [
-    "openid",
-    "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/userinfo.profile",
-    SCOPE_CALENDAR_READONLY,
-]
+SCOPES_GOOGLE_CALENDAR = list(dict.fromkeys(
+    list(base.SCOPES_GOOGLE) + [SCOPE_CALENDAR_READONLY]
+))
 CALENDAR_EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
 
 
@@ -58,7 +55,7 @@ def autorizar_google_calendar():
         port=0,
         open_browser=True,
         authorization_prompt_message=(
-            "Beta abrió el navegador para autorizar Google Calendar en modo lectura."
+            "Beta abrió el navegador para autorizar Google Calendar conservando los permisos Google de Beta."
         ),
         success_message=(
             "Autorización Calendar completada. Puede cerrar esta pestaña y volver a Beta."
@@ -258,8 +255,8 @@ class CentroCalendarRC21(tk.Tk):
             text="Calendar lectura autorizado" if calendar_ok else "Calendar pendiente de autorización",
             font=("Segoe UI", 10, "bold"),
         ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(10, 0))
-        ttk.Label(google, text="Permiso: calendar.readonly").grid(row=2, column=0, columnspan=2, sticky="w", pady=(5, 0))
-        ttk.Button(google, text="Autorizar Calendar lectura", command=self.autorizar_calendar_ui).grid(row=0, column=2, sticky="e", padx=(10, 0))
+        ttk.Label(google, text="Permisos Google unificados + Calendar").grid(row=2, column=0, columnspan=2, sticky="w", pady=(5, 0))
+        ttk.Button(google, text="Autorizar Calendar", command=self.autorizar_calendar_ui).grid(row=0, column=2, sticky="e", padx=(10, 0))
 
         pruebas = ttk.LabelFrame(self.cuerpo, text="Pruebas reales de Calendar", padding=16)
         pruebas.grid(row=1, column=0, sticky="ew", pady=8)
