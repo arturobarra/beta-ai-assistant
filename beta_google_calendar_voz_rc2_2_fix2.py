@@ -9,6 +9,7 @@ import re
 import unicodedata
 
 import beta_conexiones_rc2_1_calendar as calendar_api
+import beta_google_multicuenta_v375 as calendar_multi
 
 
 def _normalizar(texto):
@@ -93,7 +94,7 @@ def clasificar_consulta(texto):
 
 
 def calendar_autorizado():
-    return bool(calendar_api.token_tiene_calendar())
+    return bool(calendar_multi.calendar_autorizado())
 
 
 def _hora_legible(valor):
@@ -177,9 +178,9 @@ def _resumen_proximo(evento):
 
 def responder_consulta(tipo):
     if tipo == "hoy":
-        return _resumen_lista(calendar_api.eventos_hoy(), "hoy")
+        return _resumen_lista(calendar_multi.eventos_hoy(), "hoy")
     if tipo == "manana":
-        return _resumen_lista(calendar_api.eventos_manana(), "manana")
+        return _resumen_lista(calendar_multi.eventos_manana(), "manana")
     if tipo == "proximo":
-        return _resumen_proximo(calendar_api.proximo_evento())
+        return _resumen_proximo(calendar_multi.proximo_evento())
     raise ValueError("Tipo de consulta Calendar no soportado.")

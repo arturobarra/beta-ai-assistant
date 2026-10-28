@@ -240,11 +240,12 @@ ICONO_BETA = BASE_DIR / "beta_icono.ico"
 
 # Agenda Beta sigue aislada del repositorio estable durante las pruebas.
 # Se espera como carpeta hermana de A:\Beta:
-# A:\Beta_Google_Pruebas
-AGENDA_BETA_DIR = BASE_DIR.parent / "Beta_Google_Pruebas"
-AGENDA_BETA_PYTHON = AGENDA_BETA_DIR / ".venv" / "Scripts" / "python.exe"
-AGENDA_BETA_APP = AGENDA_BETA_DIR / "agenda_beta_RC1_2.py"
-AGENDA_BETA_SERVICE = AGENDA_BETA_DIR / "agenda_beta_servicio_RC2.py"
+# Agenda local propia de Beta v3.7.5: vive completamente dentro de A:\Beta.
+AGENDA_BETA_DIR = BASE_DIR
+AGENDA_BETA_PYTHON = Path(sys.executable)
+AGENDA_BETA_LOCAL = BASE_DIR / "beta_agenda_local_v375.py"
+AGENDA_BETA_APP = BASE_DIR / "beta_agenda_visual_v375.py"
+AGENDA_BETA_SERVICE = BASE_DIR / "beta_agenda_servicio_v375.py"
 AGENDA_CONFIRMACION_SEGUNDOS = 45
 
 
@@ -16238,7 +16239,7 @@ Recuerdos relevantes:
                 self.agenda_confirmacion_pendiente = None
                 self.agenda_confirmacion_hasta = 0.0
             elif re.fullmatch(
-                r"(?:si|sí|confirmo|confirma|de acuerdo|correcto|hazlo|adelante|acepto|"
+                r"(?:si|sí|si confirmo|sí confirmo|confirmo|confirma|de acuerdo|correcto|hazlo|adelante|acepto|"
                 r"no|cancela|cancelar|dejalo|déjalo)",
                 t,
             ):
@@ -24396,7 +24397,7 @@ Recuerdos relevantes:
 
     def _agenda_disponible(self):
         faltan = []
-        for p in (AGENDA_BETA_PYTHON, AGENDA_BETA_APP, AGENDA_BETA_SERVICE):
+        for p in (AGENDA_BETA_PYTHON, AGENDA_BETA_LOCAL, AGENDA_BETA_APP, AGENDA_BETA_SERVICE):
             if not p.exists():
                 faltan.append(str(p))
         return (not faltan), faltan
@@ -24857,7 +24858,7 @@ Recuerdos relevantes:
 
         negativas = {"no", "cancela", "cancelar", "dejalo"}
         afirmativas = {
-            "si", "confirmo", "confirma", "de acuerdo",
+            "si", "si confirmo", "confirmo", "confirma", "de acuerdo",
             "correcto", "hazlo", "adelante", "acepto",
         }
 
@@ -24899,9 +24900,9 @@ Recuerdos relevantes:
                     "feliz",
                 )
             else:
-                # FIX9: Agenda Beta ya guardó localmente, pero su integración
-                # aislada no sincronizó. Reintentamos con el token Google principal
-                # de Beta, que fue autorizado explícitamente con calendar.events.
+                # v3.7.5: la Agenda local propia ya guardó el evento.
+                # Si aún no está sincronizado, usamos el escritor Google multicuenta,
+                # dirigido explícitamente a Agenda Beta de la cuenta Beta Asistente.
                 try:
                     import beta_google_calendar_escritura_fix9 as calendar_write
 
@@ -24911,6 +24912,14 @@ Recuerdos relevantes:
                     print("AGENDA GOOGLE FIX9: sincronización directa falló:", exc)
 
                 if sync_google.get("sincronizado"):
+                    try:
+                        local_id = datos.get("local_id")
+                        if local_id:
+                            import beta_agenda_local_v375 as agenda_local
+                            agenda_local.vincular_google(local_id, sync_google)
+                    except Exception as exc:
+                        print("AGENDA LOCAL v3.7.5: no pude guardar vínculo Google:", exc)
+
                     try:
                         fecha_natural = self._agenda_fecha_humana(
                             datetime.strptime(payload["fecha"], "%Y-%m-%d")
@@ -24924,7 +24933,7 @@ Recuerdos relevantes:
                         "está configurado 24 horas antes.",
                         "feliz",
                     )
-                    print("AGENDA GOOGLE FIX9: evento sincronizado con token principal de Beta.")
+                    print("AGENDA GOOGLE v3.7.5: evento sincronizado con Agenda Beta de la cuenta Beta Asistente.")
                 else:
                     self.responder(
                         "guardé el evento localmente, pero la sincronización con Google "
