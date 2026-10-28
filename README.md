@@ -6,7 +6,7 @@ El objetivo del proyecto es construir un asistente local capaz de interactuar me
 
 ## Versión estable actual
 
-**Beta v3.7.4**
+**Beta v3.7.5**
 
 ## Características principales
 
@@ -52,7 +52,7 @@ Piper / Daniela
 
 ## Control Atlas Fase 3
 
-Beta v3.7.4 conserva y amplía Control Atlas con integración directa sobre funciones de Windows.
+Beta v3.7.5 conserva y amplía Control Atlas con integración directa sobre funciones de Windows.
 
 Entre sus capacidades se incluyen:
 
@@ -72,9 +72,9 @@ Entre sus capacidades se incluyen:
 Las operaciones críticas de sesión y energía requieren confirmación por voz antes de ejecutarse.
 
 También se utilizan cortafuegos locales para impedir que una transcripción ambigua termine produciendo una respuesta ficticia de la inteligencia artificial sobre una operación que no fue ejecutada.
-## Integraciones v3.7.4
+## Integraciones v3.7.5
 
-Beta v3.7.4 incorpora integraciones personales controladas, conversación general con ChatGPT y memoria local:
+Beta v3.7.5 incorpora integraciones personales controladas, conversación general con ChatGPT, memoria local, Google multicuenta y Agenda propia:
 
 - Abrir WhatsApp Desktop mediante Control Atlas.
 - Cerrar WhatsApp mediante Control Atlas.

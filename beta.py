@@ -38,7 +38,7 @@ import urllib.request
 from datetime import datetime, timedelta
 
 
-BETA_VERSION = "3.7.4"
+BETA_VERSION = "3.7.5"
 
 # ==========================================================
 # BETA v3.7.4 RC2.6 FIX2 - GOOGLE CALENDAR + DRIVE + GMAIL METADATA VOZ + PRIVACIDAD MEMORIA + CONTROL ATLAS + ASR + AGENDA
@@ -238,8 +238,7 @@ BETA_VERSION = "3.7.4"
 BASE_DIR = Path(__file__).resolve().parent
 ICONO_BETA = BASE_DIR / "beta_icono.ico"
 
-# Agenda Beta sigue aislada del repositorio estable durante las pruebas.
-# Se espera como carpeta hermana de A:\Beta:
+# Agenda Beta v3.7.5 forma parte del repositorio estable y usa almacenamiento local propio.
 # Agenda local propia de Beta v3.7.5: vive completamente dentro de A:\Beta.
 AGENDA_BETA_DIR = BASE_DIR
 AGENDA_BETA_PYTHON = Path(sys.executable)

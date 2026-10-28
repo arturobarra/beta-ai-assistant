@@ -1,0 +1,62 @@
+BETA v3.7.5 ESTABLE
+
+Fecha de promoción funcional: 2026-10-27
+Rama estable: main
+Commit funcional base v3.7.5:
+64fe6f864b6a054f14280cab47aae97d5ac83131
+
+Rama de desarrollo:
+beta-v3.7.5-google-multicuenta
+
+RESUMEN DE LA VERSIÓN
+
+Beta v3.7.5 incorpora una Agenda propia e independiente dentro de A:\Beta y soporte
+Google Calendar multicuenta, manteniendo las funciones estables previas de Beta.
+
+Cambios principales:
+- Agenda local propia con base SQLite beta_agenda_v375.db.
+- Vista mensual de calendario y panel de eventos.
+- Crear, editar y eliminar compromisos desde la interfaz.
+- Sincronización con Google Calendar de Beta Asistente.
+- Escritura Google mediante POST, actualización mediante PATCH y eliminación mediante DELETE.
+- Vinculación exacta entre evento local y google_event_id.
+- Lectura multicuenta de Google Calendar.
+- Confirmación por voz reforzada para órdenes de agenda.
+- Recordatorio de agenda conservado en 1440 minutos en el flujo normal.
+- Icono y recurso visual propio para Agenda.
+
+PRUEBAS DE ACEPTACIÓN REALIZADAS
+
+- Creación local desde interfaz: aprobada.
+- Edición del mismo evento sin duplicado: aprobada.
+- Eliminación local: aprobada.
+- Creación UI -> Google Calendar: aprobada.
+- Edición UI -> PATCH del mismo google_event_id: aprobada.
+- Eliminación UI -> DELETE del evento Google exacto: aprobada.
+- Flujo natural por voz con confirmación: aprobado.
+- Persistencia local + vinculación Google del evento por voz: aprobada.
+- Limpieza de eventos temporales de prueba: aprobada.
+- SQLite quick_check final: ok.
+- Agenda local final de pruebas: 0 eventos temporales.
+
+CONTROL DE RELEASE
+
+El commit funcional 64fe6f864b6a054f14280cab47aae97d5ac83131 fue:
+- commiteado en beta-v3.7.5-google-multicuenta;
+- subido al remoto;
+- auditado antes del merge;
+- promovido a main mediante fast-forward;
+- subido a origin/main.
+
+Este archivo documenta la finalización de metadatos previa al tag v3.7.5.
+El tag v3.7.5 debe crearse únicamente después de auditar y commitear estos metadatos.
+
+EXCLUSIONES INTENCIONALES
+
+- beta_agenda_v375.db es dato local de runtime y no debe versionarse.
+- beta_apariencia.json conserva una modificación local intencional y no forma parte
+  de este release de metadatos.
+- Scripts de diagnóstico, generación, migración, pruebas y limpieza no forman parte
+  del release de producción.
+- Credenciales, tokens y almacenes OAuth no forman parte del repositorio.
+- No se incluyen ni se utilizan carpetas de pruebas que contengan credenciales o tokens.
