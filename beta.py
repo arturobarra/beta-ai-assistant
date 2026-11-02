@@ -24394,6 +24394,13 @@ Recuerdos relevantes:
             "anota en la agenda", "anotar en la agenda",
         ))
 
+    def _agenda_es_cierre(self, texto):
+        t = normalizar(texto or "")
+        return bool(re.fullmatch(
+            r"(?:cierra|cerrar|sierra)\s+(?:(?:el|la)\s+)?(?:agenda|calendario)",
+            t,
+        ))
+
     def _agenda_disponible(self):
         faltan = []
         for p in (AGENDA_BETA_PYTHON, AGENDA_BETA_LOCAL, AGENDA_BETA_APP, AGENDA_BETA_SERVICE):
@@ -24410,33 +24417,154 @@ Recuerdos relevantes:
                 "confundida",
             )
             return True
+        actual = getattr(self, "_agenda_visual_proc", None)
+
+        if actual is not None:
+            try:
+                if actual.poll() is None:
+                    self.responder(
+                        "la Agenda Beta ya est\u00e1 abierta.",
+                        "feliz",
+                    )
+                    return True
+            except Exception:
+                pass
+
+            self._agenda_visual_proc = None
+
         try:
-            subprocess.Popen(
+            self._agenda_visual_proc = subprocess.Popen(
                 [str(AGENDA_BETA_PYTHON), str(AGENDA_BETA_APP)],
                 cwd=str(AGENDA_BETA_DIR),
             )
             self.responder("abriendo Agenda Beta.", "feliz")
         except Exception as exc:
+            self._agenda_visual_proc = None
             print("AGENDA BETA: error abriendo interfaz:", exc)
             self.responder("no pude abrir la Agenda Beta.", "molesta")
+        return True
+
+    def _agenda_cerrar_visual(self):
+        proc = getattr(self, "_agenda_visual_proc", None)
+
+        if proc is None:
+            self.responder(
+                "la Agenda Beta ya est\u00e1 cerrada.",
+                "feliz",
+            )
+            return True
+
+        try:
+            if proc.poll() is not None:
+                self._agenda_visual_proc = None
+                self.responder(
+                    "la Agenda Beta ya est\u00e1 cerrada.",
+                    "feliz",
+                )
+                return True
+        except Exception as exc:
+            print(
+                "AGENDA BETA: error comprobando proceso visual:",
+                exc,
+            )
+            self._agenda_visual_proc = None
+            self.responder(
+                "no pude comprobar el estado de la Agenda Beta.",
+                "molesta",
+            )
+            return True
+
+        try:
+            cerrado_suave = False
+
+            if os.name == "nt":
+                try:
+                    import ctypes
+                    from ctypes import wintypes
+
+                    WM_CLOSE = 0x0010
+                    user32 = ctypes.windll.user32
+                    ventanas = []
+
+                    @ctypes.WINFUNCTYPE(
+                        wintypes.BOOL,
+                        wintypes.HWND,
+                        wintypes.LPARAM,
+                    )
+                    def _enum_windows(hwnd, lparam):
+                        pid = wintypes.DWORD()
+
+                        user32.GetWindowThreadProcessId(
+                            hwnd,
+                            ctypes.byref(pid),
+                        )
+
+                        if (
+                            pid.value == proc.pid
+                            and user32.IsWindowVisible(hwnd)
+                        ):
+                            ventanas.append(hwnd)
+
+                        return True
+
+                    user32.EnumWindows(_enum_windows, 0)
+
+                    for hwnd in ventanas:
+                        user32.PostMessageW(
+                            hwnd,
+                            WM_CLOSE,
+                            0,
+                            0,
+                        )
+
+                    if ventanas:
+                        try:
+                            proc.wait(timeout=3)
+                            cerrado_suave = True
+                        except subprocess.TimeoutExpired:
+                            pass
+
+                except Exception as exc:
+                    print(
+                        "AGENDA BETA: cierre limpio no disponible:",
+                        exc,
+                    )
+
+            if not cerrado_suave:
+                proc.terminate()
+
+                try:
+                    proc.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait(timeout=2)
+
+            self._agenda_visual_proc = None
+            self.responder(
+                "Agenda Beta cerrada.",
+                "feliz",
+            )
+
+        except Exception as exc:
+            print(
+                "AGENDA BETA: error cerrando interfaz:",
+                exc,
+            )
+            self.responder(
+                "no pude cerrar la Agenda Beta.",
+                "molesta",
+            )
+
         return True
 
     def _agenda_extraer_fecha(self, texto):
         t = normalizar(texto or "")
         ahora = datetime.now()
 
-        # Relativas.
-        if "pasado manana" in t:
-            return (ahora + timedelta(days=2)).replace(
-                hour=0, minute=0, second=0, microsecond=0
-            )
-        if re.search(r"\bmanana\b", t):
-            return (ahora + timedelta(days=1)).replace(
-                hour=0, minute=0, second=0, microsecond=0
-            )
-        if re.search(r"\bhoy\b", t):
-            return ahora.replace(hour=0, minute=0, second=0, microsecond=0)
-
+        # AGENDA BETA FIX12:
+        # una fecha explicita tiene prioridad sobre palabras relativas.
+        # Ej.: "el 2 de noviembre a las 8 de la manana" debe ser
+        # 2 de noviembre, no "manana" como dia siguiente.
         meses = (
             "enero|febrero|marzo|abril|mayo|junio|julio|agosto|"
             "septiembre|setiembre|octubre|noviembre|diciembre"
@@ -24448,33 +24576,53 @@ Recuerdos relevantes:
             r"trece|doce|once|diez|nueve|ocho|siete|seis|cinco|cuatro|"
             r"tres|dos|uno|una|veinte|treinta|\d{1,2}"
         )
+
         patron = re.compile(
             rf"(?:el\s+)?(?:dia\s+)?({dias_palabra})\s+de\s+({meses})"
             rf"(?:\s+(?:de|del)\s+(\d{{4}}))?"
         )
+
         m = patron.search(t)
-        if not m:
-            return None
 
-        dia = self._agenda_numero_palabra(m.group(1))
-        mes = self._orq_mes_numero(m.group(2))
-        anio = int(m.group(3) or ahora.year)
+        if m:
+            dia = self._agenda_numero_palabra(m.group(1))
+            mes = self._orq_mes_numero(m.group(2))
+            anio = int(m.group(3) or ahora.year)
 
-        if not dia or not mes:
-            return None
+            if not dia or not mes:
+                return None
 
-        try:
-            dt = datetime(anio, mes, dia)
-        except Exception:
-            return None
-
-        # Si no dijo año y la fecha ya pasó claramente, usamos la siguiente.
-        if not m.group(3) and dt.date() < ahora.date():
             try:
-                dt = dt.replace(year=anio + 1)
+                dt = datetime(anio, mes, dia)
             except Exception:
                 return None
-        return dt
+
+            # Si no dijo anio y la fecha ya paso, usamos el siguiente.
+            if not m.group(3) and dt.date() < ahora.date():
+                try:
+                    dt = dt.replace(year=anio + 1)
+                except Exception:
+                    return None
+
+            return dt
+
+        # Solo si NO existe una fecha explicita buscamos relativas.
+        if "pasado manana" in t:
+            return (ahora + timedelta(days=2)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+
+        if re.search(r"\bmanana\b", t):
+            return (ahora + timedelta(days=1)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+
+        if re.search(r"\bhoy\b", t):
+            return ahora.replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+
+        return None
 
     def _agenda_extraer_hora(self, texto):
         t = normalizar(texto or "")
@@ -24812,7 +24960,42 @@ Recuerdos relevantes:
 
         aporta_fecha = self._agenda_extraer_fecha(t) is not None
         aporta_hora = self._agenda_extraer_hora(t) is not None
+
         if not (aporta_fecha or aporta_hora):
+            nueva_solicitud_agenda = bool(re.match(
+                r"^(?:agenda|agendar|anota en la agenda|anotar en la agenda)\b",
+                t,
+            ))
+
+            if nueva_solicitud_agenda:
+                # FIX11: una repeticion o truncamiento ASR no debe sustituir
+                # la solicitud incompleta que ya contiene mas contexto.
+                self.agenda_aclaracion_hasta = (
+                    time.time() + AGENDA_CONFIRMACION_SEGUNDOS
+                )
+
+                if pendiente.get("falta_fecha"):
+                    self.responder(
+                        "sigo esperando una fecha concreta para ese evento.",
+                        "confundida",
+                    )
+                elif pendiente.get("falta_hora"):
+                    self.responder(
+                        "sigo esperando una hora concreta para ese evento.",
+                        "confundida",
+                    )
+                else:
+                    self.responder(
+                        "sigo esperando el dato pendiente de ese evento.",
+                        "confundida",
+                    )
+
+                print(
+                    "AGENDA BETA FIX11: se conserva la aclaracion pendiente "
+                    "ante una nueva orden incompleta."
+                )
+                return True
+
             return False
 
         fuente = (fuente_asr or "manual").strip().lower()
@@ -24950,9 +25133,17 @@ Recuerdos relevantes:
     def _agenda_manejar(self, original):
         t = normalizar(original or "")
 
+        if self._agenda_es_cierre(t):
+            return self._agenda_cerrar_visual()
+
         if any(x in t for x in (
             "abre agenda", "abrir agenda", "muestra agenda", "mostrar agenda",
-            "abre calendario", "abrir calendario", "muestra calendario",
+            "abre la agenda", "abrir la agenda",
+            "muestra la agenda", "mostrar la agenda",
+            "abre calendario", "abrir calendario",
+            "muestra calendario", "mostrar calendario",
+            "abre el calendario", "abrir el calendario",
+            "muestra el calendario", "mostrar el calendario",
         )):
             return self._agenda_abrir_visual()
 
