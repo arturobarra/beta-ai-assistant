@@ -34,8 +34,10 @@ def ruta_token_beta_asistente():
 def _estado_asistente(estado=None):
     if estado is None:
         estado = base.cargar_estado()
+
     proveedores = estado.setdefault("proveedores", {})
     asistente = proveedores.setdefault("google_beta_asistente", {})
+
     asistente.setdefault("conectado", False)
     asistente.setdefault("cuenta", None)
     asistente.setdefault("nombre", None)
@@ -44,13 +46,37 @@ def _estado_asistente(estado=None):
     asistente.setdefault("calendar_id", None)
     asistente.setdefault("calendar_summary", None)
     asistente.setdefault("ultima_actualizacion", None)
-    asistente["conectado"] = ruta_token_beta_asistente().exists() and bool(asistente.get("cuenta"))
+    asistente.setdefault("requiere_reconexion", False)
+    asistente.setdefault("ultimo_error", "")
+
+    tiene_token = ruta_token_beta_asistente().exists()
+    tiene_cuenta = bool(asistente.get("cuenta"))
+
+    asistente["conectado"] = bool(
+        tiene_token
+        and tiene_cuenta
+        and not asistente.get("requiere_reconexion")
+    )
+
     return estado, asistente
 
 
 def estado_beta_asistente():
     _, asistente = _estado_asistente()
     return dict(asistente)
+
+
+def _marcar_asistente_requiere_reconexion(error):
+    estado, asistente = _estado_asistente()
+
+    asistente["conectado"] = False
+    asistente["requiere_reconexion"] = True
+    asistente["ultimo_error"] = str(error or "")[:1000]
+    asistente["ultima_actualizacion"] = (
+        datetime.now().astimezone().isoformat(timespec="seconds")
+    )
+
+    base.guardar_estado(estado)
 
 
 def _leer_token_info_asistente():
@@ -137,6 +163,8 @@ def autorizar_beta_asistente():
     estado, asistente = _estado_asistente()
     asistente.update({
         "conectado": True,
+        "requiere_reconexion": False,
+        "ultimo_error": "",
         "cuenta": perfil.get("email"),
         "nombre": perfil.get("name"),
         "sub": perfil.get("sub"),
@@ -156,26 +184,61 @@ def autorizar_beta_asistente():
 
 def _credenciales_asistente():
     info = _leer_token_info_asistente()
+
     if not info:
-        raise RuntimeError("La cuenta Beta Asistente todavía no está autorizada.")
+        raise RuntimeError(
+            "La cuenta Beta Asistente todavia no esta autorizada."
+        )
 
     scopes = info.get("scopes") or []
+
     if isinstance(scopes, str):
         scopes = scopes.split()
+
     scopes = list(dict.fromkeys(scopes))
 
-    requeridos = {SCOPE_CALENDAR_READONLY, SCOPE_CALENDAR_EVENTS}
+    requeridos = {
+        SCOPE_CALENDAR_READONLY,
+        SCOPE_CALENDAR_EVENTS,
+    }
+
     if not requeridos.issubset(set(scopes)):
         raise RuntimeError(
-            "La cuenta Beta Asistente no tiene todos los permisos Calendar requeridos."
+            "La cuenta Beta Asistente no tiene todos los permisos "
+            "Calendar requeridos."
         )
 
     from google.oauth2.credentials import Credentials
     from google.auth.transport.requests import Request as GoogleRequest
+    from google.auth.exceptions import RefreshError
 
-    cred = Credentials.from_authorized_user_info(info, scopes=scopes)
+    cred = Credentials.from_authorized_user_info(
+        info,
+        scopes=scopes,
+    )
+
     if cred.expired and cred.refresh_token:
-        cred.refresh(GoogleRequest())
+        try:
+            cred.refresh(GoogleRequest())
+        except RefreshError as exc:
+            detalle = str(exc)
+            detalle_cf = detalle.casefold()
+
+            credencial_revocada = (
+                "invalid_grant" in detalle_cf
+                or "expired or revoked" in detalle_cf
+            )
+
+            if credencial_revocada:
+                _marcar_asistente_requiere_reconexion(exc)
+                raise RuntimeError(
+                    "La cuenta Beta Asistente necesita reconectarse con Google."
+                ) from exc
+
+            raise RuntimeError(
+                "No pude renovar temporalmente la conexion con Google."
+            ) from exc
+
         base.guardar_cifrado(
             ruta_token_beta_asistente(),
             cred.to_json(),
@@ -183,14 +246,33 @@ def _credenciales_asistente():
         )
 
     if not cred.valid:
-        raise RuntimeError("El token de Beta Asistente no es válido.")
-
-    perfil = _userinfo(cred.token)
-    email = (perfil.get("email") or "").strip().lower()
-    if email != TARGET_EMAIL.lower():
-        raise RuntimeError(
-            "El token separado ya no corresponde a la cuenta Beta Asistente esperada."
+        _marcar_asistente_requiere_reconexion(
+            "Token invalido o sin renovacion disponible."
         )
+        raise RuntimeError(
+            "La cuenta Beta Asistente necesita reconectarse con Google."
+        )
+
+    try:
+        perfil = _userinfo(cred.token)
+    except RuntimeError as exc:
+        if "HTTP 401" in str(exc):
+            _marcar_asistente_requiere_reconexion(exc)
+            raise RuntimeError(
+                "La cuenta Beta Asistente necesita reconectarse con Google."
+            ) from exc
+        raise
+
+    email = (perfil.get("email") or "").strip().lower()
+
+    if email != TARGET_EMAIL.lower():
+        _marcar_asistente_requiere_reconexion(
+            "El token pertenece a una cuenta Google distinta."
+        )
+        raise RuntimeError(
+            "La cuenta Beta Asistente necesita reconectarse con Google."
+        )
+
     return cred
 
 

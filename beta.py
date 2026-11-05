@@ -25117,11 +25117,38 @@ Recuerdos relevantes:
                     )
                     print("AGENDA GOOGLE v3.7.5: evento sincronizado con Agenda Beta de la cuenta Beta Asistente.")
                 else:
-                    self.responder(
-                        "guardé el evento localmente, pero la sincronización con Google "
-                        "quedó pendiente. Puede reintentarse desde Agenda Beta.",
-                        "confundida",
-                    )
+                    # AGENDA GOOGLE v3.7.7: distinguir una falla temporal
+                    # de una credencial que Google exige reconectar.
+                    requiere_reconexion = False
+
+                    try:
+                        import beta_google_multicuenta_v375 as calendar_multi
+
+                        estado_google = calendar_multi.estado_beta_asistente()
+                        requiere_reconexion = bool(
+                            estado_google.get("requiere_reconexion")
+                        )
+                    except Exception as exc:
+                        print(
+                            "AGENDA GOOGLE v3.7.7: no pude consultar "
+                            "el estado OAuth:",
+                            exc,
+                        )
+
+                    if requiere_reconexion:
+                        self.responder(
+                            "guardé el evento localmente, pero la cuenta "
+                            "Beta Asistente necesita reconectarse con Google "
+                            "para sincronizar la agenda.",
+                            "confundida",
+                        )
+                    else:
+                        self.responder(
+                            "guardé el evento localmente, pero la sincronización "
+                            "con Google quedó pendiente. Puede reintentarse "
+                            "desde Agenda Beta.",
+                            "confundida",
+                        )
         else:
             print("AGENDA BETA: servicio error:", datos)
             self.responder(
