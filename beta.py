@@ -19181,6 +19181,199 @@ Recuerdos relevantes:
 
         return False
 
+
+    # Beta v3.7.8 RC1 - Autodiagnostico seguro de servicios.
+    def _diagnostico_beta_es_intencion(self, texto):
+        t = normalizar(texto or "").strip()
+
+        frases_exactas = {
+            "revisa tu estado",
+            "revisar tu estado",
+            "revisa tus servicios",
+            "revisar tus servicios",
+            "haz un diagnostico",
+            "hacer un diagnostico",
+            "haz diagnostico",
+            "autodiagnostico",
+            "haz un autodiagnostico",
+            "estado de beta",
+            "dime tu estado",
+            "como estan tus servicios",
+            "como estan funcionando tus servicios",
+        }
+
+        if t in frases_exactas:
+            return True
+
+        frases_seguras = (
+            "diagnostico de beta",
+            "diagnostico general de beta",
+            "revisa el estado de beta",
+            "revisar el estado de beta",
+            "comprueba tus servicios",
+            "comprueba tu estado",
+        )
+
+        return any(frase in t for frase in frases_seguras)
+
+    def _diagnostico_beta_resumen_hablado(self, informe):
+        resultados = list(informe.get("resultados") or [])
+
+        errores = [
+            item for item in resultados
+            if item.get("estado") == "ERROR"
+        ]
+
+        avisos = [
+            item for item in resultados
+            if item.get("estado") == "AVISO"
+        ]
+
+        no_configurados = [
+            item for item in resultados
+            if item.get("estado") == "NO CONFIGURADO"
+        ]
+
+        if errores:
+            nombres = ", ".join(
+                str(item.get("servicio") or "servicio")
+                for item in errores[:3]
+            )
+
+            return (
+                f"termin\u00e9 el autodiagn\u00f3stico. Detect\u00e9 "
+                f"{len(errores)} error"
+                f"{'es' if len(errores) != 1 else ''}. "
+                f"Revise principalmente: {nombres}. "
+                f"Tambi\u00e9n encontr\u00e9 {len(avisos)} advertencia"
+                f"{'s' if len(avisos) != 1 else ''}."
+            )
+
+        if avisos or no_configurados:
+            partes = [
+                "termin\u00e9 el autodiagn\u00f3stico. "
+                "Los servicios principales est\u00e1n operativos."
+            ]
+
+            if avisos:
+                nombres = ", ".join(
+                    str(item.get("servicio") or "servicio")
+                    for item in avisos[:3]
+                )
+
+                partes.append(
+                    f"Detect\u00e9 {len(avisos)} advertencia"
+                    f"{'s' if len(avisos) != 1 else ''}: {nombres}."
+                )
+
+            if no_configurados:
+                nombres = ", ".join(
+                    str(item.get("servicio") or "servicio")
+                    for item in no_configurados[:3]
+                )
+
+                partes.append(
+                    f"Hay {len(no_configurados)} servicio"
+                    f"{'s' if len(no_configurados) != 1 else ''} "
+                    f"sin configuraci\u00f3n confirmada: {nombres}."
+                )
+
+            return " ".join(partes)
+
+        return (
+            "termin\u00e9 el autodiagn\u00f3stico. "
+            "Todos los servicios revisados est\u00e1n operativos."
+        )
+
+    def diagnosticar_beta_async(self):
+        if getattr(self, "diagnostico_beta_en_curso", False):
+            self.responder(
+                "ya estoy revisando mis servicios.",
+                "pensando",
+            )
+            return True
+
+        self.diagnostico_beta_en_curso = True
+
+        try:
+            self.expresion_pensando()
+        except Exception:
+            pass
+
+        print()
+        print("=" * 78)
+        print("BETA v3.7.8: AUTODIAGNOSTICO INICIADO")
+        print("=" * 78)
+
+        def trabajo():
+            informe = None
+            error_texto = ""
+
+            try:
+                import beta_diagnostico_v378 as diagnostico
+
+                informe = diagnostico.ejecutar_diagnostico(
+                    app=self
+                )
+
+                diagnostico.imprimir_informe(informe)
+
+            except Exception as error:
+                error_texto = str(error)
+                print(
+                    "BETA v3.7.8: ERROR EN AUTODIAGNOSTICO:",
+                    error,
+                )
+
+            def terminar():
+                self.diagnostico_beta_en_curso = False
+                self.fallos_consecutivos = 0
+
+                if informe is None:
+                    self.responder(
+                        "no pude completar mi autodiagn\u00f3stico. "
+                        "El detalle qued\u00f3 registrado en la consola.",
+                        "confundida",
+                    )
+                    return
+
+                resumen = self._diagnostico_beta_resumen_hablado(
+                    informe
+                )
+
+                estado_general = str(
+                    informe.get("estado_general") or ""
+                ).upper()
+
+                if estado_general == "ERROR":
+                    expresion = "confundida"
+                elif estado_general == "OK":
+                    expresion = "feliz"
+                else:
+                    expresion = "normal"
+
+                self.responder(
+                    resumen,
+                    expresion,
+                    tipo_contexto="general",
+                )
+
+                print(
+                    "BETA v3.7.8: AUTODIAGNOSTICO FINALIZADO "
+                    f"estado={estado_general or 'DESCONOCIDO'}"
+                )
+
+            self.root.after(0, terminar)
+
+        threading.Thread(
+            target=trabajo,
+            daemon=True,
+            name="BetaDiagnosticoV378",
+        ).start()
+
+        return True
+
+
     def ejecutar_comando(self, comando, fuente_asr="manual"):
         original = comando.strip()
         fuente_asr = (fuente_asr or "manual").strip().lower()
@@ -19201,6 +19394,14 @@ Recuerdos relevantes:
         original = original_corregido
         texto = normalizar(original)
         print(f"RUTA DE RESPUESTA iniciada: {texto}")
+
+        # Beta v3.7.8 RC1: autodiagnostico de servicios.
+        # Solo captura frases dirigidas explicitamente al estado de Beta.
+        # "estado de Atlas", RAM, CPU, disco o red contin?an hacia Control Atlas.
+        if self._diagnostico_beta_es_intencion(texto):
+            self.diagnosticar_beta_async()
+            return
+
 
         # 0) Curiosidad y aprendizaje activo. Son rutas locales de control;
         # nunca necesitan Internet ni deben caer al chat general.
