@@ -19374,6 +19374,167 @@ Recuerdos relevantes:
         return True
 
 
+
+    # Beta v3.7.8 RC1 - Recuperacion conservadora de servicios.
+    def _recuperacion_beta_es_intencion(self, texto):
+        t = normalizar(texto or "").strip()
+
+        frases = {
+            "intenta recuperar tus servicios",
+            "recupera tus servicios",
+            "recuperar tus servicios",
+            "intenta reparar tus servicios",
+            "repara tus servicios",
+            "reparar tus servicios",
+            "recuperacion de servicios",
+            "recupera whisper",
+            "recuperar whisper",
+            "repara whisper",
+            "reparar whisper",
+            "intenta recuperar whisper",
+        }
+
+        return t in frases
+
+    def recuperar_servicios_beta_async(self):
+        if getattr(
+            self,
+            "recuperacion_beta_en_curso",
+            False,
+        ):
+            self.responder(
+                "ya estoy ejecutando una recuperaci\u00f3n segura.",
+                "normal",
+            )
+            return True
+
+        self.recuperacion_beta_en_curso = True
+
+        try:
+            self.expresion_pensando()
+        except Exception:
+            pass
+
+        print()
+        print("=" * 78)
+        print(
+            "BETA v3.7.8: "
+            "RECUPERACION SEGURA INICIADA"
+        )
+        print("=" * 78)
+
+        def trabajo():
+            informe = None
+
+            try:
+                import beta_recuperacion_v378 as recuperacion
+
+                informe = (
+                    recuperacion.ejecutar_recuperacion_segura(
+                        self
+                    )
+                )
+
+                recuperacion.imprimir_informe(
+                    informe
+                )
+
+            except Exception as error:
+                print(
+                    "BETA v3.7.8: "
+                    "ERROR EN RECUPERACION SEGURA:",
+                    error,
+                )
+
+            def terminar():
+                self.recuperacion_beta_en_curso = False
+                self.fallos_consecutivos = 0
+
+                if not informe:
+                    self.responder(
+                        "no pude completar la recuperaci\u00f3n segura. "
+                        "No modifiqu\u00e9 credenciales ni reinici\u00e9 el micr\u00f3fono.",
+                        "confundida",
+                    )
+                    return
+
+                resultados = list(
+                    informe.get("resultados")
+                    or []
+                )
+
+                item = (
+                    resultados[0]
+                    if resultados
+                    else {}
+                )
+
+                estado = str(
+                    item.get("estado")
+                    or ""
+                )
+
+                detalle = str(
+                    item.get("detalle")
+                    or ""
+                )
+
+                if estado == "RECUPERADO":
+                    respuesta = (
+                        "termin\u00e9 la recuperaci\u00f3n segura. "
+                        "Whisper volvi\u00f3 a quedar operativo. "
+                        "No modifiqu\u00e9 credenciales ni reinici\u00e9 el micr\u00f3fono."
+                    )
+                    expresion = "feliz"
+
+                elif estado == "SIN CAMBIOS":
+                    respuesta = (
+                        "revis\u00e9 los servicios recuperables y Whisper "
+                        "ya estaba operativo. No fue necesario modificar nada."
+                    )
+                    expresion = "normal"
+
+                elif estado == "EN PROCESO":
+                    respuesta = (
+                        "Whisper ya se est\u00e1 cargando. "
+                        "No inici\u00e9 una segunda carga."
+                    )
+                    expresion = "normal"
+
+                else:
+                    respuesta = (
+                        "no pude recuperar Whisper autom\u00e1ticamente. "
+                        + detalle
+                        + " No modifiqu\u00e9 credenciales ni reinici\u00e9 el micr\u00f3fono."
+                    )
+                    expresion = "confundida"
+
+                self.responder(
+                    respuesta,
+                    expresion,
+                    tipo_contexto="general",
+                )
+
+                print(
+                    "BETA v3.7.8: "
+                    "RECUPERACION SEGURA FINALIZADA "
+                    f"estado={estado or 'DESCONOCIDO'}"
+                )
+
+            self.root.after(
+                0,
+                terminar,
+            )
+
+        threading.Thread(
+            target=trabajo,
+            daemon=True,
+            name="BetaRecuperacionV378",
+        ).start()
+
+        return True
+
+
     def ejecutar_comando(self, comando, fuente_asr="manual"):
         original = comando.strip()
         fuente_asr = (fuente_asr or "manual").strip().lower()
@@ -19394,6 +19555,12 @@ Recuerdos relevantes:
         original = original_corregido
         texto = normalizar(original)
         print(f"RUTA DE RESPUESTA iniciada: {texto}")
+
+        # Beta v3.7.8 RC1: recuperacion segura y explicita.
+        # Nunca se ejecuta desde una simple consulta de estado.
+        if self._recuperacion_beta_es_intencion(texto):
+            self.recuperar_servicios_beta_async()
+            return
 
         # Beta v3.7.8 RC1: autodiagnostico de servicios.
         # Solo captura frases dirigidas explicitamente al estado de Beta.
