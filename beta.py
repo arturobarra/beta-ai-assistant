@@ -38,7 +38,7 @@ import urllib.request
 from datetime import datetime, timedelta
 
 
-BETA_VERSION = "3.7.6"
+BETA_VERSION = "3.7.8"
 
 # ==========================================================
 # BETA v3.7.4 RC2.6 FIX2 - GOOGLE CALENDAR + DRIVE + GMAIL METADATA VOZ + PRIVACIDAD MEMORIA + CONTROL ATLAS + ASR + AGENDA
