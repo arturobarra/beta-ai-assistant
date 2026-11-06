@@ -27,13 +27,41 @@ AVISO = "AVISO"
 ERROR = "ERROR"
 NO_CONFIGURADO = "NO CONFIGURADO"
 
+ETIQUETAS_USUARIO = {
+    OK: "OPERATIVO",
+    AVISO: "ADVERTENCIA",
+    ERROR: "REQUIERE ATENCION",
+    NO_CONFIGURADO: "NO CONFIGURADO",
+}
+
+
+def etiqueta_usuario(estado):
+    return ETIQUETAS_USUARIO.get(
+        str(estado),
+        "ESTADO DESCONOCIDO",
+    )
+
 
 def resultado(servicio, estado, detalle):
     return {
         "servicio": str(servicio),
         "estado": str(estado),
+        "estado_usuario": etiqueta_usuario(estado),
         "detalle": str(detalle),
     }
+
+
+def estado_general_usuario(conteo):
+    if conteo.get(ERROR, 0):
+        return "REQUIERE ATENCION"
+
+    if (
+        conteo.get(AVISO, 0)
+        or conteo.get(NO_CONFIGURADO, 0)
+    ):
+        return "OPERATIVO CON ADVERTENCIAS"
+
+    return "OPERATIVO"
 
 
 def modulo_disponible(nombre):
@@ -454,11 +482,16 @@ def ejecutar_diagnostico(app=None):
     else:
         estado_general = OK
 
+    conteo_dict = dict(conteo)
+
     return {
         "version": DIAGNOSTICO_VERSION,
         "estado_general": estado_general,
+        "estado_general_usuario": estado_general_usuario(
+            conteo_dict
+        ),
         "resultados": resultados,
-        "conteo": dict(conteo),
+        "conteo": conteo_dict,
     }
 
 
@@ -472,7 +505,7 @@ def imprimir_informe(informe):
 
     for item in informe["resultados"]:
         print(
-            f"[{item['estado']}] "
+            f"[{item['estado_usuario']}] "
             f"{item['servicio']}: "
             f"{item['detalle']}"
         )
@@ -483,7 +516,7 @@ def imprimir_informe(informe):
 
     print(
         "RESULTADO GENERAL:",
-        informe["estado_general"],
+        informe["estado_general_usuario"],
     )
 
     print(
