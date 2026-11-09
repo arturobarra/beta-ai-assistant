@@ -19041,13 +19041,14 @@ Recuerdos relevantes:
             self.responder("dígame.", "escuchando")
 
     def _corregir_comando_operativo_asr_v379(self, comando, fuente_asr="manual"):
-        """Corrige errores ASR observados en ordenes operativas breves.
+        """Corrige deformaciones ASR en ordenes operativas seguras y breves.
 
-        v3.7.9 RC1:
-        - solo actua sobre Whisper;
-        - usa coincidencias exactas;
-        - no reemplaza palabras dentro de frases libres;
-        - no altera entradas manuales ni Vosk provisional.
+        v3.7.9 RC2:
+        - solo actua sobre la salida final de Whisper;
+        - conserva primero las equivalencias exactas observadas;
+        - permite similitud solo en un conjunto cerrado de comandos seguros;
+        - exige frases breves y un umbral alto;
+        - no modifica entradas manuales, Vosk provisional ni frases libres.
         """
         original = (comando or "").strip()
         fuente = (fuente_asr or "manual").strip().lower()
@@ -19064,13 +19065,82 @@ Recuerdos relevantes:
         }
 
         corregido = reglas_exactas.get(texto)
+        motivo = "exacta"
+
+        if not corregido:
+            # Si Whisper ya entrego una orden canonica, no hay nada que
+            # corregir ni registrar como similitud.
+            comandos_canonicos = {
+                "revisa tu estado",
+                "revisa tus servicios",
+                "estado de atlas",
+                "recuperate",
+                "recupera tus servicios",
+            }
+
+            if texto in comandos_canonicos:
+                return original
+
+            palabras = texto.split()
+
+            # RC2 solo trabaja con ordenes muy breves.
+            if not palabras or len(palabras) > 5:
+                return original
+
+            candidatos = []
+
+            # Diagnostico de Beta: solo si la frase ya comienza
+            # con una deformacion razonable de "revisa".
+            if palabras[0].startswith(("revis", "reviz")):
+                candidatos.extend([
+                    ("revisa tu estado", "revisa tu estado"),
+                    ("revisa tus servicios", "revisa tus servicios"),
+                ])
+
+            # Estado de Atlas: la palabra "estado" debe conservarse.
+            if palabras[0] == "estado":
+                candidatos.append(
+                    ("estado de atlas", "estado de atlas")
+                )
+
+            # Recuperacion: exigimos que la deformacion siga
+            # perteneciendo claramente a la familia "recuper...".
+            # "recuperaste" se conserva porque puede ser una pregunta.
+            if (
+                palabras[0].startswith(("recuper", "recupar", "recoper"))
+                and texto not in {"recuperaste", "te recuperaste"}
+            ):
+                candidatos.extend([
+                    ("recuperate", "recuperate"),
+                    ("recupera tus servicios", "recupera tus servicios"),
+                ])
+
+            umbral_similitud = 0.95
+            mejor_destino = ""
+            mejor_ratio = 0.0
+
+            for referencia, destino in candidatos:
+                ratio = difflib.SequenceMatcher(
+                    None,
+                    texto,
+                    referencia,
+                ).ratio()
+
+                if ratio > mejor_ratio:
+                    mejor_ratio = ratio
+                    mejor_destino = destino
+
+            if mejor_destino and mejor_ratio >= umbral_similitud:
+                corregido = mejor_destino
+                motivo = f"similitud={mejor_ratio:.3f}"
 
         if not corregido:
             return original
 
         print(
-            "ASR OPERATIVO v3.7.9: "
-            f"interpretando '{original}' como '{corregido}'"
+            "ASR OPERATIVO v3.7.9 RC2: "
+            f"interpretando '{original}' como '{corregido}' "
+            f"[{motivo}]"
         )
 
         return corregido
