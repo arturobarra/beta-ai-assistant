@@ -19040,11 +19040,59 @@ Recuerdos relevantes:
             )
             self.responder("dígame.", "escuchando")
 
+    def _corregir_comando_operativo_asr_v379(self, comando, fuente_asr="manual"):
+        """Corrige errores ASR observados en ordenes operativas breves.
+
+        v3.7.9 RC1:
+        - solo actua sobre Whisper;
+        - usa coincidencias exactas;
+        - no reemplaza palabras dentro de frases libres;
+        - no altera entradas manuales ni Vosk provisional.
+        """
+        original = (comando or "").strip()
+        fuente = (fuente_asr or "manual").strip().lower()
+
+        if not original or fuente != "whisper":
+            return original
+
+        texto = normalizar(original)
+
+        reglas_exactas = {
+            "revisa lo estado": "revisa tu estado",
+            "estado de atras": "estado de atlas",
+            "africa cooperate": "recuperate",
+        }
+
+        corregido = reglas_exactas.get(texto)
+
+        if not corregido:
+            return original
+
+        print(
+            "ASR OPERATIVO v3.7.9: "
+            f"interpretando '{original}' como '{corregido}'"
+        )
+
+        return corregido
+
     def procesar_orden(self, comando, fuente_asr="manual"):
         comando = (comando or "").strip()
         fuente_asr = (fuente_asr or "manual").strip().lower()
         if not comando:
             return
+
+        comando_corregido = self._corregir_comando_operativo_asr_v379(
+            comando,
+            fuente_asr,
+        )
+
+        if normalizar(comando_corregido) != normalizar(comando):
+            print(
+                "ASR->ORDEN v3.7.9: "
+                f"'{comando}' -> '{comando_corregido}'"
+            )
+
+        comando = comando_corregido
 
         self.registrar_actividad()
         self.ultima_interaccion_voz = time.time()
