@@ -6,7 +6,7 @@ set "PYTHON=python"
 where py >nul 2>nul && set "PYTHON=py -3"
 
 echo ==============================================================
-echo INICIANDO BETA v3.7.8 ESTABLE
+echo INICIANDO BETA v3.7.9 ESTABLE
 echo Carpeta: %CD%
 echo ==============================================================
 

@@ -38,7 +38,7 @@ import urllib.request
 from datetime import datetime, timedelta
 
 
-BETA_VERSION = "3.7.8"
+BETA_VERSION = "3.7.9"
 
 # ==========================================================
 # BETA v3.7.4 RC2.6 FIX2 - GOOGLE CALENDAR + DRIVE + GMAIL METADATA VOZ + PRIVACIDAD MEMORIA + CONTROL ATLAS + ASR + AGENDA
@@ -18781,6 +18781,43 @@ Recuerdos relevantes:
             )
             return True
 
+    def _limpiar_orden_tras_wake_pendiente_v379(self, texto):
+        """Quita un wake fuerte repetido durante la ventana de orden pendiente.
+
+        Conserva el resto del texto original para no degradar nombres propios,
+        acentos ni puntuacion. Meta/metas no se retiran aqui.
+        """
+        original = (texto or "").strip()
+
+        if not original:
+            return original, False
+
+        normal = normalizar(original)
+        wake = self._wake_en_inicio(
+            normal,
+            incluir_ambiguos=False,
+        )
+
+        if wake is None:
+            return original, False
+
+        patron = (
+            r"^\s*"
+            r"(?:(?:hola|oye|hey)[\s,;:.\-]+)?"
+            r"(?:beta|veta|petra)\b"
+            r"[\s,;:.\-]*"
+        )
+
+        limpio = re.sub(
+            patron,
+            "",
+            original,
+            count=1,
+            flags=re.IGNORECASE,
+        ).strip()
+
+        return limpio, True
+
     def procesar_voz(self, texto, fuente_asr="manual"):
         texto_original = (texto or "").strip()
         fuente_asr = (fuente_asr or "manual").strip().lower()
@@ -18991,8 +19028,40 @@ Recuerdos relevantes:
         if self.esperando_orden:
             if ahora <= self.tiempo_limite_orden:
                 self.esperando_orden = False
-                self.procesar_orden(texto_original, fuente_asr=fuente_asr)
+
+                orden_pendiente, wake_repetido = (
+                    self._limpiar_orden_tras_wake_pendiente_v379(
+                        texto_original
+                    )
+                )
+
+                if wake_repetido:
+                    if not orden_pendiente:
+                        # Si el usuario repite solamente "Beta", renovamos la
+                        # ventana breve en lugar de enviar "Beta" al cerebro.
+                        self.esperando_orden = True
+                        self.tiempo_limite_orden = (
+                            time.time() + TIEMPO_ORDEN_TRAS_WAKE
+                        )
+                        self.ultima_frase_inicio = time.perf_counter()
+                        print(
+                            "WAKE PENDIENTE v3.7.9: "
+                            "wake repetido sin orden; ventana renovada."
+                        )
+                        self.responder("d?game.", "escuchando")
+                        return
+
+                    print(
+                        "WAKE PENDIENTE v3.7.9: "
+                        f"wake repetido retirado; orden='{orden_pendiente}'"
+                    )
+
+                self.procesar_orden(
+                    orden_pendiente,
+                    fuente_asr=fuente_asr,
+                )
                 return
+
             self.esperando_orden = False
             self.tiempo_limite_orden = 0.0
 
@@ -19062,6 +19131,7 @@ Recuerdos relevantes:
             "revisa lo estado": "revisa tu estado",
             "estado de atras": "estado de atlas",
             "africa cooperate": "recuperate",
+            "recupera t": "recuperate",
         }
 
         corregido = reglas_exactas.get(texto)
@@ -19420,7 +19490,7 @@ Recuerdos relevantes:
 
         print()
         print("=" * 78)
-        print("BETA v3.7.8: AUTODIAGNOSTICO INICIADO")
+        print(f"BETA v{BETA_VERSION}: AUTODIAGNOSTICO INICIADO")
         print("=" * 78)
 
         def trabajo():
@@ -19439,7 +19509,7 @@ Recuerdos relevantes:
             except Exception as error:
                 error_texto = str(error)
                 print(
-                    "BETA v3.7.8: ERROR EN AUTODIAGNOSTICO:",
+                    f"BETA v{BETA_VERSION}: ERROR EN AUTODIAGNOSTICO:",
                     error,
                 )
 
@@ -19477,7 +19547,7 @@ Recuerdos relevantes:
                 )
 
                 print(
-                    "BETA v3.7.8: AUTODIAGNOSTICO FINALIZADO "
+                    f"BETA v{BETA_VERSION}: AUTODIAGNOSTICO FINALIZADO "
                     f"estado={estado_general or 'DESCONOCIDO'}"
                 )
 
@@ -19551,7 +19621,7 @@ Recuerdos relevantes:
         print()
         print("=" * 78)
         print(
-            "BETA v3.7.8: "
+            f"BETA v{BETA_VERSION}: "
             "RECUPERACION SEGURA INICIADA"
         )
         print("=" * 78)
@@ -19574,7 +19644,7 @@ Recuerdos relevantes:
 
             except Exception as error:
                 print(
-                    "BETA v3.7.8: "
+                    f"BETA v{BETA_VERSION}: "
                     "ERROR EN RECUPERACION SEGURA:",
                     error,
                 )
@@ -19649,7 +19719,7 @@ Recuerdos relevantes:
                 )
 
                 print(
-                    "BETA v3.7.8: "
+                    f"BETA v{BETA_VERSION}: "
                     "RECUPERACION SEGURA FINALIZADA "
                     f"estado={estado or 'DESCONOCIDO'}"
                 )
